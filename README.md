@@ -61,15 +61,19 @@ public class MyCustomTool : EditorWindow
 
 | 工具 | 分类 | 说明 |
 |------|------|------|
-| 收藏夹 | 资产工具 | 收藏常用资源和场景对象 |
-| 资源导入过滤 | 资产工具 | 自动处理资源导入设置 |
-| 组件参数复制 | 组件工具 | 批量复制粘贴组件参数 |
-| 字体替换器 | UI工具 | 批量替换项目中的字体 |
-| 资源分析器 | 资产工具 | 分析资源引用和依赖 |
-| 富文本编辑器 | 文本工具 | 可视化编辑富文本 |
-| 编码转换器 | 文本工具 | 文件编码批量转换 |
-| Using 添加器 | 代码工具 | 自动添加缺失的 using 语句 |
+| 收藏夹 | 资产工具 | 收藏常用资源和场景对象，支持分组和搜索 |
+| 资产导入过滤 | 资产工具 | 自动处理资源导入设置 |
+| 组件参数复制 | 编辑器工具 | 批量复制粘贴组件参数 |
+| 字体替换 | 字体工具 | 批量替换 UGUI / TextMeshPro 字体 |
+| 富文本编辑器(网页版) | 文本工具 | 浏览器版富文本编辑器，解决选区丢失问题 |
+| 编码转换 | 文件工具 | 文件编码批量转换 |
+| 自动添加 Using | 文件工具 | 扫描 .cs 文件自动补全缺失的 using 语句 |
+| 批量重命名 | 文件工具 | 批量重命名资源文件 |
+| 视频首帧导出 | 媒体工具 | 导出视频文件的首帧图片 |
 | 包创建器 | 项目工具 | 快速创建 UPM 包 |
+| 测试窗口 | 调试工具 | 聚合展示场景中标记了 [Test] 的方法和字段 |
+
+> **注意**：所有工具均通过 `[ToolInfo]` 特性自动注册，无需手动维护此列表。
 
 ## 目录结构
 
@@ -77,21 +81,39 @@ public class MyCustomTool : EditorWindow
 UnityToolsHub/
 ├── package.json
 ├── CHANGELOG.md
+├── LICENSE
 ├── README.md
 └── Editor/
-    ├── Hub/                    # Hub 核心面板
-    │   ├── UnityToolsHub.cs    # 主窗口
-    │   ├── ToolDiscovery.cs    # 工具发现
-    │   ├── LeftPanel.cs        # 左侧分类面板
-    │   ├── RightPanel.cs       # 右侧详情面板
-    │   └── ...
-    ├── Tools/                  # 内置工具集合
-    │   ├── AssetBookmarks.cs
-    │   ├── FontReplacer.cs
-    │   └── ...
-    └── ToolInfoAttribute.cs    # 工具信息特性定义
+    ├── Hub/                        # Hub 核心面板
+    │   ├── UnityToolsHub.cs        # 主窗口
+    │   ├── ToolDiscovery.cs        # 工具发现
+    │   ├── LeftPanel.cs            # 左侧分类面板
+    │   ├── RightPanel.cs           # 右侧详情面板
+    │   ├── DataStructures.cs       # 数据结构定义
+    │   ├── DrawingUtils.cs         # 绘图工具
+    │   ├── ShortcutBinding.cs      # 快捷键绑定
+    │   ├── ShortcutManager.cs      # 快捷键管理
+    │   ├── Styles.cs               # 样式定义
+    │   └── Theme.cs                # 主题配置
+    ├── Tools/                      # 内置工具集合
+    │   ├── AssetBookmarks.cs       # 收藏夹
+    │   ├── AssetImportFilter.cs    # 资产导入过滤
+    │   ├── ComponentParameterCopier.cs  # 组件参数复制
+    │   ├── EncodingConverter.cs    # 编码转换
+    │   ├── FileRenameTool.cs       # 批量重命名
+    │   ├── FontReplacer.cs         # 字体替换
+    │   ├── ResourceAnalyzer/       # 资源分析器（子模块）
+    │   ├── RichTextEditorWeb.html  # 富文本编辑器网页
+    │   ├── RichTextEditorWebLauncher.cs  # 富文本编辑器启动器
+    │   ├── UsingAdder.cs           # 自动添加 Using
+    │   ├── VideoFirstFrameExporter.cs  # 视频首帧导出
+    │   ├── Unity Package Creator/  # 包创建器（子包）
+    │   └── Test/                   # 测试工具
+    ├── ToolInfoAttribute.cs        # 工具信息特性定义
+    ├── UnityPathUtility.cs         # 路径工具
+    └── _NewToolTemplate.cs.txt     # 新建工具模板
 ```
 
 ## 许可证
 
-MIT License
+Apache License 2.0
