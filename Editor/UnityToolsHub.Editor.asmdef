@@ -2,7 +2,9 @@
     "name": "UnityToolsHub.Editor",
     "rootNamespace": "",
     "references": [
-        "GUID:70de3d35ece9b7b44ae69317d3221b51"
+        "GUID:70de3d35ece9b7b44ae69317d3221b51",
+        "GUID:47a84ebde4ec47fabb620b30cc7a3e5c",
+        "GUID:a4865f1ab4504ed8a368670db22f409c"
     ],
     "includePlatforms": [
         "Editor"
@@ -13,6 +15,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.sirenix.odininspector",
+            "expression": "",
+            "define": "ODIN_INSPECTOR"
+        }
+    ],
     "noEngineReferences": false
 }

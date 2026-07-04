@@ -3,10 +3,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Sirenix.OdinInspector;
-using Sirenix.OdinInspector.Editor;
 using UnityEditor;
 using UnityEngine;
+
+#if ODIN_INSPECTOR
+using Sirenix.OdinInspector;
+using Sirenix.OdinInspector.Editor;
+#else
+using UnityToolsHubCompat;
+#endif
 
 // ═══════════════════════════════════════════════════════════════
 // 编码转换工具 — 将项目文件批量转换为指定编码
@@ -19,62 +24,91 @@ using UnityEngine;
         + "• 支持预览模式，转换前先查看影响范围\n"
         + "• 支持按文件夹和文件类型过滤",
     Icon = "🔤", Tags = new[] { "编码", "UTF-8", "转换" })]
-public class EncodingConverterSafe : OdinEditorWindow
+public class EncodingConverterSafe
+#if ODIN_INSPECTOR
+    : OdinEditorWindow
+#else
+    : EditorWindow
+#endif
 {
     #region ── 字段 ────────────────────────────────────────
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("文件筛选")]
     [LabelText("目标文件夹"), FolderPath(AbsolutePath = true)]
+#else
+    [Header("文件筛选")]
+#endif
     [Tooltip("留空则转换整个 Assets 目录")]
     public string targetFolder = "";
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("文件筛选")]
     [LabelText("文件匹配模式")]
+#endif
     [Tooltip("支持通配符，用分号分隔多个模式，如 *.cs;*.json;*.txt")]
     public string filePattern = "*.cs";
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("文件筛选")]
     [LabelText("递归子目录")]
+#endif
     public bool recursive = true;
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("编码设置")]
     [LabelText("目标编码")]
     [ValueDropdown("GetTargetEncodings")]
+#endif
     public string targetEncodingName = "UTF-8 (无 BOM)";
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("编码设置")]
     [LabelText("自动检测源编码")]
+#endif
     [Tooltip("关闭后可手动指定源编码（用于已知编码的批量文件）")]
     public bool autoDetect = true;
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("编码设置")]
     [LabelText("手动指定源编码")]
     [ValueDropdown("GetSourceEncodings")]
     [ShowIf("autoDetect", false)]
+#endif
     public string manualSourceEncoding = "GB18030 (简体中文)";
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("编码设置")]
     [LabelText("跳过已经是目标编码的文件")]
+#endif
     public bool skipAlreadyTarget = true;
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("编码设置")]
     [LabelText("排除 .meta 文件")]
+#endif
     public bool excludeMetaFiles = true;
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("执行")]
     [LabelText("预览文件数上限")]
+#endif
     [Tooltip("预览模式下最多显示的文件数量")]
     [Range(10, 500)]
     public int previewLimit = 100;
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("状态")]
     [LabelText("扫描结果"), ReadOnly, MultiLineProperty(5)]
     [ShowInInspector]
+#endif
     private string scanResult = "";
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("状态")]
     [LabelText("转换报告"), ReadOnly, MultiLineProperty(8)]
     [ShowInInspector]
+#endif
     private string convertReport = "";
 
     #endregion
@@ -114,10 +148,12 @@ public class EncodingConverterSafe : OdinEditorWindow
 
     #endregion
 
-    #region ── Odin 按钮 ───────────────────────────────────
+    #region ── 按钮（Odin） / OnGUI（原生） ─────────────────────
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("执行")]
     [Button("🔍 扫描文件", ButtonSizes.Large), GUIColor(0.5f, 0.7f, 1f)]
+#endif
     public void ScanFiles()
     {
         string root = GetTargetFolder();
@@ -168,8 +204,10 @@ public class EncodingConverterSafe : OdinEditorWindow
         scanResult = sb.ToString();
     }
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("执行")]
     [Button("👁 预览转换", ButtonSizes.Large), GUIColor(0.9f, 0.85f, 0.4f)]
+#endif
     public void PreviewConversion()
     {
         string root = GetTargetFolder();
@@ -217,8 +255,10 @@ public class EncodingConverterSafe : OdinEditorWindow
         convertReport = sb.ToString();
     }
 
+#if ODIN_INSPECTOR
     [FoldoutGroup("执行")]
     [Button("🚀 执行转换", ButtonSizes.Large), GUIColor(0.3f, 0.8f, 0.4f)]
+#endif
     public void ExecuteConversion()
     {
         string root = GetTargetFolder();
@@ -245,6 +285,99 @@ public class EncodingConverterSafe : OdinEditorWindow
     }
 
     #endregion
+
+#if !ODIN_INSPECTOR
+    #region ── 原生 OnGUI（无 Odin 时的回退渲染） ────────────
+
+    private Vector2 _scrollPos;
+
+    private void OnGUI()
+    {
+        _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
+
+        // ── 文件筛选 ──
+        EditorGUILayout.LabelField("文件筛选", EditorStyles.boldLabel);
+        targetFolder = EditorGUILayout.TextField(new GUIContent("目标文件夹", "留空则转换整个 Assets 目录"), targetFolder);
+        filePattern = EditorGUILayout.TextField(new GUIContent("文件匹配模式", "支持通配符，用分号分隔多个模式"), filePattern);
+        recursive = EditorGUILayout.Toggle("递归子目录", recursive);
+        EditorGUILayout.Space(8);
+
+        // ── 编码设置 ──
+        EditorGUILayout.LabelField("编码设置", EditorStyles.boldLabel);
+        targetEncodingName = EncodingDropdown("目标编码", targetEncodingName, GetTargetEncodingOptions());
+        autoDetect = EditorGUILayout.Toggle(new GUIContent("自动检测源编码", "关闭后可手动指定源编码"), autoDetect);
+        if (!autoDetect)
+        {
+            manualSourceEncoding = EncodingDropdown("手动指定源编码", manualSourceEncoding, GetSourceEncodingOptions());
+        }
+        skipAlreadyTarget = EditorGUILayout.Toggle("跳过已经是目标编码的文件", skipAlreadyTarget);
+        excludeMetaFiles = EditorGUILayout.Toggle("排除 .meta 文件", excludeMetaFiles);
+        EditorGUILayout.Space(8);
+
+        // ── 执行按钮 ──
+        EditorGUILayout.LabelField("执行", EditorStyles.boldLabel);
+        var defaultBg = GUI.backgroundColor;
+
+        GUI.backgroundColor = new Color(0.5f, 0.7f, 1f);
+        if (GUILayout.Button("🔍 扫描文件", GUILayout.Height(32))) ScanFiles();
+
+        GUI.backgroundColor = new Color(0.9f, 0.85f, 0.4f);
+        if (GUILayout.Button("👁 预览转换", GUILayout.Height(32))) PreviewConversion();
+
+        GUI.backgroundColor = new Color(0.3f, 0.8f, 0.4f);
+        if (GUILayout.Button("🚀 执行转换", GUILayout.Height(32))) ExecuteConversion();
+
+        GUI.backgroundColor = defaultBg;
+        EditorGUILayout.Space(8);
+
+        // ── 预览文件数上限 ──
+        previewLimit = EditorGUILayout.IntSlider(new GUIContent("预览文件数上限", "预览模式下最多显示的文件数量"), previewLimit, 10, 500);
+        EditorGUILayout.Space(8);
+
+        // ── 状态 ──
+        if (!string.IsNullOrEmpty(scanResult))
+        {
+            EditorGUILayout.LabelField("扫描结果", EditorStyles.boldLabel);
+            EditorGUI.BeginDisabledGroup(true);
+            EditorGUILayout.TextArea(scanResult, GUILayout.MinHeight(80));
+            EditorGUI.EndDisabledGroup();
+        }
+
+        if (!string.IsNullOrEmpty(convertReport))
+        {
+            EditorGUILayout.LabelField("转换报告", EditorStyles.boldLabel);
+            EditorGUI.BeginDisabledGroup(true);
+            EditorGUILayout.TextArea(convertReport, GUILayout.MinHeight(100));
+            EditorGUI.EndDisabledGroup();
+        }
+
+        EditorGUILayout.EndScrollView();
+    }
+
+    /// <summary>绘制编码下拉菜单</summary>
+    private static string EncodingDropdown(string label, string current, string[] options)
+    {
+        int idx = Array.IndexOf(options, current);
+        if (idx < 0) idx = 0;
+        idx = EditorGUILayout.Popup(label, idx, options);
+        return options[idx];
+    }
+
+    private static string[] GetTargetEncodingOptions() => new[]
+    {
+        "UTF-8 (无 BOM)", "UTF-8 (有 BOM)", "UTF-16 LE", "UTF-16 BE",
+        "UTF-32 LE", "ASCII", "GB18030 (简体中文)", "Shift-JIS (日文)",
+        "EUC-KR (韩文)", "Latin1 (ISO-8859-1)",
+    };
+
+    private static string[] GetSourceEncodingOptions() => new[]
+    {
+        "GB18030 (简体中文)", "UTF-8 (无 BOM)", "UTF-8 (有 BOM)",
+        "UTF-16 LE", "UTF-16 BE", "Shift-JIS (日文)", "EUC-KR (韩文)",
+    };
+
+    #endregion
+#endif
 
     #region ── 核心转换逻辑 ────────────────────────────────
 
@@ -595,6 +728,7 @@ public class EncodingConverterSafe : OdinEditorWindow
         return enc.EncodingName;
     }
 
+#if ODIN_INSPECTOR
     /// <summary>供 Odin ValueDropdown 使用的目标编码列表</summary>
     private static ValueDropdownList<string> GetTargetEncodings()
     {
@@ -627,6 +761,7 @@ public class EncodingConverterSafe : OdinEditorWindow
             { "EUC-KR (韩文)", "EUC-KR (韩文)" },
         };
     }
+#endif
 
     #endregion
 }

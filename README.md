@@ -9,6 +9,7 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **快速搜索**：支持关键字搜索和标签过滤
 - **快捷键**：为常用工具绑定键盘快捷键
 - **使用统计**：记录工具使用频率，常用工具自动置顶
+- **Odin Inspector 可选支持**：自动检测 Odin，有则使用 Odin 属性渲染，无则回退原生 IMGUI
 
 ## 快速开始
 
@@ -99,7 +100,7 @@ UnityToolsHub/
     │   ├── AssetBookmarks.cs       # 收藏夹
     │   ├── AssetImportFilter.cs    # 资产导入过滤
     │   ├── ComponentParameterCopier.cs  # 组件参数复制
-    │   ├── EncodingConverter.cs    # 编码转换
+    │   ├── EncodingConverter.cs    # 编码转换（支持 Odin 回退原生）
     │   ├── FileRenameTool.cs       # 批量重命名
     │   ├── FontReplacer.cs         # 字体替换
     │   ├── ResourceAnalyzer/       # 资源分析器（子模块）
@@ -109,9 +110,59 @@ UnityToolsHub/
     │   ├── VideoFirstFrameExporter.cs  # 视频首帧导出
     │   ├── Unity Package Creator/  # 包创建器（子包）
     │   └── Test/                   # 测试工具
+    ├── OdinCompat.cs               # Odin Inspector 兼容层（空特性占位）
+    ├── OdinAutoDetector.cs         # Odin 自动检测与宏定义管理
     ├── ToolInfoAttribute.cs        # 工具信息特性定义
     ├── UnityPathUtility.cs         # 路径工具
     └── _NewToolTemplate.cs.txt     # 新建工具模板
+```
+
+## Odin Inspector 兼容
+
+工具内置对 [Odin Inspector](https://odininspector.com/) 的可选支持：
+
+- **自动检测**：编辑器启动时自动扫描项目中是否存在 Sirenix DLL
+- **自动宏管理**：检测到 Odin 自动添加 `ODIN_INSPECTOR` 宏定义，移除后自动清理
+- **无缝切换**：有 Odin 时使用 `[FoldoutGroup]`、`[LabelText]`、`[Button]` 等属性渲染；无 Odin 时回退原生 IMGUI `OnGUI()` 绘制
+- **零配置**：无需手动设置宏，开箱即用
+
+### 工作原理
+
+```
+项目启动 → OdinAutoDetector 扫描 Sirenix DLL
+  ├─ 找到 → 添加 ODIN_INSPECTOR 宏 → 使用 Odin 属性自动渲染
+  └─ 未找到 → 移除 ODIN_INSPECTOR 宏 → 回退原生 OnGUI 手动绘制
+```
+
+### 添加 Odin 兼容到自定义工具
+
+工具如需使用 Odin 属性，按以下模式编写：
+
+```csharp
+#if ODIN_INSPECTOR
+using Sirenix.OdinInspector;
+#else
+using UnityToolsHubCompat;  // 空特性占位，保证编译通过
+#endif
+
+public class MyTool : EditorWindow
+#if ODIN_INSPECTOR
+    // Odin 会自动渲染带属性的字段
+#endif
+{
+#if ODIN_INSPECTOR
+    [FoldoutGroup("设置")]
+    [LabelText("速度")]
+#endif
+    public float speed = 5f;
+
+#if !ODIN_INSPECTOR
+    private void OnGUI()
+    {
+        speed = EditorGUILayout.FloatField("速度", speed);
+    }
+#endif
+}
 ```
 
 ## 许可证
