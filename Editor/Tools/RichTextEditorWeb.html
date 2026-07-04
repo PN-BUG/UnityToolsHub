@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>富文本编辑器</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   深色主题 v2 —— 高对比度，层次分明
+   参考 VS Code Dark+ / One Dark Pro 配色
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+    /* ── 背景层次（从深到浅，不透明，避免灰蒙蒙）── */
+    --bg:           #1E1E2E;  /* 主背景：深蓝紫，比纯灰更有质感 */
+    --toolbar-bg:   #181825;  /* 工具栏：更深，与主背景区分 */
+    --card-bg:      #313244;  /* 卡片：明显浮出 */
+    --input-bg:     #11111B;  /* 编辑区背景：最深，让文字突出 */
+    --preview-bg:   #11111B;  /* 预览区背景：与编辑区一致 */
+
+    /* ── 文字层次（高对比度）── */
+    --text:         #CDD6F4;  /* 主文字：高亮蓝白 */
+    --text-dim:     #A6ADC8;  /* 次要文字：仍清晰可读 */
+    --text-bright:  #FFFFFF;  /* 高亮文字：纯白 */
+    --text-faint:   #6C7086;  /* 极淡文字：仅用于提示 */
+
+    /* ── 强调色（更鲜明）── */
+    --accent:       #89B4FA;  /* 主强调：亮蓝 */
+    --accent-2:     #F9E2AF;  /* 次强调：暖黄 */
+    --btn-normal:   #89B4FA;  /* 主按钮：亮蓝 */
+    --btn-hover:    #B4BEFE;  /* 悬停：更亮的蓝紫 */
+    --btn-active:   #74C7EC;  /* 按下：青蓝 */
+    --btn-inactive: #45475A;  /* 普通按钮：明显浮出背景 */
+
+    /* ── 功能色 ── */
+    --success:      #A6E3A1;  /* 绿 */
+    --warning:      #F9E2AF;  /* 黄 */
+    --danger:       #F38BA8;  /* 粉红 */
+    --tag-bg:       #45475A;  /* 标签背景 */
+    --tag-text:     #CDD6F4;  /* 标签文字 */
+
+    /* ── 边框/分隔（可见但不抢眼）── */
+    --divider:      #45475A;  /* 分隔线：实色，可见 */
+    --border:       #585B70;  /* 边框：稍亮 */
+    --border-focus: #89B4FA;  /* 聚焦边框：强调色 */
+
+    /* ── 阴影 ── */
+    --shadow:       0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg:    0 8px 24px rgba(0,0,0,0.5);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+    font-size: 13px;
+    overflow: hidden;
+}
+
+.app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ── 顶部工具栏 ─────────────────────────────────────── */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--toolbar-bg);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--divider);
+    flex-shrink: 0;
+    min-height: 44px;
+    flex-wrap: wrap;
+    box-shadow: var(--shadow);
+    position: relative;
+    z-index: 10;
+}
+
+.btn-group { display: flex; gap: 2px; }
+
+.format-btn {
+    width: 32px; height: 30px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--btn-inactive);
+    color: var(--text);
+    font-size: 14px; font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.format-btn:hover {
+    background: var(--btn-hover);
+    color: var(--bg);
+    border-color: var(--btn-hover);
+    transform: translateY(-1px);
+}
+.format-btn:active {
+    background: var(--btn-active);
+    color: var(--bg);
+    transform: translateY(0);
+}
+.format-btn.bold { font-weight: 800; }
+.format-btn.italic { font-style: italic; }
+.format-btn.underline { text-decoration: underline; }
+.format-btn.strike { text-decoration: line-through; }
+
+.divider {
+    width: 1px; height: 26px;
+    background: var(--divider);
+    margin: 0 6px;
+    flex-shrink: 0;
+}
+
+.toolbar-label {
+    color: var(--text-dim);
+    font-size: 11px;
+    margin-right: 4px;
+    font-weight: 500;
+}
+
+select, input[type="number"] {
+    height: 28px;
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0 8px;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+select:hover, input[type="number"]:hover { border-color: var(--accent); }
+select:focus, input[type="number"]:focus { border-color: var(--border-focus); box-shadow: 0 0 0 2px rgba(137,180,250,0.2); }
+
+.size-select { width: 64px; }
+.color-select { width: 72px; }
+.size-custom { width: 48px; }
+
+.icon-btn {
+    min-width: 32px; height: 30px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--btn-inactive);
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0 6px;
+    transition: all 0.15s ease;
+}
+.icon-btn:hover {
+    background: var(--btn-hover);
+    color: var(--bg);
+    border-color: var(--btn-hover);
+}
+.icon-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+.text-btn {
+    height: 30px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--btn-inactive);
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0 12px;
+    transition: all 0.15s ease;
+}
+.text-btn:hover {
+    background: var(--btn-hover);
+    color: var(--bg);
+    border-color: var(--btn-hover);
+}
+
+.action-btn {
+    height: 30px;
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+    padding: 0 14px;
+    transition: all 0.15s ease;
+}
+.action-btn:hover {
+    background: var(--btn-hover);
+    border-color: var(--btn-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+/* ── 对齐图标（三横线）── */
+.align-icon {
+    display: inline-block;
+    width: 16px;
+    height: 12px;
+    vertical-align: middle;
+    background-image:
+        linear-gradient(currentColor, currentColor),
+        linear-gradient(currentColor, currentColor),
+        linear-gradient(currentColor, currentColor);
+    background-size:
+        16px 2px,
+        10px 2px,
+        13px 2px;
+    background-position:
+        0 0,
+        0 5px,
+        0 10px;
+    background-repeat: no-repeat;
+    border-radius: 0;
+}
+.align-icon.center {
+    background-position:
+        50% 0,
+        50% 5px,
+        50% 10px;
+    background-size:
+        16px 2px,
+        13px 2px,
+        10px 2px;
+}
+.align-icon.right {
+    background-position:
+        100% 0,
+        100% 5px,
+        100% 10px;
+}
+
+.spacer { flex: 1; }
+
+/* ── 快捷标签栏 ─────────────────────────────────────── */
+.sub-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--toolbar-bg);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--divider);
+    flex-shrink: 0;
+    min-height: 36px;
+    flex-wrap: wrap;
+}
+.sub-label { color: var(--text-dim); font-size: 11px; margin-right: 6px; font-weight: 500; }
+
+.tag-btn {
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0 10px;
+    transition: all 0.15s ease;
+}
+.tag-btn:hover {
+    background: var(--btn-hover);
+    color: var(--bg);
+    border-color: var(--btn-hover);
+}
+
+/* ── 自定义颜色面板 ─────────────────────────────────── */
+.color-panel {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: var(--card-bg);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--divider);
+    flex-shrink: 0;
+}
+.color-panel.show { display: flex; }
+.panel-label { color: var(--text-dim); font-size: 11px; font-weight: 500; }
+input[type="color"] {
+    width: 48px; height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    padding: 2px;
+}
+
+/* ── 主体：编辑区 + 预览区 ─────────────────────────── */
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.editor-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    padding: 8px;
+    min-height: 120px;
+}
+.area-hint {
+    color: var(--text-faint);
+    font-size: 10px;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+    font-style: italic;
+}
+
+/* textarea —— 选区/光标的核心，原生 selectionStart/selectionEnd */
+#textInput {
+    flex: 1;
+    width: 100%;
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    font-family: "Cascadia Code", "Consolas", "Microsoft YaHei", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+    min-height: 0; /* 让 flex 正确收缩 */
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+#textInput:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(137,180,250,0.15);
+}
+#textInput::selection {
+    background: rgba(137,180,250,0.35);
+    color: var(--text-bright);
+}
+
+/* ── 分隔条 ─────────────────────────────────────────── */
+.splitter {
+    height: 6px;
+    background: var(--divider);
+    cursor: row-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.splitter:hover { background: var(--accent); }
+
+/* ── 预览区 ─────────────────────────────────────────── */
+.preview-area {
+    height: 180px;
+    display: flex;
+    flex-direction: column;
+    background: var(--preview-bg);
+    flex-shrink: 0;
+    border-top: 1px solid var(--divider);
+}
+.preview-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    background: var(--toolbar-bg);
+    border-bottom: 1px solid var(--divider);
+    flex-shrink: 0;
+}
+.preview-title {
+    color: var(--text-dim);
+    font-size: 11px;
+    flex: 1;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+#previewLabel {
+    flex: 1;
+    padding: 12px 14px;
+    overflow: auto;
+    color: var(--text-bright);
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ── 状态栏 ─────────────────────────────────────────── */
+.status-bar {
+    display: flex;
+    align-items: center;
+    background: var(--toolbar-bg);
+    padding: 4px 12px;
+    border-top: 1px solid var(--divider);
+    flex-shrink: 0;
+    min-height: 26px;
+}
+#statusLabel { color: var(--text-dim); font-size: 11px; font-family: "Cascadia Code", monospace; }
+
+/* ── Toast ──────────────────────────────────────────── */
+.toast {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--card-bg);
+    color: var(--text-bright);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+    z-index: 100;
+}
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-4px);
+}
+
+/* ── 模板下拉菜单 ───────────────────────────────────── */
+.dropdown-menu {
+    position: fixed;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: var(--shadow-lg);
+    padding: 4px;
+    z-index: 200;
+    display: none;
+    min-width: 160px;
+}
+.dropdown-menu.show { display: block; }
+.dropdown-item {
+    padding: 8px 14px;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.12s;
+}
+.dropdown-item:hover { background: var(--accent); color: var(--bg); }
+.dropdown-separator { height: 1px; background: var(--divider); margin: 4px 0; }
+.dropdown-item.danger { color: var(--danger); }
+.dropdown-item.danger:hover { background: var(--danger); color: var(--bg); }
+</style>
+</head>
+<body>
+<div class="app">
+    <!-- ═══ 顶部工具栏 ═══ -->
+    <div class="toolbar">
+        <div class="btn-group">
+            <button class="format-btn bold"   data-action="tag" data-tag="b" title="粗体 (Ctrl+B)">B</button>
+            <button class="format-btn italic" data-action="tag" data-tag="i" title="斜体 (Ctrl+I)">I</button>
+            <button class="format-btn underline" data-action="tag" data-tag="u" title="下划线 (Ctrl+U)">U</button>
+            <button class="format-btn strike" data-action="tag" data-tag="s" title="删除线">S</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <span class="toolbar-label">字号</span>
+        <select id="sizeSelect" class="size-select" title="字号预设"></select>
+        <span class="toolbar-label">×</span>
+        <input type="number" id="sizeCustom" class="size-custom" value="14" min="6" max="200" title="自定义字号">
+
+        <div class="divider"></div>
+
+        <span class="toolbar-label">颜色</span>
+        <select id="colorSelect" class="color-select" title="颜色预设"></select>
+        <button class="text-btn" id="btnCustomColor" title="自定义颜色">自定义色</button>
+
+        <div class="divider"></div>
+
+        <button class="icon-btn" data-action="align" data-align="left"   title="左对齐"><i class="align-icon left"></i></button>
+        <button class="icon-btn" data-action="align" data-align="center" title="居中"><i class="align-icon center"></i></button>
+        <button class="icon-btn" data-action="align" data-align="right"  title="右对齐"><i class="align-icon right"></i></button>
+
+        <div class="divider"></div>
+
+        <button class="icon-btn" id="btnUndo" title="撤销 (Ctrl+Z)" disabled>↩</button>
+        <button class="icon-btn" id="btnRedo" title="重做 (Ctrl+Y)" disabled>↪</button>
+
+        <div class="spacer"></div>
+
+        <button class="action-btn" id="btnCopy" title="复制到剪贴板">复制</button>
+    </div>
+
+    <!-- ═══ 快捷标签栏 ═══ -->
+    <div class="sub-toolbar">
+        <span class="sub-label">快捷标签:</span>
+        <button class="tag-btn" data-action="tag" data-tag="b">粗体 &lt;b&gt;</button>
+        <button class="tag-btn" data-action="tag" data-tag="i">斜体 &lt;i&gt;</button>
+        <button class="tag-btn" data-action="tag" data-tag="u">下划线 &lt;u&gt;</button>
+        <button class="tag-btn" data-action="tag" data-tag="s">删除线 &lt;s&gt;</button>
+        <button class="tag-btn" data-action="tag" data-tag="sup">上标 &lt;sup&gt;</button>
+        <button class="tag-btn" data-action="tag" data-tag="sub">下标 &lt;sub&gt;</button>
+        <button class="tag-btn" data-action="raw" data-raw="\n">换行</button>
+        <button class="tag-btn" data-action="raw" data-raw=" ">空格</button>
+        <div class="spacer"></div>
+        <button class="tag-btn" id="btnTemplate">模板 ▾</button>
+    </div>
+
+    <!-- ═══ 自定义颜色面板 ═══ -->
+    <div class="color-panel" id="colorPanel">
+        <span class="panel-label">自定义颜色:</span>
+        <input type="color" id="customColor" value="#ffffff">
+        <button class="action-btn" id="btnApplyColor">应用到选区/光标</button>
+    </div>
+
+    <!-- ═══ 主体 ═══ -->
+    <div class="main">
+        <div class="editor-area">
+            <div class="area-hint">编辑区（选中文字后点按钮会包裹选区，不选中则插入到光标位置）</div>
+            <textarea id="textInput" placeholder="在此输入文本..."></textarea>
+        </div>
+
+        <div class="splitter" id="splitter"></div>
+
+        <div class="preview-area" id="previewArea">
+            <div class="preview-header">
+                <span class="preview-title">实时预览</span>
+                <button class="text-btn" id="btnPreviewBg">背景</button>
+            </div>
+            <div id="previewLabel"></div>
+        </div>
+    </div>
+
+    <!-- ═══ 状态栏 ═══ -->
+    <div class="status-bar">
+        <span id="statusLabel">就绪</span>
+    </div>
+</div>
+
+<!-- Toast + 下拉菜单 -->
+<div class="toast" id="toast"></div>
+<div class="dropdown-menu" id="templateMenu"></div>
+
+<script>
+"use strict";
+
+// ═══════════════════════════════════════════════════════════════
+//  富文本编辑器 —— 纯网页实现
+//  核心：textarea 原生 selectionStart/selectionEnd，
+//  点击按钮时用 mousedown + preventDefault 保持选区不丢失
+// ═══════════════════════════════════════════════════════════════
+
+const $ = (id) => document.getElementById(id);
+const textInput = $("textInput");
+const previewLabel = $("previewLabel");
+const statusLabel = $("statusLabel");
+const toast = $("toast");
+const sizeSelect = $("sizeSelect");
+const colorSelect = $("colorSelect");
+const sizeCustom = $("sizeCustom");
+const colorPanel = $("colorPanel");
+const customColor = $("customColor");
+const previewArea = $("previewArea");
+const templateMenu = $("templateMenu");
+
+// ── 预设数据 ─────────────────────────────────────────
+const ColorPresets = [
+    { name: "默认", color: "#FFFFFF" },
+    { name: "红",   color: "#F24D4D" },
+    { name: "橙",   color: "#F29933" },
+    { name: "黄",   color: "#F2E633" },
+    { name: "绿",   color: "#4DD659" },
+    { name: "青",   color: "#33CCCC" },
+    { name: "蓝",   color: "#4D8CF2" },
+    { name: "紫",   color: "#B266F2" },
+    { name: "粉",   color: "#F273B3" },
+    { name: "灰",   color: "#999999" },
+    { name: "黑",   color: "#262626" },
+    { name: "金",   color: "#FFD600" },
+];
+
+const SizePresets = [
+    { label: "小",   size: 10 },
+    { label: "较小", size: 12 },
+    { label: "正常", size: 14 },
+    { label: "较大", size: 18 },
+    { label: "大",   size: 24 },
+    { label: "特大", size: 32 },
+    { label: "巨大", size: 48 },
+];
+
+const Templates = {
+    "标题模板": '<size=28><b><color=#FFD700>标题文字</color></b></size>\n<size=14>副标题或描述内容</size>',
+    "高亮提示": '这是一段<color=#FF6B35><b>高亮强调</b></color>的文字内容。',
+    "渐变文字": '<color=#FF6B6B>渐</color><color=#FF8E6B>变</color><color=#FFB86B>文</color><color=#FFE26B>字</color><color=#A8E66B>效</color><color=#6BE6C1>果</color>',
+    "描边文字": '<b><color=#000000>描边文字效果（需配合 shader 使用）</color></b>',
+    "链接样式": '<color=#4DA6FF><u>点击查看详情</u></color>',
+    "引用块": '<indent=5%><color=#888888><i>「这是一段引用文字，使用缩进和斜体来区分。」</i></color></indent>',
+    "列表项": '• <b>项目一</b>：描述内容\n• <b>项目二</b>：描述内容\n• <b>项目三</b>：描述内容',
+    "价格标签": '<size=36><color=#FFD700><b>¥99</b></color></size> <size=14><color=#888888><s>¥199</s></color></size>',
+};
+
+// ── 状态 ─────────────────────────────────────────────
+let currentSize = 14;
+let currentColor = "#FFFFFF";
+const history = [];
+let historyIndex = -1;
+const MAX_HISTORY = 50;
+let suppressHistory = false;
+let toastTimer = null;
+
+// ── 选区缓存 ─────────────────────────────────────────
+// 关键修复：textarea 的 selectionStart/selectionEnd 在按钮点击时可能被重置为 0，
+// 因此在 textarea 每次选区变化时缓存，按钮点击时优先使用缓存值。
+let cachedSelection = { start: 0, end: 0 };
+
+// ═══════════════════════════════════════════════════════════════
+//  初始化
+// ═══════════════════════════════════════════════════════════════
+function init() {
+    // 字号下拉
+    SizePresets.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.size;
+        opt.textContent = s.label;
+        sizeSelect.appendChild(opt);
+    });
+    sizeSelect.selectedIndex = 2; // 正常
+
+    // 颜色下拉
+    ColorPresets.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.color;
+        opt.textContent = c.name;
+        colorSelect.appendChild(opt);
+    });
+    colorSelect.selectedIndex = 0;
+
+    bindEvents();
+    recordHistory();
+    updatePreview();
+    updateStatus();
+    updateUndoRedoButtons();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  事件绑定
+// ═══════════════════════════════════════════════════════════════
+function bindEvents() {
+    // ── 关键修复：按钮 mousedown 时立即缓存 textarea 选区 ──
+    // 此时 textarea 可能仍有焦点，selectionStart/selectionEnd 是最新的。
+    // 即使 preventDefault 失效或浏览器在 click 前重置选区，缓存也能救场。
+    const cacheSelectionOnMouseDown = (e) => {
+        // 只在 textarea 是 activeElement 或有缓存时更新
+        if (document.activeElement === textInput || textInput.selectionStart > 0 || textInput.selectionEnd > 0) {
+            cachedSelection = {
+                start: textInput.selectionStart,
+                end: textInput.selectionEnd
+            };
+        }
+        // 阻止 textarea 失焦（保留选区）
+        e.preventDefault();
+    };
+
+    // 所有工具栏按钮：mousedown 缓存选区 + preventDefault，click 执行操作
+    document.querySelectorAll("[data-action]").forEach(btn => {
+        btn.addEventListener("mousedown", cacheSelectionOnMouseDown);
+        btn.addEventListener("click", onToolbarButtonClick);
+    });
+
+    // 字号
+    sizeSelect.addEventListener("change", () => {
+        currentSize = parseInt(sizeSelect.value, 10);
+        sizeCustom.value = currentSize;
+        applySizeTag();
+    });
+    sizeCustom.addEventListener("change", () => {
+        currentSize = Math.max(6, Math.min(200, parseInt(sizeCustom.value, 10) || 14));
+        sizeSelect.selectedIndex = -1;
+        applySizeTag();
+    });
+
+    // 颜色
+    colorSelect.addEventListener("change", () => {
+        currentColor = colorSelect.value;
+        applyColorTag();
+    });
+    $("btnCustomColor").addEventListener("mousedown", cacheSelectionOnMouseDown);
+    $("btnCustomColor").addEventListener("click", () => {
+        colorPanel.classList.toggle("show");
+        if (colorPanel.classList.contains("show")) customColor.value = currentColor;
+    });
+    $("btnApplyColor").addEventListener("mousedown", cacheSelectionOnMouseDown);
+    $("btnApplyColor").addEventListener("click", () => {
+        currentColor = customColor.value;
+        applyColorTag();
+    });
+
+    // 撤销/重做
+    $("btnUndo").addEventListener("mousedown", cacheSelectionOnMouseDown);
+    $("btnUndo").addEventListener("click", undo);
+    $("btnRedo").addEventListener("mousedown", cacheSelectionOnMouseDown);
+    $("btnRedo").addEventListener("click", redo);
+
+    // 复制
+    $("btnCopy").addEventListener("mousedown", cacheSelectionOnMouseDown);
+    $("btnCopy").addEventListener("click", copyToClipboard);
+
+    // 模板
+    $("btnTemplate").addEventListener("mousedown", cacheSelectionOnMouseDown);
+    $("btnTemplate").addEventListener("click", showTemplateMenu);
+
+    // 预览背景
+    $("btnPreviewBg").addEventListener("mousedown", cacheSelectionOnMouseDown);
+    $("btnPreviewBg").addEventListener("click", showPreviewBgMenu);
+
+    // 文本变化
+    textInput.addEventListener("input", () => {
+        updatePreview();
+        updateStatus();
+        scheduleHistory();
+    });
+
+    // ── 关键修复：缓存 textarea 的选区/光标位置 ──
+    // 监听所有可能改变选区的事件，实时更新缓存。
+    // 这样即使按钮点击导致 textarea 失焦、selectionStart 被重置为 0，
+    // 我们仍能用缓存的正确位置插入。
+    const updateCachedSelection = () => {
+        cachedSelection = {
+            start: textInput.selectionStart,
+            end: textInput.selectionEnd
+        };
+    };
+    textInput.addEventListener("keyup", updateCachedSelection);
+    textInput.addEventListener("mouseup", updateCachedSelection);
+    textInput.addEventListener("select", updateCachedSelection);
+    textInput.addEventListener("input", updateCachedSelection);
+    textInput.addEventListener("focus", updateCachedSelection);
+    // 鼠标按下时也更新（拖选过程中）
+    textInput.addEventListener("mousedown", () => {
+        // 延迟一帧，让浏览器处理完选区更新
+        setTimeout(updateCachedSelection, 0);
+    });
+
+    // 键盘快捷键
+    textInput.addEventListener("keydown", onKeyDown);
+
+    // 分隔条拖动
+    initSplitter();
+
+    // 点击空白处关闭下拉菜单
+    document.addEventListener("click", (e) => {
+        if (!templateMenu.contains(e.target) && e.target.id !== "btnTemplate") {
+            templateMenu.classList.remove("show");
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  核心：选区/光标插入逻辑
+// ═══════════════════════════════════════════════════════════════
+
+/// 获取选区范围 [start, end)，无选区时 start==end==光标位置
+/// 优先用缓存（在按钮 mousedown 时更新，最可靠）；
+/// 若 textarea 当前有焦点则用实时值（键盘操作场景）
+function getSelectionRange() {
+    const textLen = textInput.value.length;
+    let start, end;
+
+    if (document.activeElement === textInput) {
+        // textarea 有焦点：实时选区最准确
+        start = textInput.selectionStart;
+        end = textInput.selectionEnd;
+    } else {
+        // textarea 无焦点（按钮点击场景）：用 mousedown 时缓存的选区
+        start = cachedSelection.start;
+        end = cachedSelection.end;
+    }
+
+    start = Math.max(0, Math.min(start, textLen));
+    end = Math.max(0, Math.min(end, textLen));
+    return { start: Math.min(start, end), end: Math.max(start, end) };
+}
+
+/// 替换 [start, end) 范围内容为 newText，光标移到 newCursor
+function replaceRange(start, end, newText, newCursor) {
+    const text = textInput.value;
+    start = Math.max(0, Math.min(start, text.length));
+    end = Math.max(start, Math.min(end, text.length));
+
+    const result = text.substring(0, start) + newText + text.substring(end);
+    const cursor = Math.max(0, Math.min(newCursor, result.length));
+
+    textInput.value = result;
+    // 关键：setSelectionRange 同时设置光标和选区
+    textInput.setSelectionRange(cursor, cursor);
+    // 同步更新缓存，避免下次插入用旧位置
+    cachedSelection = { start: cursor, end: cursor };
+    textInput.focus();
+
+    updatePreview();
+    updateStatus();
+}
+
+/// 插入配对标签：有选区包裹，无选区在光标处插入空标签对
+function insertTag(tag) {
+    const openTag = `<${tag}>`;
+    const closeTag = `</${tag}>`;
+    const { start, end } = getSelectionRange();
+
+    if (end > start) {
+        const selected = textInput.value.substring(start, end);
+        const wrapped = `${openTag}${selected}${closeTag}`;
+        replaceRange(start, end, wrapped, start + openTag.length + selected.length + closeTag.length);
+        showToast(`已用 <${tag}> 包裹选中文本`);
+    } else {
+        const inserted = `${openTag}${closeTag}`;
+        replaceRange(start, end, inserted, start + openTag.length);
+        showToast(`已在光标处插入 <${tag}> 标签`);
+    }
+    recordHistory();
+}
+
+/// 插入原始文本
+function insertRawText(text) {
+    const { start, end } = getSelectionRange();
+    replaceRange(start, end, text, start + text.length);
+    showToast(`已插入 ${text === "\n" ? "换行" : text === " " ? "空格" : text}`);
+    recordHistory();
+}
+
+/// 应用字号标签
+function applySizeTag() {
+    const { start, end } = getSelectionRange();
+    const openTag = `<size=${currentSize}>`;
+
+    if (end > start) {
+        const selected = textInput.value.substring(start, end);
+        const cleaned = selected.replace(/<\/?size=\d+>/gi, "");
+        const wrapped = `${openTag}${cleaned}</size>`;
+        replaceRange(start, end, wrapped, start + wrapped.length);
+        showToast(`选中文本字号设为 ${currentSize}`);
+    } else {
+        const inserted = `${openTag}</size>`;
+        replaceRange(start, end, inserted, start + openTag.length);
+        showToast(`已在光标处插入字号标签 (size=${currentSize})`);
+    }
+    recordHistory();
+}
+
+/// 应用颜色标签
+function applyColorTag() {
+    const { start, end } = getSelectionRange();
+    const hex = currentColor.replace("#", "").toUpperCase();
+    const openTag = `<color=#${hex}>`;
+
+    if (end > start) {
+        const selected = textInput.value.substring(start, end);
+        const cleaned = selected.replace(/<\/?color=#[0-9a-fA-F]{6,8}>/gi, "");
+        const wrapped = `${openTag}${cleaned}</color>`;
+        replaceRange(start, end, wrapped, start + wrapped.length);
+        showToast(`选中文本颜色设为 #${hex.substring(0, 6)}`);
+    } else {
+        const inserted = `${openTag}</color>`;
+        replaceRange(start, end, inserted, start + openTag.length);
+        showToast(`已在光标处插入颜色标签 (#${hex.substring(0, 6)})`);
+    }
+    recordHistory();
+}
+
+/// 插入对齐标签
+function insertAlignTag(align) {
+    const { start, end } = getSelectionRange();
+    const openTag = `<align=${align}>`;
+
+    if (end > start) {
+        const selected = textInput.value.substring(start, end);
+        const cleaned = selected.replace(/<\/?align=(left|center|right)>/gi, "");
+        const wrapped = `${openTag}${cleaned}</align>`;
+        replaceRange(start, end, wrapped, start + wrapped.length);
+        showToast(`选中文本对齐设为 ${align}`);
+    } else {
+        const inserted = `${openTag}</align>`;
+        replaceRange(start, end, inserted, start + openTag.length);
+        showToast(`已在光标处插入对齐标签 (${align})`);
+    }
+    recordHistory();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  工具栏按钮统一分发
+// ═══════════════════════════════════════════════════════════════
+function onToolbarButtonClick(e) {
+    const btn = e.currentTarget;
+    const action = btn.dataset.action;
+    if (action === "tag") insertTag(btn.dataset.tag);
+    else if (action === "align") insertAlignTag(btn.dataset.align);
+    else if (action === "raw") insertRawText(btn.dataset.raw);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  预览 / 状态 / Toast
+// ═══════════════════════════════════════════════════════════════
+function updatePreview() {
+    const text = textInput.value;
+    // 把 Unity 富文本标签转成 HTML（有限支持，用于预览）
+    let html = escapeHtml(text);
+    // <b> <i> <u> <s>
+    html = html.replace(/&lt;b&gt;(.*?)&lt;\/b&gt;/gs, "<b>$1</b>");
+    html = html.replace(/&lt;i&gt;(.*?)&lt;\/i&gt;/gs, "<i>$1</i>");
+    html = html.replace(/&lt;u&gt;(.*?)&lt;\/u&gt;/gs, "<u>$1</u>");
+    html = html.replace(/&lt;s&gt;(.*?)&lt;\/s&gt;/gs, "<s>$1</s>");
+    // <size=N>
+    html = html.replace(/&lt;size=(\d+)&gt;(.*?)&lt;\/size&gt;/gs,
+        (_, size, content) => `<span style="font-size:${size}px">${content}</span>`);
+    // <color=#RRGGBBAA>
+    html = html.replace(/&lt;color=#([0-9a-fA-F]{6,8})&gt;(.*?)&lt;\/color&gt;/gs,
+        (_, hex, content) => {
+            const color = hex.length === 8 ? "#" + hex.substring(0, 6) : "#" + hex;
+            return `<span style="color:${color}">${content}</span>`;
+        });
+    // 换行
+    html = html.replace(/\n/g, "<br>");
+    previewLabel.innerHTML = text ? html : '<span style="color:#888">（在此预览富文本效果）</span>';
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function updateStatus() {
+    const text = textInput.value;
+    const plainLen = text.replace(/<[^>]*>/g, "").length;
+    statusLabel.textContent = `纯文本 ${plainLen} 字符 | 含标签 ${text.length} 字符`;
+}
+
+function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add("show");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("show"), 2000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  模板菜单
+// ═══════════════════════════════════════════════════════════════
+function showTemplateMenu() {
+    templateMenu.innerHTML = "";
+    Object.keys(Templates).forEach(name => {
+        const item = document.createElement("div");
+        item.className = "dropdown-item";
+        item.textContent = name;
+        item.addEventListener("mousedown", (e) => e.preventDefault());
+        item.addEventListener("click", () => {
+            applyTemplate(name);
+            templateMenu.classList.remove("show");
+        });
+        templateMenu.appendChild(item);
+    });
+    // 分隔 + 清除格式
+    const sep = document.createElement("div");
+    sep.className = "dropdown-separator";
+    templateMenu.appendChild(sep);
+    const clear = document.createElement("div");
+    clear.className = "dropdown-item danger";
+    clear.textContent = "清除所有格式";
+    clear.addEventListener("mousedown", (e) => e.preventDefault());
+    clear.addEventListener("click", () => {
+        clearAllFormatting();
+        templateMenu.classList.remove("show");
+    });
+    templateMenu.appendChild(clear);
+
+    // 定位
+    const rect = $("btnTemplate").getBoundingClientRect();
+    templateMenu.style.left = rect.left + "px";
+    templateMenu.style.top = (rect.bottom + 2) + "px";
+    templateMenu.classList.toggle("show");
+}
+
+function applyTemplate(name) {
+    const text = Templates[name];
+    textInput.value = text;
+    const cursor = text.length;
+    textInput.setSelectionRange(cursor, cursor);
+    textInput.focus();
+    updatePreview();
+    updateStatus();
+    showToast(`已套用模板：${name}`);
+    recordHistory();
+}
+
+function clearAllFormatting() {
+    const plain = textInput.value.replace(/<[^>]*>/g, "");
+    textInput.value = plain;
+    textInput.setSelectionRange(plain.length, plain.length);
+    textInput.focus();
+    updatePreview();
+    updateStatus();
+    showToast("已清除所有格式");
+    recordHistory();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  预览背景菜单
+// ═══════════════════════════════════════════════════════════════
+function showPreviewBgMenu() {
+    const menu = document.createElement("div");
+    menu.className = "dropdown-menu show";
+    const options = [
+        { name: "深色背景", color: "#1F1F1F" },
+        { name: "浅色背景", color: "#E6E6E6" },
+        { name: "黑色背景", color: "#000000" },
+        { name: "白色背景", color: "#FFFFFF" },
+    ];
+    options.forEach(opt => {
+        const item = document.createElement("div");
+        item.className = "dropdown-item";
+        item.textContent = opt.name;
+        item.addEventListener("mousedown", (e) => e.preventDefault());
+        item.addEventListener("click", () => {
+            previewArea.style.background = opt.color;
+            document.body.removeChild(menu);
+        });
+        menu.appendChild(item);
+    });
+    const rect = $("btnPreviewBg").getBoundingClientRect();
+    menu.style.left = rect.left + "px";
+    menu.style.top = (rect.bottom + 2) + "px";
+    document.body.appendChild(menu);
+
+    // 点击外部关闭
+    const closeHandler = (e) => {
+        if (!menu.contains(e.target) && e.target.id !== "btnPreviewBg") {
+            document.body.removeChild(menu);
+            document.removeEventListener("click", closeHandler);
+        }
+    };
+    setTimeout(() => document.addEventListener("click", closeHandler), 0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  撤销/重做
+// ═══════════════════════════════════════════════════════════════
+let historyTimer = null;
+function scheduleHistory() {
+    if (historyTimer) clearTimeout(historyTimer);
+    historyTimer = setTimeout(recordHistory, 400);
+}
+
+function recordHistory() {
+    if (suppressHistory) return;
+    const snapshot = {
+        text: textInput.value,
+        cursor: textInput.selectionStart,
+    };
+    // 在历史中间插入新状态，丢弃后续
+    if (historyIndex < history.length - 1) {
+        history.splice(historyIndex + 1);
+    }
+    // 避免连续记录相同内容
+    if (history.length > 0 && history[history.length - 1].text === snapshot.text) return;
+    history.push(snapshot);
+    if (history.length > MAX_HISTORY) history.shift();
+    historyIndex = history.length - 1;
+    updateUndoRedoButtons();
+}
+
+function undo() {
+    if (historyIndex <= 0) { showToast("没有可撤销的操作"); return; }
+    historyIndex--;
+    applySnapshot(history[historyIndex]);
+    showToast("已撤销");
+}
+
+function redo() {
+    if (historyIndex >= history.length - 1) { showToast("没有可重做的操作"); return; }
+    historyIndex++;
+    applySnapshot(history[historyIndex]);
+    showToast("已重做");
+}
+
+function applySnapshot(snap) {
+    suppressHistory = true;
+    textInput.value = snap.text;
+    const cursor = Math.max(0, Math.min(snap.cursor, snap.text.length));
+    textInput.setSelectionRange(cursor, cursor);
+    textInput.focus();
+    suppressHistory = false;
+    updatePreview();
+    updateStatus();
+    updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+    $("btnUndo").disabled = historyIndex <= 0;
+    $("btnRedo").disabled = historyIndex >= history.length - 1;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  复制到剪贴板
+// ═══════════════════════════════════════════════════════════════
+function copyToClipboard() {
+    if (!textInput.value) return;
+    navigator.clipboard.writeText(textInput.value).then(() => {
+        showToast("已复制到剪贴板");
+    }).catch(() => {
+        // 回退方案
+        textInput.select();
+        document.execCommand("copy");
+        showToast("已复制到剪贴板");
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  键盘快捷键
+// ═══════════════════════════════════════════════════════════════
+function onKeyDown(e) {
+    // Ctrl+Z 撤销
+    if (e.ctrlKey && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return;
+    }
+    // Ctrl+Y 或 Ctrl+Shift+Z 重做
+    if ((e.ctrlKey && e.key === "y") || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "z")) {
+        e.preventDefault();
+        redo();
+        return;
+    }
+    // Ctrl+B/I/U
+    if (e.ctrlKey && !e.shiftKey) {
+        if (e.key === "b") { e.preventDefault(); insertTag("b"); return; }
+        if (e.key === "i") { e.preventDefault(); insertTag("i"); return; }
+        if (e.key === "u") { e.preventDefault(); insertTag("u"); return; }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  分隔条拖动（调整编辑区/预览区高度）
+// ═══════════════════════════════════════════════════════════════
+function initSplitter() {
+    const splitter = $("splitter");
+    const editorArea = document.querySelector(".editor-area");
+    const previewAreaEl = $("previewArea");
+    let dragging = false;
+    let startY = 0;
+    let startPreviewH = 0;
+
+    splitter.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        dragging = true;
+        startY = e.clientY;
+        startPreviewH = previewAreaEl.offsetHeight;
+        document.body.style.cursor = "row-resize";
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        const delta = e.clientY - startY;
+        let newH = startPreviewH - delta;
+        newH = Math.max(60, Math.min(newH, window.innerHeight - 200));
+        previewAreaEl.style.height = newH + "px";
+    });
+
+    document.addEventListener("mouseup", () => {
+        if (dragging) {
+            dragging = false;
+            document.body.style.cursor = "";
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  启动
+// ═══════════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>

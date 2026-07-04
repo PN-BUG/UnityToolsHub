@@ -1,0 +1,100 @@
+#if UNITY_EDITOR
+using Sirenix.OdinInspector;
+using UnityEditor;
+using UnityEngine;
+
+/// <summary>
+/// ═══════════════════════════════════════════════════════════════
+///  UnityToolsHub 新工具模板
+/// ═══════════════════════════════════════════════════════════════
+///  
+///  使用方法：
+///  1. 将此文件复制并重命名 _NewToolTemplate.cs.txt → YourTool.cs
+///  2. 修改类名与 [ToolInfo] 特性参数
+///  3. 实现你的工具逻辑
+///  4. 保存后 Hub 面板会自动发现并显示，无需修改 Hub 代码
+///  
+///  ── 快速参考 ─────────────────────────────────────────────
+///  [ToolInfo] 参数说明：
+///    - 第1参数 (name)     : 工具显示名称（必填）
+///    - 第2参数 (category) : 所属分类（必填），相同名称自动归组
+///    - Description        : 功能描述，支持 \n 换行
+///    - Icon               : 分类/工具图标（emoji），如 "⚙" "📊" "🔧"
+///    - Tags               : 搜索标签，用于搜索过滤
+///    - Shortcut           : 快捷键提示（仅显示用）
+///    - Priority           : 排序优先级，数字越小越靠前
+///  
+///  ── 已有分类 ─────────────────────────────────────────────
+///  框架初始化 | 数据管理 | 面板管理 | 资产工具 | 编辑器工具
+///  文件工具   | 字体工具 | 媒体工具 | UI 工具  | 调试工具
+///  路径工具
+///  
+///  如需新分类，直接在 category 参数填写新名称即可，
+///  Hub 会自动分配颜色。
+///  
+/// ═══════════════════════════════════════════════════════════════
+/// </summary>
+
+// ── [ToolInfo] 是必须的，Hub 通过它自动发现工具 ─────────────
+[ToolInfo("示例工具", "编辑器工具",
+    Description = "这是一个示例工具模板，展示如何创建新工具。\n\n功能说明写在这里，支持多行描述。",
+    Icon = "🔧",
+    Tags = new[] { "示例", "模板" },    Shortcut = "Ctrl+Shift+T",    Priority = 99)]
+public class MyToolTemplate : EditorWindow
+{
+    // ── 字段：使用 Odin Inspector 特性，中文 LabelText ──────
+    [LabelText("启用功能")]
+    public bool enableFeature = true;
+
+    [LabelText("速度")]
+    [Range(0f, 100f)]
+    public float speed = 50f;
+
+    [LabelText("目标对象")]
+    public GameObject target;
+
+    // ── 菜单入口（可选，如果需要从菜单也能打开）──────────────
+    // [MenuItem("UnityToolsHub/My Tool")]
+    // public static void OpenFromMenu()
+    // {
+    //     GetWindow<MyToolTemplate>("示例工具");
+    // }
+
+    // ── 生命周期 ────────────────────────────────────────────
+    private void OnEnable()
+    {
+        // 初始化、注册事件等
+    }
+
+    private void OnDisable()
+    {
+        // 清理、注销事件等
+    }
+
+    private void OnGUI()
+    {
+        // 绘制 UI
+        EditorGUILayout.Space(10);
+        EditorGUILayout.LabelField("示例工具", EditorStyles.boldLabel);
+        EditorGUILayout.Space(5);
+
+        // 使用 EditorGUILayout 或 Odin 的 SirenixEditorFields
+        enableFeature = EditorGUILayout.Toggle("启用功能", enableFeature);
+        speed = EditorGUILayout.Slider("速度", speed, 0f, 100f);
+        target = (GameObject)EditorGUILayout.ObjectField("目标对象", target, typeof(GameObject), true);
+
+        EditorGUILayout.Space(20);
+
+        if (GUILayout.Button("执行操作"))
+        {
+            ExecuteAction();
+        }
+    }
+
+    private void ExecuteAction()
+    {
+        // 实现你的工具逻辑
+        Debug.Log($"[示例工具] 执行操作: enable={enableFeature}, speed={speed}");
+    }
+}
+#endif
