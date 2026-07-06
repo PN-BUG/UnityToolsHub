@@ -4,7 +4,6 @@
   "displayName": "Unity Package Creator",
   "description": "Custom Package Quick Creator,Allow you to quickly create a package of your own",
   "unity": "2021.3",
-  "unityRelease": "38f1",
   "keywords": [
     "package",
     "creator",
@@ -15,6 +14,5 @@
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "2.0.0"
   },
-  "type": "tool",
-  "_fingerprint": "23496bea9f2795efa2af333b9f18bfaba943c051"
+  "type": "tool"
 }
