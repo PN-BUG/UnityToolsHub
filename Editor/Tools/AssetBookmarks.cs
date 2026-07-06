@@ -78,7 +78,8 @@ public class AssetBookmarks : EditorWindow
     #endregion
 
     #region 常量
-    private const string PREFS_KEY = "AssetBookmarks_Data";
+    // 基于项目路径生成唯一 key，实现数据与项目绑定
+    private static string PREFS_KEY => $"AssetBookmarks_{Application.dataPath.GetHashCode():X}";
     private const float ItemHeight = 40f;
     private const float GroupHeaderHeight = 26f;
     private const float ToolbarHeight = 36f;
