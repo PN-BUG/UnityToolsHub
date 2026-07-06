@@ -97,6 +97,10 @@ UnityToolsHub/
     │   ├── ShortcutManager.cs      # 快捷键管理
     │   ├── Styles.cs               # 样式定义
     │   └── Theme.cs                # 主题配置
+    ├── InsidersTest/               # 内部测试工具
+    │   ├── CryptoUtility.cs        # 加密工具
+    │   ├── JsonViewer.cs           # JSON 查看器
+    │   └── ProjectBuilder.cs       # 项目构建器
     ├── Tools/                      # 内置工具集合
     │   ├── AssetBookmarks.cs       # 收藏夹
     │   ├── AssetImportFilter.cs    # 资产导入过滤
