@@ -175,7 +175,7 @@ public class AssetBookmarks : EditorWindow
     #region 菜单入口
     // 快捷键: Ctrl+Shift+V (Toggle)
     [MenuItem("UnityToolsHub/收藏夹 %#v", false, 100)]
-    [MenuItem("Window/UnityFramework/收藏夹 %#v")]
+    [MenuItem("Window/UnityFramework/收藏夹", false, 100)]
     public static void Toggle()
     {
         if (_instance != null)
