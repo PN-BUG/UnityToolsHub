@@ -11,6 +11,12 @@ using UnityEngine;
 [ToolInfo("测试窗口", "调试工具", Description = "聚合展示场景中所有标记了 [Test] 的方法和字段。\n\n方法显示为可点击按钮，字段显示为可编辑控件。\n支持搜索过滤、按组件分组，快捷键 Ctrl+T 打开/关闭。", Icon = "⌘", Tags = new[] { "测试", "调试", "Test" }, Shortcut = "Ctrl+T")]
 public class TestWindow : EditorWindow
 {
+#if UNITY_6000_0_OR_NEWER
+    static int GetEntityKey(UnityEngine.Object obj) => obj.GetEntityId();
+#else
+    static int GetEntityKey(UnityEngine.Object obj) => obj.GetInstanceID();
+#endif
+
     // ── 数据结构 ──────────────────────────────────────────────
     private class TestMethodEntry
     {
@@ -96,7 +102,7 @@ public class TestWindow : EditorWindow
             foreach (var entry in group.Methods)
             {
                 if (entry.Target == null || entry.Parameters.Length == 0) continue;
-                string key = $"{entry.Target.GetInstanceID()}_{entry.Method.Name}";
+                string key = $"{GetEntityKey(entry.Target)}_{entry.Method.Name}";
                 _paramCache[key] = entry.ParameterValues;
             }
         }
@@ -144,7 +150,7 @@ public class TestWindow : EditorWindow
                 };
 
                 // 尝试从缓存恢复参数值，否则使用默认值
-                string cacheKey = $"{mb.GetInstanceID()}_{method.Name}";
+                string cacheKey = $"{GetEntityKey(mb)}_{method.Name}";
                 if (_paramCache.TryGetValue(cacheKey, out var cached) && cached.Length == parameters.Length)
                 {
                     entry.ParameterValues = cached;
