@@ -73,6 +73,7 @@ public class UnityFrameworkInitWindow : EditorWindow
     private string installStatus = string.Empty;
 
     [MenuItem("UnityToolsHub/初始化设置", false, 0)]
+    [MenuItem("UnityFramework/初始化设置", false, 0)]
     public static void ShowWindow()
     {
         var window = GetWindow<UnityFrameworkInitWindow>(true, "UnityFramework 初始化设置", true);

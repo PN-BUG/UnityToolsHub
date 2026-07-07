@@ -42,6 +42,8 @@ public class TestWindow : EditorWindow
     private Dictionary<TestGroup, bool> _foldouts = new Dictionary<TestGroup, bool>();
     private string _searchFilter = "";
     private Vector2 _scrollPosGroups;
+    // 缓存参数值，避免刷新时丢失用户输入
+    private Dictionary<string, object[]> _paramCache = new Dictionary<string, object[]>();
 
     // ── 快捷键注册 ──────────────────────────────────────────
     [MenuItem("UnityToolsHub/测试窗口 %t")]   // Ctrl+T
@@ -62,7 +64,7 @@ public class TestWindow : EditorWindow
     {
         var win = GetWindow<TestWindow>("测试窗口");
         win.minSize = new Vector2(320, 200);
-        win.RefreshEntries();
+        // OnEnable 中会自动调用 RefreshEntries，无需重复刷新
         win.Show();
     }
 
@@ -84,9 +86,28 @@ public class TestWindow : EditorWindow
         Repaint();
     }
 
+    /// <summary>
+    /// 保存当前所有方法的参数值到缓存
+    /// </summary>
+    private void SaveParamCache()
+    {
+        foreach (var group in _groups)
+        {
+            foreach (var entry in group.Methods)
+            {
+                if (entry.Target == null || entry.Parameters.Length == 0) continue;
+                string key = $"{entry.Target.GetInstanceID()}_{entry.Method.Name}";
+                _paramCache[key] = entry.ParameterValues;
+            }
+        }
+    }
+
     // ── 刷新数据 ────────────────────────────────────────────
     private void RefreshEntries()
     {
+        // 保存当前参数值到缓存
+        SaveParamCache();
+        
         _groups.Clear();
         _foldouts.Clear();
 
@@ -122,10 +143,18 @@ public class TestWindow : EditorWindow
                     ParameterValues = new object[parameters.Length]
                 };
 
-                // 初始化参数默认值
-                for (int i = 0; i < parameters.Length; i++)
+                // 尝试从缓存恢复参数值，否则使用默认值
+                string cacheKey = $"{mb.GetInstanceID()}_{method.Name}";
+                if (_paramCache.TryGetValue(cacheKey, out var cached) && cached.Length == parameters.Length)
                 {
-                    entry.ParameterValues[i] = GetDefaultValue(parameters[i].ParameterType);
+                    entry.ParameterValues = cached;
+                }
+                else
+                {
+                    for (int i = 0; i < parameters.Length; i++)
+                    {
+                        entry.ParameterValues[i] = GetDefaultValue(parameters[i].ParameterType);
+                    }
                 }
 
                 group.Methods.Add(entry);
