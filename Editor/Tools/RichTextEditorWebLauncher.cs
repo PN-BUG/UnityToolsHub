@@ -45,24 +45,46 @@ public class RichTextEditorWebLauncher : EditorWindow
         Close();
     }
 
-    /// <summary>获取 HTML 文件的绝对路径（相对于包目录）</summary>
+    /// <summary>获取 HTML 文件的路径（基于脚本自身路径动态定位，兼容任意安装位置）</summary>
     private static string GetHtmlFilePath()
     {
-        string asmPath = typeof(RichTextEditorWebLauncher).Assembly.Location;
-        string asmDir = Path.GetDirectoryName(asmPath);
-        string packageRoot = Path.GetDirectoryName(asmDir);
-        return Path.Combine(packageRoot, "Editor", "Tools", "RichTextEditorWeb.html");
+        // 通过 MonoScript 反查脚本在 Assets / Packages 中的路径，
+        // 再拼接同目录下的 HTML 文件，兼容 Assets、UPM、git submodule 等任意位置
+        var monoScript = MonoScript.FromScriptableObject(CreateInstance<RichTextEditorWebLauncher>());
+        if (monoScript != null)
+        {
+            string scriptPath = AssetDatabase.GetAssetPath(monoScript);
+            if (!string.IsNullOrEmpty(scriptPath))
+            {
+                string scriptDir = Path.GetDirectoryName(scriptPath);
+                string htmlPath = Path.Combine(scriptDir, "RichTextEditorWeb.html");
+                if (File.Exists(htmlPath))
+                    return Path.GetFullPath(htmlPath);
+            }
+        }
+
+        // 回退：搜索项目中所有同名 HTML 文件
+        string[] guids = AssetDatabase.FindAssets("RichTextEditorWeb t:TextAsset");
+        foreach (string guid in guids)
+        {
+            string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+            if (assetPath.EndsWith("RichTextEditorWeb.html"))
+                return Path.GetFullPath(assetPath);
+        }
+
+        return string.Empty;
     }
 
     /// <summary>用系统默认浏览器打开 HTML 文件</summary>
     private static void OpenInBrowser()
     {
         var fullPath = GetHtmlFilePath();
-        if (!File.Exists(fullPath))
+        if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
         {
             EditorUtility.DisplayDialog("错误",
-                $"找不到富文本编辑器 HTML 文件：\n{fullPath}\n\n请确认文件存在于该路径。", "确定");
-            Debug.LogError($"[RichTextEditorWeb] 找不到 HTML 文件：{fullPath}");
+                "找不到富文本编辑器 HTML 文件（RichTextEditorWeb.html）。\n\n" +
+                "请确认 RichTextEditorWeb.html 与 RichTextEditorWebLauncher.cs 在同一目录下。", "确定");
+            Debug.LogError("[RichTextEditorWeb] 找不到 RichTextEditorWeb.html，请确认它与启动器脚本在同一目录。");
             return;
         }
 
