@@ -326,6 +326,8 @@ namespace UnityFramework
         private GUIStyle _styleRowNormal;
         private GUIStyle _styleRowHover;
         private GUIStyle _styleRowSelected;
+        private GUIStyle _styleToolbarLabel;
+        private GUIStyle _styleTableCell;
 
         private Texture2D MakeTex(int w, int h, Color c)
         {
@@ -521,6 +523,23 @@ namespace UnityFramework
                 normal = { background = _texSelected }
             };
 
+            // ── 工具栏标签（与按钮字号一致、垂直居中）──
+            _styleToolbarLabel = new GUIStyle()
+            {
+                fontSize = 11,
+                normal = { textColor = ClrTextDim },
+                alignment = TextAnchor.MiddleLeft,
+                padding = new RectOffset(0, 0, 0, 0)
+            };
+
+            // ── 表格单元格（数字居中）──
+            _styleTableCell = new GUIStyle()
+            {
+                fontSize = 12,
+                normal = { textColor = ClrText },
+                alignment = TextAnchor.MiddleCenter
+            };
+
             _stylesInitialized = true;
         }
 
@@ -602,33 +621,42 @@ namespace UnityFramework
             var rect = GUILayoutUtility.GetRect(0, 36, GUILayout.ExpandWidth(true));
             EditorGUI.DrawRect(rect, ClrToolbarBg);
 
-            // 标题
-            var titleRect = new Rect(rect.x + 12, rect.y, 120, rect.height);
-            GUI.Label(titleRect, "📄  Using 管理", new GUIStyle()
-            {
-                fontSize = 13,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = ClrTextBright },
-                alignment = TextAnchor.MiddleLeft,
-                richText = true
-            });
+            float x = rect.x + 12;
 
-            float x = rect.x + 130;
+            // 搜索
+            var searchLabelRect = new Rect(x, rect.y + 7, 30, 22);
+            GUI.Label(searchLabelRect, "搜索", _styleToolbarLabel);
+            x += 34;
+
+            var searchRect = new Rect(x, rect.y + 7, 120, 22);
+            EditorGUI.DrawRect(searchRect, ClrSearchBg);
+            GUI.SetNextControlName("ToolbarSearch");
+            _searchKeyword = EditorGUI.TextField(searchRect, _searchKeyword, _styleSearchField);
+
+            // Placeholder
+            if (string.IsNullOrEmpty(_searchKeyword) && GUI.GetNameOfFocusedControl() != "ToolbarSearch")
+            {
+                GUI.Label(searchRect, "  搜索文件名...", _styleSearchPlaceholder);
+            }
+            x += 126;
 
             // 扫描路径
-            var pathLabelRect = new Rect(x, rect.y + 8, 55, 20);
-            GUI.Label(pathLabelRect, "扫描路径", _styleLabelDim);
-            x += 58;
+            var pathLabelRect = new Rect(x, rect.y + 7, 50, 22);
+            GUI.Label(pathLabelRect, "扫描路径", _styleToolbarLabel);
+            x += 54;
 
-            var pathFieldRect = new Rect(x, rect.y + 7, 180, 22);
+            // 路径输入框自适应宽度：填满到浏览按钮之前的剩余空间
+            // 右侧固定控件: 浏览(52) + 筛选标签(30) + 筛选下拉(95) + 扫描按钮(64) + 间距(26) = 267
+            float pathFieldWidth = Mathf.Max(100, rect.width - x - 267);
+            var pathFieldRect = new Rect(x, rect.y + 7, pathFieldWidth, 22);
             EditorGUI.DrawRect(pathFieldRect, ClrSearchBg);
             _scanPath = EditorGUI.TextField(pathFieldRect, _scanPath, _styleSearchField);
-            x += 184;
+            x += pathFieldWidth + 4;
 
-            var browseRect = new Rect(x, rect.y + 7, 50, 22);
+            var browseRect = new Rect(x, rect.y + 7, 52, 22);
             bool browseHover = browseRect.Contains(Event.current.mousePosition);
             EditorGUI.DrawRect(browseRect, browseHover ? ClrItemHover : ClrTagBg);
-            if (GUI.Button(browseRect, "浏览...", _styleBtnFlat))
+            if (GUI.Button(browseRect, "浏览…", _styleBtnFlat))
             {
                 string selected = EditorUtility.OpenFolderPanel("选择扫描目录", _scanPath, "");
                 if (!string.IsNullOrEmpty(selected))
@@ -640,25 +668,19 @@ namespace UnityFramework
                         _scanPath = selected;
                 }
             }
-            x += 56;
+            x += 58;
 
             // 筛选
-            var filterLabelRect = new Rect(x, rect.y + 8, 30, 20);
-            GUI.Label(filterLabelRect, "筛选", _styleLabelDim);
+            var filterLabelRect = new Rect(x, rect.y + 7, 30, 22);
+            GUI.Label(filterLabelRect, "筛选", _styleToolbarLabel);
             x += 34;
 
-            var filterRect = new Rect(x, rect.y + 7, 80, 22);
+            var filterRect = new Rect(x, rect.y + 7, 95, 22);
             EditorGUI.DrawRect(filterRect, ClrSearchBg);
             var newFilter = (FilterMode)EditorGUI.EnumPopup(filterRect, _filterMode, _styleBtnFlat);
             if (newFilter != _filterMode) { _filterMode = newFilter; _filterDirty = true; }
-            x += 86;
 
-            // 搜索（自适应宽度，始终为扫描按钮留出空间）
-            var searchLabelRect = new Rect(x, rect.y + 8, 30, 20);
-            GUI.Label(searchLabelRect, "搜索", _styleLabelDim);
-            x += 34;
-
-            // 扫描按钮（始终靠右绘制，确保不被遮挡）
+            // 扫描按钮（始终靠右）
             var scanBtnWidth = 64f;
             var scanRect = new Rect(rect.xMax - scanBtnWidth - 8, rect.y + 6, scanBtnWidth, 24);
             bool scanHover = scanRect.Contains(Event.current.mousePosition);
@@ -666,19 +688,6 @@ namespace UnityFramework
             if (GUI.Button(scanRect, "🔍 扫描", _styleBtnPrimary))
             {
                 ScanFiles();
-            }
-
-            // 搜索框（到扫描按钮左边截止，留 8px 间距）
-            float searchWidth = Mathf.Max(80, scanRect.x - x - 8);
-            var searchRect = new Rect(x, rect.y + 7, searchWidth, 22);
-            EditorGUI.DrawRect(searchRect, ClrSearchBg);
-            GUI.SetNextControlName("ToolbarSearch");
-            _searchKeyword = EditorGUI.TextField(searchRect, _searchKeyword, _styleSearchField);
-
-            // Placeholder
-            if (string.IsNullOrEmpty(_searchKeyword) && GUI.GetNameOfFocusedControl() != "ToolbarSearch")
-            {
-                GUI.Label(searchRect, "  搜索文件名...", _styleSearchPlaceholder);
             }
         }
 
@@ -890,13 +899,16 @@ namespace UnityFramework
             hx += 22;
             GUI.Label(new Rect(hx, headerRect.y, 200, headerRect.height), "文件名", _styleHeaderLabel);
             hx += 204;
-            GUI.Label(new Rect(hx, headerRect.y, 45, headerRect.height), "Using", _styleHeaderLabel);
+
+            // 表头数字列居中，与数据对齐
+            var headerCellStyle = new GUIStyle(_styleHeaderLabel) { alignment = TextAnchor.MiddleCenter };
+            GUI.Label(new Rect(hx, headerRect.y, 45, headerRect.height), "Using", headerCellStyle);
             hx += 48;
-            GUI.Label(new Rect(hx, headerRect.y, 40, headerRect.height), "缺失", _styleHeaderLabel);
+            GUI.Label(new Rect(hx, headerRect.y, 40, headerRect.height), "缺失", headerCellStyle);
             hx += 44;
-            GUI.Label(new Rect(hx, headerRect.y, 50, headerRect.height), "未使用", _styleHeaderLabel);
+            GUI.Label(new Rect(hx, headerRect.y, 50, headerRect.height), "未使用", headerCellStyle);
             hx += 54;
-            GUI.Label(new Rect(hx, headerRect.y, 30, headerRect.height), "宏", _styleHeaderLabel);
+            GUI.Label(new Rect(hx, headerRect.y, 30, headerRect.height), "宏", headerCellStyle);
 
             // ── 表格内容 ──
             bool shiftHeld = Event.current.shift;
@@ -951,7 +963,7 @@ namespace UnityFramework
 
                 // Using 数量
                 var usingCountRect = new Rect(rx, rowRect.y, 45, rowRect.height);
-                GUI.Label(usingCountRect, result.AllUsings.Count.ToString(), _styleLabel);
+                GUI.Label(usingCountRect, result.AllUsings.Count.ToString(), _styleTableCell);
                 rx += 48;
 
                 // 缺失
@@ -965,7 +977,7 @@ namespace UnityFramework
                 }
                 else
                 {
-                    GUI.Label(missRect, result.MissingUsings.Count.ToString(), _styleLabel);
+                    GUI.Label(missRect, result.MissingUsings.Count.ToString(), _styleTableCell);
                 }
                 rx += 44;
 
@@ -979,7 +991,7 @@ namespace UnityFramework
                 }
                 else
                 {
-                    GUI.Label(unusedRect, result.UnusedUsings.Count.ToString(), _styleLabel);
+                    GUI.Label(unusedRect, result.UnusedUsings.Count.ToString(), _styleTableCell);
                 }
                 rx += 54;
 
@@ -996,7 +1008,7 @@ namespace UnityFramework
                 }
                 else
                 {
-                    GUI.Label(macroRect, "-", _styleLabelDim);
+                    GUI.Label(macroRect, "-", _styleTableCell);
                 }
 
                 // Hover 跟踪
@@ -1077,7 +1089,7 @@ namespace UnityFramework
             {
                 if (result.MissingUsings.Count == 0)
                 {
-                    EditorGUILayout.LabelField("  ✓ 无缺失", _styleTagOk);
+                    EditorGUILayout.LabelField("  ✓ 无缺失", new GUIStyle(_styleLabel) { normal = { textColor = ClrOkTag } });
                 }
                 else
                 {
@@ -1099,7 +1111,7 @@ namespace UnityFramework
             {
                 if (result.UnusedUsings.Count == 0)
                 {
-                    EditorGUILayout.LabelField("  ✓ 无未使用的 Using", _styleTagOk);
+                    EditorGUILayout.LabelField("  ✓ 无未使用的 Using", new GUIStyle(_styleLabel) { normal = { textColor = ClrOkTag } });
                 }
                 else
                 {
@@ -1178,7 +1190,9 @@ namespace UnityFramework
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.Label($"  {label}", _styleLabelDim, GUILayout.Width(70));
-                EditorGUILayout.SelectableLabel(value, _styleLabel, GUILayout.Height(18));
+                // 路径等长文本支持换行显示
+                var wrapStyle = new GUIStyle(_styleLabel) { wordWrap = true };
+                EditorGUILayout.LabelField(value, wrapStyle, GUILayout.ExpandHeight(true));
             }
         }
 
