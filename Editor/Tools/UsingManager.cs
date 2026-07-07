@@ -970,8 +970,8 @@ namespace UnityFramework
                 var missRect = new Rect(rx, rowRect.y, 40, rowRect.height);
                 if (result.MissingUsings.Count > 0)
                 {
-                    // 标签样式
-                    var tagRect = new Rect(rx + 4, rowRect.y + 3, 28, 16);
+                    // 标签样式（列宽40，标签宽28，居中偏移6）
+                    var tagRect = new Rect(rx + 6, rowRect.y + 3, 28, 16);
                     EditorGUI.DrawRect(tagRect, new Color(0.90f, 0.45f, 0.25f, 0.15f));
                     GUI.Label(tagRect, result.MissingUsings.Count.ToString(), _styleTagMiss);
                 }
@@ -985,7 +985,8 @@ namespace UnityFramework
                 var unusedRect = new Rect(rx, rowRect.y, 50, rowRect.height);
                 if (result.UnusedUsings.Count > 0)
                 {
-                    var tagRect = new Rect(rx + 4, rowRect.y + 3, 28, 16);
+                    // 标签样式（列宽50，标签宽28，居中偏移11）
+                    var tagRect = new Rect(rx + 11, rowRect.y + 3, 28, 16);
                     EditorGUI.DrawRect(tagRect, new Color(0.95f, 0.75f, 0.25f, 0.15f));
                     GUI.Label(tagRect, result.UnusedUsings.Count.ToString(), _styleTagUnused);
                 }
@@ -1097,7 +1098,7 @@ namespace UnityFramework
                     {
                         using (new EditorGUILayout.HorizontalScope())
                         {
-                            GUILayout.Label("  ➕", GUILayout.Width(20));
+                            GUILayout.Label("  ➕", GUILayout.Width(24));
                             EditorGUILayout.SelectableLabel($"using {ns};", _styleLabel, GUILayout.Height(18));
                         }
                     }
@@ -1121,7 +1122,7 @@ namespace UnityFramework
                         {
                             using (new EditorGUILayout.HorizontalScope())
                             {
-                                GUILayout.Label("  🗑", GUILayout.Width(20));
+                                GUILayout.Label("  🗑", GUILayout.Width(24));
                                 EditorGUILayout.SelectableLabel(u.Directive, _styleLabel, GUILayout.Height(18));
                             }
                             if (!string.IsNullOrEmpty(u.MacroContext))
@@ -1145,7 +1146,7 @@ namespace UnityFramework
                     string macro = !string.IsNullOrEmpty(u.MacroContext) ? $"  [{u.MacroContext}]" : "";
                     using (new EditorGUILayout.HorizontalScope())
                     {
-                        GUILayout.Label($"  {status}", GUILayout.Width(20));
+                        GUILayout.Label($"  {status}", GUILayout.Width(24));
                         EditorGUILayout.SelectableLabel($"{u.Directive}{macro}", _styleLabel, GUILayout.Height(18));
                     }
                 }
