@@ -219,7 +219,7 @@ namespace Sirenix.OdinInspector.Editor
     /// 有 Odin 时由 Odin 的 OdinEditor 自动接管（CustomEditor 优先级更高）。
     /// </summary>
     [CustomEditor(typeof(ScriptableObject), true)]
-    public class OdinCompatEditor : Editor
+    public class OdinCompatEditor : UnityEditor.Editor
     {
         private OdinCompatDrawer _drawer;
 
@@ -268,61 +268,187 @@ namespace Sirenix.OdinInspector.Editor
             DrawUngroupedFields();
             DrawUngroupedButtons();
 
-            // 绘制分组
-            var groupNames = GetOrderedGroupNames();
-            foreach (var groupName in groupNames)
+            // 绘制分组（按顶层分组，子分组嵌套渲染）
+            var topGroups = GetOrderedTopGroupNames();
+            foreach (var groupName in topGroups)
             {
-                if (!_foldoutStates.ContainsKey(groupName))
-                {
-                    var firstField = _fields.FirstOrDefault(f => f.GetCustomAttribute<FoldoutGroupAttribute>()?.GroupName == groupName);
-                    var expanded = firstField?.GetCustomAttribute<FoldoutGroupAttribute>()?.Expanded ?? false;
-                    _foldoutStates[groupName] = expanded;
-                }
-
-                EditorGUILayout.Space(2);
-                _foldoutStates[groupName] = EditorGUILayout.Foldout(_foldoutStates[groupName], groupName, true, EditorStyles.foldoutHeader);
-
-                if (_foldoutStates[groupName])
-                {
-                    EditorGUI.indentLevel++;
-                    DrawFieldsInGroup(groupName);
-                    DrawButtonsInGroup(groupName);
-                    EditorGUI.indentLevel--;
-                }
+                DrawTopGroup(groupName);
             }
 
             EditorGUILayout.EndScrollView();
         }
 
+        // ── 顶层分组 ────────────────────────────────────
+
+        private void DrawTopGroup(string groupName)
+        {
+            if (!_foldoutStates.ContainsKey(groupName))
+            {
+                var firstField = _fields.FirstOrDefault(f => GetTopGroupName(f) == groupName);
+                var expanded = firstField?.GetCustomAttribute<FoldoutGroupAttribute>()?.Expanded ?? false;
+                _foldoutStates[groupName] = expanded;
+            }
+
+            EditorGUILayout.Space(3);
+
+            // 分组标题栏
+            DrawGroupHeader(groupName, _foldoutStates[groupName], isSubGroup: false, out var toggled);
+            if (toggled) _foldoutStates[groupName] = !_foldoutStates[groupName];
+
+            if (_foldoutStates[groupName])
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.Space(2);
+
+                // 直接属于该分组的字段
+                DrawFieldsInGroup(groupName, exactMatch: true);
+
+                // 子分组
+                var subGroups = GetSubGroupNames(groupName);
+                foreach (var sub in subGroups)
+                {
+                    DrawSubGroup(sub, groupName);
+                }
+
+                // 直接属于该分组的按钮
+                DrawButtonsInGroup(groupName, exactMatch: true);
+
+                EditorGUILayout.Space(2);
+                EditorGUILayout.EndVertical();
+            }
+        }
+
+        // ── 子分组 ──────────────────────────────────────
+
+        private void DrawSubGroup(string fullGroupName, string parentGroup)
+        {
+            var shortName = fullGroupName.Substring(parentGroup.Length + 1);
+            var stateKey = fullGroupName;
+
+            if (!_foldoutStates.ContainsKey(stateKey))
+            {
+                var firstField = _fields.FirstOrDefault(f => f.GetCustomAttribute<FoldoutGroupAttribute>()?.GroupName == fullGroupName);
+                var expanded = firstField?.GetCustomAttribute<FoldoutGroupAttribute>()?.Expanded ?? true;
+                _foldoutStates[stateKey] = expanded;
+            }
+
+            EditorGUILayout.Space(2);
+            DrawGroupHeader(shortName, _foldoutStates[stateKey], isSubGroup: true, out var toggled);
+            if (toggled) _foldoutStates[stateKey] = !_foldoutStates[stateKey];
+
+            if (_foldoutStates[stateKey])
+            {
+                EditorGUI.indentLevel++;
+                DrawFieldsInGroup(fullGroupName, exactMatch: true);
+                DrawButtonsInGroup(fullGroupName, exactMatch: true);
+                EditorGUI.indentLevel--;
+            }
+        }
+
+        // ── 分组标题栏 ──────────────────────────────────
+
+        private static void DrawGroupHeader(string title, bool expanded, bool isSubGroup, out bool clicked)
+        {
+            clicked = false;
+            var rect = EditorGUILayout.GetControlRect(GUILayout.Height(isSubGroup ? 22 : 26));
+            if (Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition))
+            {
+                clicked = true;
+                Event.current.Use();
+            }
+
+            // 背景
+            var bgRect = rect;
+            if (isSubGroup)
+            {
+                EditorGUI.DrawRect(bgRect, new Color(0.22f, 0.22f, 0.24f, 0.6f));
+            }
+            else
+            {
+                EditorGUI.DrawRect(bgRect, new Color(0.26f, 0.52f, 0.88f, 0.18f));
+            }
+
+            // 左侧色条
+            var barRect = new Rect(rect.x, rect.y, 3, rect.height);
+            EditorGUI.DrawRect(barRect, isSubGroup ? new Color(0.4f, 0.4f, 0.45f, 0.8f) : new Color(0.3f, 0.55f, 0.95f, 0.9f));
+
+            // 箭头
+            var arrowRect = new Rect(rect.x + 8, rect.y, 16, rect.height);
+            var arrow = expanded ? "▼" : "▶";
+            var oldColor = GUI.color;
+            GUI.color = new Color(0.6f, 0.65f, 0.75f, 1f);
+            GUI.Label(arrowRect, arrow, EditorStyles.miniLabel);
+            GUI.color = oldColor;
+
+            // 标题
+            var labelRect = new Rect(rect.x + 26, rect.y, rect.width - 26, rect.height);
+            var style = isSubGroup ? EditorStyles.boldLabel : EditorStyles.boldLabel;
+            EditorGUI.LabelField(labelRect, title, style);
+        }
+
         // ── 分组排序 ──────────────────────────────────────
 
-        private List<string> GetOrderedGroupNames()
+        private static string GetTopGroupName(FieldInfo field)
+        {
+            var attr = field.GetCustomAttribute<FoldoutGroupAttribute>();
+            if (attr == null) return null;
+            var name = attr.GroupName;
+            var slash = name.IndexOf('/');
+            return slash >= 0 ? name.Substring(0, slash) : name;
+        }
+
+        private List<string> GetOrderedTopGroupNames()
         {
             var groups = new List<string>();
             var orders = new Dictionary<string, int>();
 
             foreach (var f in _fields)
             {
-                var attr = f.GetCustomAttribute<FoldoutGroupAttribute>();
-                if (attr != null && !groups.Contains(attr.GroupName))
+                var topName = GetTopGroupName(f);
+                if (topName != null && !groups.Contains(topName))
                 {
-                    groups.Add(attr.GroupName);
-                    orders[attr.GroupName] = attr.Order;
+                    groups.Add(topName);
+                    var attr = f.GetCustomAttribute<FoldoutGroupAttribute>();
+                    orders[topName] = attr.Order;
                 }
             }
 
             foreach (var m in _methods)
             {
                 var attr = m.GetCustomAttribute<FoldoutGroupAttribute>();
-                if (attr != null && !groups.Contains(attr.GroupName))
+                if (attr != null)
                 {
-                    groups.Add(attr.GroupName);
-                    orders[attr.GroupName] = attr.Order;
+                    var name = attr.GroupName;
+                    var slash = name.IndexOf('/');
+                    var topName = slash >= 0 ? name.Substring(0, slash) : name;
+                    if (!groups.Contains(topName))
+                    {
+                        groups.Add(topName);
+                        orders[topName] = attr.Order;
+                    }
                 }
             }
 
             groups.Sort((a, b) => orders[a].CompareTo(orders[b]));
             return groups;
+        }
+
+        private List<string> GetSubGroupNames(string parentGroup)
+        {
+            var subs = new List<string>();
+            foreach (var f in _fields)
+            {
+                var attr = f.GetCustomAttribute<FoldoutGroupAttribute>();
+                if (attr != null && attr.GroupName.StartsWith(parentGroup + "/") && !subs.Contains(attr.GroupName))
+                    subs.Add(attr.GroupName);
+            }
+            foreach (var m in _methods)
+            {
+                var attr = m.GetCustomAttribute<FoldoutGroupAttribute>();
+                if (attr != null && attr.GroupName.StartsWith(parentGroup + "/") && !subs.Contains(attr.GroupName))
+                    subs.Add(attr.GroupName);
+            }
+            return subs;
         }
 
         // ── 字段绘制 ──────────────────────────────────────
@@ -337,12 +463,21 @@ namespace Sirenix.OdinInspector.Editor
             }
         }
 
-        private void DrawFieldsInGroup(string groupName)
+        private void DrawFieldsInGroup(string groupName, bool exactMatch = true)
         {
             foreach (var field in _fields)
             {
                 var attr = field.GetCustomAttribute<FoldoutGroupAttribute>();
-                if (attr == null || attr.GroupName != groupName) continue;
+                if (attr == null) continue;
+                if (exactMatch)
+                {
+                    if (attr.GroupName != groupName) continue;
+                }
+                else
+                {
+                    // 不再使用模糊匹配
+                    continue;
+                }
                 if (!ShouldShow(field)) continue;
                 DrawField(field);
             }
@@ -536,49 +671,75 @@ namespace Sirenix.OdinInspector.Editor
             var listType = type.GetGenericArguments()[0];
             var list = (System.Collections.IList)value;
 
-            if (!hideLabel)
-                EditorGUILayout.LabelField(label, EditorStyles.boldLabel);
-
-            EditorGUI.indentLevel++;
-            for (int i = 0; i < list.Count; i++)
-            {
-                var itemLabel = $"[{i}]";
-                var itemValue = list[i];
-
-                if (listType == typeof(bool))
-                    list[i] = EditorGUILayout.Toggle(itemLabel, (bool)itemValue);
-                else if (listType == typeof(int))
-                    list[i] = EditorGUILayout.IntField(itemLabel, (int)itemValue);
-                else if (listType == typeof(float))
-                    list[i] = EditorGUILayout.FloatField(itemLabel, (float)itemValue);
-                else if (listType == typeof(string))
-                    list[i] = EditorGUILayout.TextField(itemLabel, (string)itemValue ?? "");
-                else if (listType == typeof(Vector3))
-                    list[i] = EditorGUILayout.Vector3Field(itemLabel, (Vector3)itemValue);
-                else if (listType == typeof(Vector2))
-                    list[i] = EditorGUILayout.Vector2Field(itemLabel, (Vector2)itemValue);
-                else if (listType == typeof(Color))
-                    list[i] = EditorGUILayout.ColorField(itemLabel, (Color)itemValue);
-                else if (listType.IsEnum)
-                    list[i] = EditorGUILayout.EnumPopup(itemLabel, (Enum)itemValue);
-                else if (typeof(UnityEngine.Object).IsAssignableFrom(listType))
-                    list[i] = EditorGUILayout.ObjectField(itemLabel, (UnityEngine.Object)itemValue, listType, true);
-                else
-                    EditorGUILayout.LabelField(itemLabel, itemValue?.ToString() ?? "null");
-            }
-
+            // 列表标题栏
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("+ 添加"))
+            if (!hideLabel)
+                EditorGUILayout.LabelField($"{label}  ({list.Count})", EditorStyles.boldLabel);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("+", GUILayout.Width(24), GUILayout.Height(18)))
             {
                 object defaultVal = listType.IsValueType ? Activator.CreateInstance(listType) : null;
                 list.Add(defaultVal);
-            }
-            if (GUILayout.Button("✕ 移除最后一个") && list.Count > 0)
-            {
-                list.RemoveAt(list.Count - 1);
+                GUI.changed = true;
+                return;
             }
             EditorGUILayout.EndHorizontal();
+
+            // 列表内容框
+            EditorGUILayout.BeginVertical(EditorStyles.textArea);
+            EditorGUI.indentLevel++;
+
+            if (list.Count == 0)
+            {
+                EditorGUILayout.LabelField("（空列表）", EditorStyles.centeredGreyMiniLabel);
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var itemValue = list[i];
+                EditorGUILayout.BeginHorizontal();
+
+                // 序号标签
+                var numStyle = new GUIStyle(EditorStyles.miniLabel) { fixedWidth = 28 };
+                EditorGUILayout.LabelField($"#{i}", numStyle);
+
+                // 字段绘制
+                if (listType == typeof(bool))
+                    list[i] = EditorGUILayout.Toggle((bool)itemValue);
+                else if (listType == typeof(int))
+                    list[i] = EditorGUILayout.IntField((int)itemValue);
+                else if (listType == typeof(float))
+                    list[i] = EditorGUILayout.FloatField((float)itemValue);
+                else if (listType == typeof(string))
+                    list[i] = EditorGUILayout.TextField((string)itemValue ?? "");
+                else if (listType == typeof(Vector3))
+                    list[i] = EditorGUILayout.Vector3Field("", (Vector3)itemValue);
+                else if (listType == typeof(Vector2))
+                    list[i] = EditorGUILayout.Vector2Field("", (Vector2)itemValue);
+                else if (listType == typeof(Color))
+                    list[i] = EditorGUILayout.ColorField((Color)itemValue, GUILayout.Width(60));
+                else if (listType.IsEnum)
+                    list[i] = EditorGUILayout.EnumPopup((Enum)itemValue);
+                else if (typeof(UnityEngine.Object).IsAssignableFrom(listType))
+                    list[i] = EditorGUILayout.ObjectField((UnityEngine.Object)itemValue, listType, true);
+                else
+                    EditorGUILayout.LabelField(itemValue?.ToString() ?? "null");
+
+                // 移除按钮
+                if (GUILayout.Button("✕", GUILayout.Width(22), GUILayout.Height(16)))
+                {
+                    list.RemoveAt(i);
+                    GUI.changed = true;
+                    EditorGUILayout.EndHorizontal();
+                    break;
+                }
+
+                EditorGUILayout.EndHorizontal();
+            }
+
             EditorGUI.indentLevel--;
+            EditorGUILayout.EndVertical();
+            EditorGUILayout.Space(2);
         }
 
         // ── 按钮绘制 ──────────────────────────────────────
@@ -593,12 +754,13 @@ namespace Sirenix.OdinInspector.Editor
             }
         }
 
-        private void DrawButtonsInGroup(string groupName)
+        private void DrawButtonsInGroup(string groupName, bool exactMatch = true)
         {
             foreach (var method in _methods)
             {
                 var attr = method.GetCustomAttribute<FoldoutGroupAttribute>();
-                if (attr == null || attr.GroupName != groupName) continue;
+                if (attr == null) continue;
+                if (exactMatch && attr.GroupName != groupName) continue;
                 if (!ShouldShowMethod(method)) continue;
                 DrawButton(method);
             }
