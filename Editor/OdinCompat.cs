@@ -245,7 +245,6 @@ namespace Sirenix.OdinInspector.Editor
         private readonly FieldInfo[] _fields;
         private readonly MethodInfo[] _methods;
         private readonly Dictionary<string, bool> _foldoutStates = new();
-        private Vector2 _scrollPos;
 
         public OdinCompatDrawer(object target)
         {
@@ -262,8 +261,6 @@ namespace Sirenix.OdinInspector.Editor
 
         public void Draw()
         {
-            _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
-
             // 绘制无分组的独立字段和方法
             DrawUngroupedFields();
             DrawUngroupedButtons();
@@ -274,8 +271,6 @@ namespace Sirenix.OdinInspector.Editor
             {
                 DrawTopGroup(groupName);
             }
-
-            EditorGUILayout.EndScrollView();
         }
 
         // ── 顶层分组 ────────────────────────────────────
