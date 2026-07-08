@@ -185,7 +185,6 @@ namespace Sirenix.OdinInspector.Editor
     public class OdinEditorWindow : UnityEditor.EditorWindow
     {
         private OdinCompatDrawer _drawer;
-        private Vector2 _scrollPos;
 
         protected virtual void OnEnable()
         {
@@ -214,6 +213,27 @@ namespace Sirenix.OdinInspector.Editor
         public void Add(string name, T value) => Add(new ValueDropdownItem<T>(name, value));
     }
 
+    /// <summary>
+    /// 通用 ScriptableObject / MonoBehaviour 编辑器桩。
+    /// 无 Odin 时通过 OdinCompatDrawer 反射自动绘制 Inspector。
+    /// 有 Odin 时由 Odin 的 OdinEditor 自动接管（CustomEditor 优先级更高）。
+    /// </summary>
+    [CustomEditor(typeof(ScriptableObject), true)]
+    public class OdinCompatEditor : Editor
+    {
+        private OdinCompatDrawer _drawer;
+
+        private void OnEnable()
+        {
+            _drawer = new OdinCompatDrawer(target);
+        }
+
+        public override void OnInspectorGUI()
+        {
+            _drawer?.Draw();
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  反射式自动绘制器
     // ═══════════════════════════════════════════════════════════════
@@ -225,6 +245,7 @@ namespace Sirenix.OdinInspector.Editor
         private readonly FieldInfo[] _fields;
         private readonly MethodInfo[] _methods;
         private readonly Dictionary<string, bool> _foldoutStates = new();
+        private Vector2 _scrollPos;
 
         public OdinCompatDrawer(object target)
         {
@@ -241,6 +262,8 @@ namespace Sirenix.OdinInspector.Editor
 
         public void Draw()
         {
+            _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
+
             // 绘制无分组的独立字段和方法
             DrawUngroupedFields();
             DrawUngroupedButtons();
@@ -251,7 +274,6 @@ namespace Sirenix.OdinInspector.Editor
             {
                 if (!_foldoutStates.ContainsKey(groupName))
                 {
-                    // 从属性中读取初始展开状态
                     var firstField = _fields.FirstOrDefault(f => f.GetCustomAttribute<FoldoutGroupAttribute>()?.GroupName == groupName);
                     var expanded = firstField?.GetCustomAttribute<FoldoutGroupAttribute>()?.Expanded ?? false;
                     _foldoutStates[groupName] = expanded;
@@ -268,6 +290,8 @@ namespace Sirenix.OdinInspector.Editor
                     EditorGUI.indentLevel--;
                 }
             }
+
+            EditorGUILayout.EndScrollView();
         }
 
         // ── 分组排序 ──────────────────────────────────────
