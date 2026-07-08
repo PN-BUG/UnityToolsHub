@@ -1,9 +1,7 @@
 {
-    "name": "UnityToolsHub.Editor",
+    "name": "UnityToolsHub.OdinDetector.Editor",
     "rootNamespace": "",
-    "references": [
-        "GUID:70de3d35ece9b7b44ae69317d3221b51"
-    ],
+    "references": [],
     "includePlatforms": [
         "Editor"
     ],
