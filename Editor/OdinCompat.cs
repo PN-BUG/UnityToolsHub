@@ -29,8 +29,11 @@ using UnityEngine;
 
 namespace Sirenix.OdinInspector
 {
+    // 统一目标：Field | Property | Method
+    // Odin 真实属性大多同时支持三者，桩也保持一致以避免 CS0592
+
     // ── 分组 ──────────────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class FoldoutGroupAttribute : Attribute
     {
         public int Order { get; set; }
@@ -38,24 +41,24 @@ namespace Sirenix.OdinInspector
         public FoldoutGroupAttribute(string _, bool expanded = false) { }
     }
 
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class BoxGroupAttribute : Attribute
     {
         public BoxGroupAttribute(string _) { }
     }
 
     // ── 标签与显示 ────────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class LabelTextAttribute : Attribute
     {
         public LabelTextAttribute(string _) { }
     }
 
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class HideLabelAttribute : Attribute { }
 
     // ── 下拉 ──────────────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class ValueDropdownAttribute : Attribute
     {
         public ValueDropdownAttribute(string _) { }
@@ -64,7 +67,7 @@ namespace Sirenix.OdinInspector
     // ── 按钮与颜色 ────────────────────────────────────────
     public enum ButtonSizes { Small, Medium, Large }
 
-    [AttributeUsage(AttributeTargets.Method)]
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Property)]
     public class ButtonAttribute : Attribute
     {
         public ButtonAttribute() { }
@@ -81,14 +84,14 @@ namespace Sirenix.OdinInspector
     }
 
     // ── 条件显示 ──────────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class ShowIfAttribute : Attribute
     {
         public ShowIfAttribute(string _) { }
         public ShowIfAttribute(string _, object __) { }
     }
 
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class HideIfAttribute : Attribute
     {
         public HideIfAttribute(string _) { }
@@ -119,38 +122,38 @@ namespace Sirenix.OdinInspector
     }
 
     // ── 只读 / 显示 ──────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class ShowInInspectorAttribute : Attribute { }
 
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class ReadOnlyAttribute : Attribute { }
 
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class MultiLinePropertyAttribute : Attribute
     {
         public MultiLinePropertyAttribute(int _) { }
     }
 
     // ── 路径与资源 ────────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class FolderPathAttribute : Attribute
     {
         public bool AbsolutePath { get; set; }
         public bool RequireExistingPath { get; set; }
     }
 
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class AssetsOnlyAttribute : Attribute { }
 
     // ── 事件回调 ──────────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class OnValueChangedAttribute : Attribute
     {
         public OnValueChangedAttribute(string _) { }
     }
 
     // ── 列表绘制 ──────────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class ListDrawerSettingsAttribute : Attribute
     {
         public bool ShowFoldout { get; set; } = true;
@@ -161,7 +164,7 @@ namespace Sirenix.OdinInspector
     }
 
     // ── 信息提示 ──────────────────────────────────────────
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = true)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method, AllowMultiple = true)]
     public class InfoBoxAttribute : Attribute
     {
         public InfoBoxAttribute(string _) { }
@@ -175,8 +178,16 @@ namespace Sirenix.OdinInspector
 
 namespace Sirenix.OdinInspector.Editor
 {
-    /// <summary>OdinEditorWindow 桩 —— 无 Odin 时退化为普通 EditorWindow</summary>
-    public class OdinEditorWindow : UnityEditor.EditorWindow { }
+    /// <summary>
+    /// OdinEditorWindow 桩 —— 无 Odin 时退化为普通 EditorWindow。
+    /// 提供 virtual OnEnable/OnDisable 以匹配 Odin 真实 API，
+    /// 使业务代码 protected override void OnEnable() 可编译。
+    /// </summary>
+    public class OdinEditorWindow : UnityEditor.EditorWindow
+    {
+        protected virtual void OnEnable() { }
+        protected virtual void OnDisable() { }
+    }
 
     /// <summary>ValueDropdownItem 桩</summary>
     public struct ValueDropdownItem<T>
