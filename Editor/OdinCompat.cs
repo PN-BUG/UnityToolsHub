@@ -232,7 +232,7 @@ namespace Sirenix.OdinInspector.Editor
             _type = target.GetType();
             _fields = _type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic)
                 .Where(f => f.IsPublic || f.GetCustomAttribute<ShowInInspectorAttribute>() != null)
-                .Where(f => !f.GetCustomAttribute<HideInInspector>() != true || f.GetCustomAttribute<ShowInInspectorAttribute>() != null)
+                .Where(f => f.GetCustomAttribute<HideInInspector>() == null || f.GetCustomAttribute<ShowInInspectorAttribute>() != null)
                 .ToArray();
             _methods = _type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                 .Where(m => m.GetCustomAttribute<ButtonAttribute>() != null)
