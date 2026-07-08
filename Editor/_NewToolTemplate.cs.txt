@@ -5,15 +5,15 @@ using UnityEngine;
 
 /// <summary>
 /// ═══════════════════════════════════════════════════════════════
-///  UnityToolsHub 新工具模板
+///  UnityToolsHub 新工具模板（基于 ToolEditorWindow）
 /// ═══════════════════════════════════════════════════════════════
-///  
+///
 ///  使用方法：
 ///  1. 将此文件复制并重命名 _NewToolTemplate.cs.txt → YourTool.cs
 ///  2. 修改类名与 [ToolInfo] 特性参数
 ///  3. 实现你的工具逻辑
 ///  4. 保存后 Hub 面板会自动发现并显示，无需修改 Hub 代码
-///  
+///
 ///  ── 快速参考 ─────────────────────────────────────────────
 ///  [ToolInfo] 参数说明：
 ///    - 第1参数 (name)     : 工具显示名称（必填）
@@ -23,25 +23,36 @@ using UnityEngine;
 ///    - Tags               : 搜索标签，用于搜索过滤
 ///    - Shortcut           : 快捷键提示（仅显示用）
 ///    - Priority           : 排序优先级，数字越小越靠前
-///  
+///
 ///  ── 已有分类 ─────────────────────────────────────────────
 ///  框架初始化 | 数据管理 | 面板管理 | 资产工具 | 编辑器工具
 ///  文件工具   | 字体工具 | 媒体工具 | UI 工具  | 调试工具
 ///  路径工具
-///  
+///
 ///  如需新分类，直接在 category 参数填写新名称即可，
 ///  Hub 会自动分配颜色。
-///  
+///
+///  ── 基类 ToolEditorWindow 提供 ───────────────────────────
+///  统一深色调色板、样式系统、绘制工具方法，无需重复定义。
+///  详见 Hub/ToolEditorWindow.cs 注释。
+///
 /// ═══════════════════════════════════════════════════════════════
 /// </summary>
 
 // ── [ToolInfo] 是必须的，Hub 通过它自动发现工具 ─────────────
+// ── 继承 ToolEditorWindow 获取统一主题和绘制工具 ───────────
 [ToolInfo("示例工具", "编辑器工具",
-    Description = "这是一个示例工具模板，展示如何创建新工具。\n\n功能说明写在这里，支持多行描述。",
+    Description = "这是一个示例工具模板，展示如何基于 ToolEditorWindow 创建新工具。\n\n功能说明写在这里，支持多行描述。",
     Icon = "🔧",
-    Tags = new[] { "示例", "模板" },    Shortcut = "Ctrl+Shift+T",    Priority = 99)]
-public class MyToolTemplate : EditorWindow
+    Tags = new[] { "示例", "模板" },
+    Shortcut = "Ctrl+Shift+T",
+    Priority = 99)]
+public class MyToolTemplate : ToolEditorWindow
 {
+    // ── 配置属性（重写基类）─────────────────────────────────
+    protected override string ToolTitle => "示例工具";
+    protected override string ToolIcon  => "🔧";
+
     // ── 字段：使用 Odin Inspector 特性，中文 LabelText ──────
     [LabelText("启用功能")]
     public bool enableFeature = true;
@@ -60,35 +71,50 @@ public class MyToolTemplate : EditorWindow
     //     GetWindow<MyToolTemplate>("示例工具");
     // }
 
-    // ── 生命周期 ────────────────────────────────────────────
-    private void OnEnable()
+    // ── 生命周期（重写基类虚拟方法）─────────────────────────
+    protected override void OnToolEnable()
     {
         // 初始化、注册事件等
     }
 
-    private void OnDisable()
+    protected override void OnToolDisable()
     {
         // 清理、注销事件等
     }
 
-    private void OnGUI()
+    // ── 工具主体 UI ─────────────────────────────────────────
+    // 自动拥有深色背景、滚动视图、统一边距
+    protected override void DrawToolContent()
     {
-        // 绘制 UI
-        EditorGUILayout.Space(10);
-        EditorGUILayout.LabelField("示例工具", EditorStyles.boldLabel);
-        EditorGUILayout.Space(5);
+        // 渐变装饰条（可选）
+        DrawGradientBar(
+            new Color(0.20f, 0.45f, 0.90f),
+            new Color(0.40f, 0.70f, 0.95f));
+        EditorGUILayout.Space(12);
+
+        // ── 分段标题 ──────────────────────────────────────
+        DrawSection("基础设置");
 
         // 使用 EditorGUILayout 或 Odin 的 SirenixEditorFields
         enableFeature = EditorGUILayout.Toggle("启用功能", enableFeature);
         speed = EditorGUILayout.Slider("速度", speed, 0f, 100f);
         target = (GameObject)EditorGUILayout.ObjectField("目标对象", target, typeof(GameObject), true);
 
-        EditorGUILayout.Space(20);
+        EditorGUILayout.Space(12);
 
-        if (GUILayout.Button("执行操作"))
-        {
-            ExecuteAction();
-        }
+        // ── 按钮示例 ──────────────────────────────────────
+        DrawPrimaryButton("执行操作", GUILayout.Height(30));
+        EditorGUILayout.Space(4);
+        DrawDangerButton("重置", GUILayout.Height(24));
+
+        EditorGUILayout.Space(8);
+
+        // ── 帮助框 ────────────────────────────────────────
+        DrawToolHelpBox("提示：这是基于 ToolEditorWindow 的新工具模板，自动拥有统一深色主题。");
+
+        // ── 标签示例 ──────────────────────────────────────
+        EditorGUILayout.Space(4);
+        DrawTags(new[] { "示例", "模板", "UnityToolsHub" });
     }
 
     private void ExecuteAction()

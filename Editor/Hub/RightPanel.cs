@@ -7,7 +7,7 @@ using UnityEngine;
 
 /// <summary>
 /// UnityToolsHub — 右侧面板绘制
-/// 包含欢迎页、工具详情页、创建工具表单、隐藏项管理面板
+/// 包含欢迎页、工具详情页、创建工具表单、设置面板（隐藏项/使用频率/关于）
 /// </summary>
 public partial class UnityToolsHub
 {
@@ -24,7 +24,7 @@ public partial class UnityToolsHub
         _rightScroll = EditorGUILayout.BeginScrollView(_rightScroll);
 
         if (_showHiddenManager)
-            DrawHiddenManagerPanel();
+            DrawSettingsPanel();
         else if (_showCreateForm)
             DrawCreateToolForm();
         else if (_selectedTool == null)
@@ -167,8 +167,8 @@ public partial class UnityToolsHub
     }
     #endregion
 
-    #region 隐藏项管理面板
-    private void DrawHiddenManagerPanel()
+    #region 设置面板
+    private void DrawSettingsPanel()
     {
         var area = new Rect(0, 0, position.width - LeftPanelWidth - SplitterWidth, position.height);
         Color accent = new Color(0.85f, 0.55f, 0.40f, 1f);
@@ -191,7 +191,7 @@ public partial class UnityToolsHub
         }
 
         GUILayout.Space(8);
-        GUILayout.Label("隐藏项管理", _styleRightTitle);
+        GUILayout.Label("设置", _styleRightTitle);
         GUILayout.FlexibleSpace();
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
@@ -201,12 +201,91 @@ public partial class UnityToolsHub
         EditorGUILayout.Space(4);
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
-        GUILayout.Label("管理被隐藏的分类与工具，可单独恢复或一键全部恢复", _styleRightSubtitle);
+        GUILayout.Label("管理工具集的显示、统计与更新", _styleRightSubtitle);
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.Space(16);
 
+        // ── 标签页导航 ──────────────────────────────────
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+
+        DrawSettingsTabButton("隐藏项", SettingsTab.HiddenItems, accent);
+        GUILayout.Space(4);
+        DrawSettingsTabButton("使用频率", SettingsTab.UsageStats, accent);
+        GUILayout.Space(4);
+        DrawSettingsTabButton("关于 / 更新", SettingsTab.About, accent);
+
+        GUILayout.FlexibleSpace();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(8);
+
+        // ── 分割线 ──────────────────────────────────────
+        var divRect = GUILayoutUtility.GetRect(0, 1, GUILayout.ExpandWidth(true));
+        EditorGUI.DrawRect(divRect, ClrDivider);
+
+        EditorGUILayout.Space(12);
+
+        // ── 标签页内容 ──────────────────────────────────
+        _settingsScroll = EditorGUILayout.BeginScrollView(_settingsScroll);
+
+        switch (_settingsTab)
+        {
+            case SettingsTab.HiddenItems:
+                DrawHiddenItemsTab();
+                break;
+            case SettingsTab.UsageStats:
+                DrawUsageStatsTab();
+                break;
+            case SettingsTab.About:
+                DrawAboutTab();
+                break;
+        }
+
+        EditorGUILayout.EndScrollView();
+    }
+
+    /// <summary>绘制设置标签页按钮</summary>
+    private void DrawSettingsTabButton(string label, SettingsTab tab, Color accent)
+    {
+        bool isActive = _settingsTab == tab;
+        var content = new GUIContent(label);
+        var style = new GUIStyle(_styleBtnPrimary)
+        {
+            fontSize = 12,
+            fontStyle = isActive ? FontStyle.Bold : FontStyle.Normal,
+            normal = { textColor = isActive ? ClrTextBright : ClrTextDim },
+            padding = new RectOffset(12, 12, 6, 6)
+        };
+        var size = style.CalcSize(content);
+        var rect = GUILayoutUtility.GetRect(size.x + 8, size.y + 4, GUILayout.Width(size.x + 8));
+        bool hover = rect.Contains(Event.current.mousePosition);
+
+        if (isActive)
+        {
+            EditorGUI.DrawRect(rect, ClrCardBg);
+            // 底部高亮条
+            EditorGUI.DrawRect(new Rect(rect.x + 4, rect.yMax - 2, rect.width - 8, 2), accent);
+        }
+        else if (hover)
+        {
+            EditorGUI.DrawRect(rect, ClrHover);
+        }
+
+        if (GUI.Button(rect, content, style))
+        {
+            _settingsTab = tab;
+            _settingsScroll = Vector2.zero;
+        }
+    }
+    #endregion
+
+    #region 隐藏项标签页
+    private void DrawHiddenItemsTab()
+    {
         // ── 全局操作按钮 ──────────────────────────────────
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
@@ -228,34 +307,11 @@ public partial class UnityToolsHub
             }
         }
 
-        GUILayout.Space(12);
-
-        // 重置使用频率
-        var resetUsageContent = new GUIContent("  重置使用频率");
-        var resetUsageSize = _styleBtnPrimary.CalcSize(resetUsageContent);
-        var resetUsageW = Mathf.Max(resetUsageSize.x + 24, 140);
-        var resetUsageRect = GUILayoutUtility.GetRect(resetUsageW, 32, GUILayout.Width(resetUsageW), GUILayout.Height(32));
-        bool resetUsageHover = resetUsageRect.Contains(Event.current.mousePosition);
-        EditorGUI.DrawRect(resetUsageRect, resetUsageHover ? ClrTagBg : ClrCardBg);
-        if (GUI.Button(resetUsageRect, resetUsageContent, new GUIStyle(_styleBtnPrimary)
-        {
-            normal = { textColor = ClrTextBright }
-        }))
-        {
-            if (EditorUtility.DisplayDialog("确认", "确定要重置所有工具的使用频率统计吗？\n\n这将使排序恢复为默认优先级顺序。", "确定", "取消"))
-            {
-                ResetAllUsageStats();
-            }
-        }
-
         GUILayout.FlexibleSpace();
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
 
-        EditorGUILayout.Space(20);
-
-        // ── 列表区 ──────────────────────────────────────
-        _hiddenMgrScroll = EditorGUILayout.BeginScrollView(_hiddenMgrScroll);
+        EditorGUILayout.Space(16);
 
         // ── 隐藏的分类 ──────────────────────────────────
         EditorGUILayout.BeginHorizontal();
@@ -295,7 +351,6 @@ public partial class UnityToolsHub
         {
             foreach (var typeName in _hiddenItems.hiddenTools.ToList())
             {
-                // 查找工具显示名
                 _toolIndex.TryGetValue(typeName, out var tool);
                 string displayName = tool != null ? tool.name : typeName;
                 string displayDesc = tool != null ? tool.category : "(类型未找到)";
@@ -311,17 +366,14 @@ public partial class UnityToolsHub
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
 
-        EditorGUILayout.Space(20);
-        EditorGUILayout.EndScrollView();
+        EditorGUILayout.Space(16);
 
         // ── 使用提示 ──────────────────────────────────────
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
         EditorGUILayout.HelpBox(
-            "提示：\n" +
-            "• 在左侧列表的分类标题或工具项上右键，可快速隐藏/取消隐藏。\n" +
-            "• 隐藏的项不会显示在左侧列表中（搜索时仍可见）。\n" +
-            "• 工具和分类按使用频率排序，使用越多越靠前。",
+            "提示：在左侧列表的分类标题或工具项上右键，可快速隐藏/取消隐藏。\n" +
+            "隐藏的项不会显示在左侧列表中（搜索时仍可见）。",
             MessageType.Info);
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
@@ -363,6 +415,356 @@ public partial class UnityToolsHub
         {
             onRestore?.Invoke();
         }
+    }
+    #endregion
+
+    #region 使用频率标签页
+    private void DrawUsageStatsTab()
+    {
+        // ── 全局操作按钮 ──────────────────────────────────
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        GUILayout.FlexibleSpace();
+
+        var resetUsageContent = new GUIContent("  重置所有统计");
+        var resetUsageSize = _styleBtnPrimary.CalcSize(resetUsageContent);
+        var resetUsageW = Mathf.Max(resetUsageSize.x + 24, 140);
+        var resetUsageRect = GUILayoutUtility.GetRect(resetUsageW, 32, GUILayout.Width(resetUsageW), GUILayout.Height(32));
+        bool resetUsageHover = resetUsageRect.Contains(Event.current.mousePosition);
+        EditorGUI.DrawRect(resetUsageRect, resetUsageHover ? ClrTagBg : ClrCardBg);
+        if (GUI.Button(resetUsageRect, resetUsageContent, new GUIStyle(_styleBtnPrimary)
+        {
+            normal = { textColor = ClrTextBright }
+        }))
+        {
+            if (EditorUtility.DisplayDialog("确认", "确定要重置所有工具的使用频率统计吗？\n\n这将使排序恢复为默认优先级顺序。", "确定", "取消"))
+            {
+                ResetAllUsageStats();
+            }
+        }
+
+        GUILayout.FlexibleSpace();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(16);
+
+        // ── 分类使用统计 ──────────────────────────────────
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+
+        GUILayout.Label("分类使用统计", _styleSectionHeader);
+        GUILayout.Space(4);
+
+        var sortedCategories = _usageStats.categories
+            .OrderByDescending(e => e.count)
+            .ToList();
+
+        if (sortedCategories.Count == 0)
+        {
+            GUILayout.Label("暂无使用记录", _styleEmptyHint);
+        }
+        else
+        {
+            foreach (var entry in sortedCategories)
+            {
+                DrawUsageStatRow(entry.key, entry.count, true);
+            }
+        }
+
+        GUILayout.Space(16);
+
+        // ── 工具使用统计 ──────────────────────────────────
+        GUILayout.Label("工具使用统计", _styleSectionHeader);
+        GUILayout.Space(4);
+
+        var sortedTools = _usageStats.tools
+            .OrderByDescending(e => e.count)
+            .ToList();
+
+        if (sortedTools.Count == 0)
+        {
+            GUILayout.Label("暂无使用记录", _styleEmptyHint);
+        }
+        else
+        {
+            foreach (var entry in sortedTools)
+            {
+                _toolIndex.TryGetValue(entry.key, out var tool);
+                string displayName = tool != null ? tool.name : entry.key;
+                DrawUsageStatRow(displayName, entry.count, false);
+            }
+        }
+
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(16);
+
+        // ── 使用提示 ──────────────────────────────────────
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.HelpBox(
+            "工具和分类按使用频率排序，使用越多越靠前。\n" +
+            "点击工具时自动记录使用次数。",
+            MessageType.Info);
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(8);
+    }
+
+    /// <summary>绘制使用频率统计行</summary>
+    private void DrawUsageStatRow(string name, int count, bool isCategory)
+    {
+        var rect = GUILayoutUtility.GetRect(0, 28, GUILayout.ExpandWidth(true));
+        bool hover = rect.Contains(Event.current.mousePosition);
+        if (hover) EditorGUI.DrawRect(rect, ClrHover);
+
+        // 左侧色点
+        var dotRect = new Rect(rect.x + 8, rect.y + rect.height / 2 - 3, 6, 6);
+        GUI.color = isCategory ? ClrAccent : ClrTextDim;
+        GUI.DrawTexture(dotRect, _texWhite, ScaleMode.ScaleToFit);
+        GUI.color = Color.white;
+
+        // 名称
+        var nameRect = new Rect(rect.x + 20, rect.y + 2, rect.width - 100, 18);
+        GUI.Label(nameRect, name, _styleHiddenItemName);
+
+        // 类型标签
+        var typeRect = new Rect(rect.x + 20, rect.y + 18, rect.width - 100, 12);
+        GUI.Label(typeRect, isCategory ? "分类" : "工具", _styleHiddenItemDesc);
+
+        // 使用次数
+        var countRect = new Rect(rect.xMax - 80, rect.y + 4, 72, 20);
+        var countStyle = new GUIStyle()
+        {
+            fontSize = 12,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleRight,
+            normal = { textColor = ClrAccent }
+        };
+        GUI.Label(countRect, $"{count} 次", countStyle);
+    }
+    #endregion
+
+    #region 关于 / 更新标签页
+    private void DrawAboutTab()
+    {
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+
+        // ── 版本信息卡片 ──────────────────────────────────
+        var cardRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        EditorGUI.DrawRect(cardRect, ClrCardBg);
+        EditorGUI.DrawRect(new Rect(cardRect.x, cardRect.y + 8, 3, cardRect.height - 16),
+            new Color(0.30f, 0.55f, 0.95f, 1f));
+
+        GUILayout.Space(10);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(16);
+        EditorGUILayout.BeginVertical();
+
+        GUILayout.Label("UnityToolsHub", new GUIStyle(_styleRightTitle) { fontSize = 18 });
+        GUILayout.Space(4);
+        GUILayout.Label("版本 1.0.0", new GUIStyle(_styleRightSubtitle) { fontSize = 12 });
+        GUILayout.Space(8);
+        GUILayout.Label("游戏开发工具集 — 集成式编辑器工具管理平台", _styleDescription);
+        GUILayout.Space(4);
+        GUILayout.Label($"当前管理 {_totalToolCount} 个工具，{_categories.Count} 个分类", _styleRightSubtitle);
+
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(4);
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(10);
+
+        EditorGUILayout.EndVertical();
+
+        GUILayout.Space(16);
+
+        // ── 检查更新 ──────────────────────────────────────
+        var updateRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        EditorGUI.DrawRect(updateRect, ClrCardBg);
+        EditorGUI.DrawRect(new Rect(updateRect.x, updateRect.y + 8, 3, updateRect.height - 16),
+            new Color(0.35f, 0.75f, 0.45f, 1f));
+
+        GUILayout.Space(10);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(16);
+        EditorGUILayout.BeginVertical();
+
+        GUILayout.Label("检查更新", _styleSectionHeader);
+        GUILayout.Space(8);
+
+        // 检查更新按钮
+        var checkBtnContent = new GUIContent("  检查更新");
+        var checkBtnSize = _styleBtnPrimary.CalcSize(checkBtnContent);
+        var checkBtnW = Mathf.Max(checkBtnSize.x + 32, 160);
+        var checkBtnRect = GUILayoutUtility.GetRect(checkBtnW, 36, GUILayout.Width(checkBtnW), GUILayout.Height(36));
+        bool checkBtnHover = checkBtnRect.Contains(Event.current.mousePosition);
+        EditorGUI.DrawRect(checkBtnRect, checkBtnHover ? ClrBtnHover : ClrBtnNormal);
+
+        if (GUI.Button(checkBtnRect, checkBtnContent, _styleBtnPrimary))
+        {
+            CheckForUpdates();
+        }
+
+        GUILayout.Space(8);
+
+        // 显示检查结果
+        if (!string.IsNullOrEmpty(_updateCheckResult))
+        {
+            var resultStyle = new GUIStyle(_styleDescription)
+            {
+                fontSize = 11,
+                normal = { textColor = _updateCheckResult.Contains("最新") ? ClrText : new Color(0.90f, 0.65f, 0.25f, 1f) }
+            };
+            GUILayout.Label(_updateCheckResult, resultStyle);
+
+            if (_updateCheckTime > 0)
+            {
+                var timeAgo = GetTimeAgoString(_updateCheckTime);
+                GUILayout.Label($"上次检查：{timeAgo}", new GUIStyle(_styleRightSubtitle) { fontSize = 10 });
+            }
+        }
+        else
+        {
+            GUILayout.Label("点击按钮检查是否有新版本可用", _styleEmptyHint);
+        }
+
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(4);
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(10);
+
+        EditorGUILayout.EndVertical();
+
+        GUILayout.Space(16);
+
+        // ── 快捷键说明 ──────────────────────────────────
+        var shortcutRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        EditorGUI.DrawRect(shortcutRect, ClrCardBg);
+        EditorGUI.DrawRect(new Rect(shortcutRect.x, shortcutRect.y + 8, 3, shortcutRect.height - 16),
+            new Color(0.85f, 0.55f, 0.40f, 1f));
+
+        GUILayout.Space(10);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(16);
+        EditorGUILayout.BeginVertical();
+
+        GUILayout.Label("快捷键说明", _styleSectionHeader);
+        GUILayout.Space(6);
+
+        DrawShortcutInfoRow("打开主面板", "Ctrl + Shift + E");
+        DrawShortcutInfoRow("隐藏/恢复面板", "Ctrl + Shift + E（再次按下）");
+        DrawShortcutInfoRow("自定义快捷键", "在工具详情页设置");
+
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(4);
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(10);
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(20);
+    }
+
+    /// <summary>绘制快捷键信息行</summary>
+    private void DrawShortcutInfoRow(string action, string keys)
+    {
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label(action, new GUIStyle(_styleDescription) { fontSize = 11 }, GUILayout.Width(140));
+        var kbRect = GUILayoutUtility.GetRect(0, 20, GUILayout.ExpandWidth(false));
+        EditorGUI.DrawRect(kbRect, ClrTagBg);
+        GUI.Label(new Rect(kbRect.x + 8, kbRect.y, kbRect.width, kbRect.height), keys, _styleShortcut);
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(4);
+    }
+
+    /// <summary>检查更新逻辑</summary>
+    private void CheckForUpdates()
+    {
+        _updateCheckTime = EditorApplication.timeSinceStartup;
+
+        // 获取当前版本
+        var currentVersion = "1.0.0";
+
+        // 尝试从本地版本文件读取
+        var versionFilePath = "Assets/UnityFramework/Editor/UnityToolsHub/version.txt";
+        if (System.IO.File.Exists(versionFilePath))
+        {
+            try
+            {
+                var localVersion = System.IO.File.ReadAllText(versionFilePath).Trim();
+                if (!string.IsNullOrEmpty(localVersion))
+                    currentVersion = localVersion;
+            }
+            catch { }
+        }
+
+        // 模拟检查更新（实际项目中可替换为真实的网络请求）
+        // 这里演示本地检查逻辑
+        var latestVersion = GetLatestVersion();
+
+        if (CompareVersions(currentVersion, latestVersion) < 0)
+        {
+            _updateCheckResult = $"发现新版本 {latestVersion}！\n当前版本：{currentVersion}";
+        }
+        else
+        {
+            _updateCheckResult = $"当前已是最新版本 ({currentVersion})";
+        }
+    }
+
+    /// <summary>获取最新版本号（本地检查）</summary>
+    private string GetLatestVersion()
+    {
+        // 从本地版本文件获取最新版本
+        // 实际项目中可替换为从服务器获取
+        var latestVersionFile = "Assets/UnityFramework/Editor/UnityToolsHub/latest_version.txt";
+        if (System.IO.File.Exists(latestVersionFile))
+        {
+            try
+            {
+                return System.IO.File.ReadAllText(latestVersionFile).Trim();
+            }
+            catch { }
+        }
+        return "1.0.0";
+    }
+
+    /// <summary>比较版本号（返回 -1, 0, 1）</summary>
+    private int CompareVersions(string v1, string v2)
+    {
+        var parts1 = v1.Split('.');
+        var parts2 = v2.Split('.');
+        int maxLen = Mathf.Max(parts1.Length, parts2.Length);
+
+        for (int i = 0; i < maxLen; i++)
+        {
+            int p1 = i < parts1.Length && int.TryParse(parts1[i], out int n1) ? n1 : 0;
+            int p2 = i < parts2.Length && int.TryParse(parts2[i], out int n2) ? n2 : 0;
+            if (p1 < p2) return -1;
+            if (p1 > p2) return 1;
+        }
+        return 0;
+    }
+
+    /// <summary>获取时间差描述</summary>
+    private string GetTimeAgoString(double lastCheckTime)
+    {
+        var elapsed = EditorApplication.timeSinceStartup - lastCheckTime;
+        if (elapsed < 60) return "刚刚";
+        if (elapsed < 3600) return $"{(int)(elapsed / 60)} 分钟前";
+        if (elapsed < 86400) return $"{(int)(elapsed / 3600)} 小时前";
+        return $"{(int)(elapsed / 86400)} 天前";
     }
     #endregion
 

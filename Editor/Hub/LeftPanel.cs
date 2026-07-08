@@ -219,13 +219,13 @@ public partial class UnityToolsHub
             GUI.FocusControl(null);
         }
 
-        // 管理隐藏项按钮
+        // 设置按钮
         var hiddenBtnRect = new Rect(8, 32, LeftPanelWidth - 16, 24);
         bool hiddenBtnHover = hiddenBtnRect.Contains(Event.current.mousePosition);
         EditorGUI.DrawRect(hiddenBtnRect, _showHiddenManager ? ClrSelection : (hiddenBtnHover ? ClrHover : new Color(0, 0, 0, 0)));
         EditorGUI.DrawRect(new Rect(hiddenBtnRect.x, hiddenBtnRect.y + 4, 3, hiddenBtnRect.height - 8),
             new Color(0.85f, 0.55f, 0.40f, 1f));
-        string hiddenLabel = hiddenCount > 0 ? $"  ⚙  管理隐藏项 ({hiddenCount})" : "  ⚙  管理隐藏项";
+        string hiddenLabel = hiddenCount > 0 ? $"  ⚙  设置 ({hiddenCount})" : "  ⚙  设置";
         GUI.Label(hiddenBtnRect, hiddenLabel, new GUIStyle(_styleToolItem)
         {
             fontSize = 11,

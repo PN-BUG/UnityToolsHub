@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using UnityToolsHubCompat;
 
 /// <summary>
 /// 测试窗口 —— 聚合展示场景中所有标记了 [Test] 的方法和字段。

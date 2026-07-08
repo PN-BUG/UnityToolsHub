@@ -61,6 +61,11 @@ public partial class UnityToolsHub : EditorWindow
     private HiddenItems _hiddenItems = new HiddenItems();
     private bool _showHiddenManager;
     private Vector2 _hiddenMgrScroll;
+    // ── 设置面板状态 ──────────────────────────────────
+    private SettingsTab _settingsTab = SettingsTab.HiddenItems;
+    private Vector2 _settingsScroll;
+    private string _updateCheckResult = "";
+    private double _updateCheckTime;
     // ── 缓存索引（避免每帧 LINQ 遍历）───────────────
     private Dictionary<string, ToolEntry> _toolIndex = new Dictionary<string, ToolEntry>();
     private int _totalToolCount;
