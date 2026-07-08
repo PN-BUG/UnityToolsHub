@@ -3,11 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Sirenix.OdinInspector;
-using Sirenix.OdinInspector.Editor;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using Sirenix.OdinInspector;
+using Sirenix.OdinInspector.Editor;
+
 /// <summary>
 /// ═══════════════════════════════════════════════════════════════
 ///  项目打包工具 —— 多平台一键打包 & 批量构建
@@ -23,6 +24,15 @@ using UnityEngine;
 ///  
 /// ═══════════════════════════════════════════════════════════════
 /// </summary>
+
+/// <summary>构建压缩方式</summary>
+public enum CompressionType
+{
+    None,
+    Lz4,
+    Lz4HC,
+}
+
 [ToolInfo("项目打包", "构建工具",
     Description = "多平台项目打包工具，支持 Windows / Android / iOS / WebGL 等平台的一键打包与批量构建。\n\n可管理构建场景、配置打包选项、快速设置 Player Settings。",
     Icon = "📦",
@@ -36,19 +46,12 @@ public class ProjectBuilder : OdinEditorWindow
     [Serializable]
     public enum BuildPlatform
     {
-        [LabelText("Windows (64-bit)")]
         Windows64,
-        [LabelText("Windows (32-bit)")]
         Windows32,
-        [LabelText("Android")]
         Android,
-        [LabelText("iOS")]
         iOS,
-        [LabelText("WebGL")]
         WebGL,
-        [LabelText("Linux (64-bit)")]
         Linux64,
-        [LabelText("macOS")]
         MacOS,
     }
 
@@ -96,6 +99,22 @@ public class ProjectBuilder : OdinEditorWindow
             BuildPlatform.Linux64                               => ".x86_64",
             BuildPlatform.MacOS                                 => ".app",
             _                                                   => ".exe",
+        };
+    }
+
+    /// <summary>获取平台显示名称</summary>
+    private static string GetPlatformDisplayName(BuildPlatform platform)
+    {
+        return platform switch
+        {
+            BuildPlatform.Windows64 => "Windows (64-bit)",
+            BuildPlatform.Windows32 => "Windows (32-bit)",
+            BuildPlatform.Android   => "Android",
+            BuildPlatform.iOS       => "iOS",
+            BuildPlatform.WebGL     => "WebGL",
+            BuildPlatform.Linux64   => "Linux (64-bit)",
+            BuildPlatform.MacOS     => "macOS",
+            _                       => platform.ToString(),
         };
     }
     #endregion
@@ -182,6 +201,7 @@ public class ProjectBuilder : OdinEditorWindow
     #endregion
 
     #region 状态字段
+
     [FoldoutGroup("打包日志", expanded: true, Order = 99)]
     [LabelText("构建日志")]
     [MultiLineProperty(10)]
@@ -189,11 +209,9 @@ public class ProjectBuilder : OdinEditorWindow
     [HideLabel]
     public string buildLog = "";
 
-    [HideInInspector]
-    private bool _isBuilding;
+    [HideInInspector] private bool _isBuilding;
+    [HideInInspector] private BuildPlatform _previousPlatform;
 
-    [HideInInspector]
-    private BuildPlatform _previousPlatform;
     #endregion
 
     #region 菜单入口
@@ -205,14 +223,12 @@ public class ProjectBuilder : OdinEditorWindow
     #endregion
 
     #region 生命周期
+
     protected override void OnEnable()
     {
         base.OnEnable();
-        // 从 Player Settings 同步当前配置
         LoadFromPlayerSettings();
-        // 从 Build Settings 同步场景列表
         LoadScenesFromBuildSettings();
-        // 记录当前平台
         _previousPlatform = targetPlatform;
     }
 
@@ -221,6 +237,7 @@ public class ProjectBuilder : OdinEditorWindow
         _isBuilding = false;
         base.OnDisable();
     }
+
     #endregion
 
     #region Player Settings 同步
@@ -253,7 +270,6 @@ public class ProjectBuilder : OdinEditorWindow
 
     private void OnPlayerSettingChanged()
     {
-        // 字段变更时自动应用（用户可控制何时调用）
     }
     #endregion
 
@@ -316,7 +332,6 @@ public class ProjectBuilder : OdinEditorWindow
     {
         if (_previousPlatform != targetPlatform)
         {
-            // 自动更新批量平台列表中的首个（保持默认一致）
             if (batchPlatforms.Count == 1 && batchPlatforms[0] == _previousPlatform)
             {
                 batchPlatforms[0] = targetPlatform;
@@ -425,7 +440,6 @@ public class ProjectBuilder : OdinEditorWindow
     private string GetFullOutputPath(BuildPlatform platform)
     {
         var basePath = Path.GetFullPath(string.IsNullOrEmpty(outputPath) ? "Builds" : outputPath);
-        // 为每个平台创建子目录
         var platformDir = Path.Combine(basePath, platform.ToString());
 
         var fileName = string.IsNullOrEmpty(outputFileName)
@@ -456,12 +470,10 @@ public class ProjectBuilder : OdinEditorWindow
             var buildTargetGroup = GetBuildTargetGroup(platform);
             var fullPath         = GetFullOutputPath(platform);
 
-            // 确保输出目录存在
             var dir = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            // 检查并切换平台
             if (EditorUserBuildSettings.activeBuildTarget != buildTarget)
             {
                 AppendLog($"正在切换平台: {EditorUserBuildSettings.activeBuildTarget} → {buildTarget} ...");
@@ -473,7 +485,6 @@ public class ProjectBuilder : OdinEditorWindow
                 AppendLog($"✅ 平台切换完成: {buildTarget}");
             }
 
-            // 构建场景路径列表
             var scenePaths = buildScenes
                 .Where(s => s != null)
                 .Select(s => AssetDatabase.GetAssetPath(s))
@@ -486,7 +497,6 @@ public class ProjectBuilder : OdinEditorWindow
                 return;
             }
 
-            // 构建选项
             var options = BuildOptions.None;
             if (developmentBuild)
                 options |= BuildOptions.Development;
@@ -495,7 +505,6 @@ public class ProjectBuilder : OdinEditorWindow
             if (incrementalBuild)
                 options |= BuildOptions.AcceptExternalModificationsToPlayer;
 
-            // 压缩方式（通过 BuildOptions 设置）
             switch (compressionType)
             {
                 case CompressionType.Lz4:
@@ -515,7 +524,6 @@ public class ProjectBuilder : OdinEditorWindow
             AppendLog($"  压缩: {compressionType}");
             AppendLog($"══════════════════════════════════════");
 
-            // 执行构建
             var report = BuildPipeline.BuildPlayer(
                 scenePaths,
                 fullPath,
@@ -523,7 +531,6 @@ public class ProjectBuilder : OdinEditorWindow
                 options
             );
 
-            // 处理构建结果
             if (report.summary.result == BuildResult.Succeeded)
             {
                 var sizeMB = report.summary.totalSize / 1024f / 1024f;
@@ -550,7 +557,6 @@ public class ProjectBuilder : OdinEditorWindow
                 var warnings = report.summary.totalWarnings;
                 AppendLog($"❌ 构建失败！错误: {errors}，警告: {warnings}");
 
-                // 输出详细错误信息
                 foreach (var step in report.steps)
                 {
                     foreach (var msg in step.messages)
@@ -582,7 +588,6 @@ public class ProjectBuilder : OdinEditorWindow
     {
         var timestamp = DateTime.Now.ToString("HH:mm:ss");
         buildLog += $"[{timestamp}] {msg}\n";
-        // 限制日志长度，保留最近 5000 行
         var lines = buildLog.Split('\n');
         if (lines.Length > 5000)
         {
@@ -591,5 +596,113 @@ public class ProjectBuilder : OdinEditorWindow
         Repaint();
     }
     #endregion
+
+#if !ODIN_INSPECTOR
+    #region ── 原生 OnGUI（无 Odin 时的回退渲染） ────────────
+
+    private Vector2 _scrollPos;
+
+    private void OnGUI()
+    {
+        _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
+
+        // ── 平台选择 ──
+        EditorGUILayout.LabelField("平台选择", EditorStyles.boldLabel);
+        targetPlatform = (BuildPlatform)EditorGUILayout.EnumPopup("目标平台", targetPlatform);
+        EditorGUILayout.Space(4);
+
+        // ── 构建场景 ──
+        EditorGUILayout.LabelField("构建场景", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox("场景必须添加到 Build Settings 才会被打包。", MessageType.Info);
+
+        for (int i = 0; i < buildScenes.Count; i++)
+        {
+            EditorGUILayout.BeginHorizontal();
+            buildScenes[i] = (SceneAsset)EditorGUILayout.ObjectField($"场景 {i + 1}", buildScenes[i], typeof(SceneAsset), false);
+            if (GUILayout.Button("✕", GUILayout.Width(24)))
+            {
+                buildScenes.RemoveAt(i);
+                i--;
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        DrawSceneButtons();
+        if (GUILayout.Button("+ 添加场景", GUILayout.Height(22)))
+            buildScenes.Add(null);
+        EditorGUILayout.Space(8);
+
+        // ── 打包选项 ──
+        EditorGUILayout.LabelField("打包选项", EditorStyles.boldLabel);
+        developmentBuild = EditorGUILayout.Toggle("Development Build", developmentBuild);
+        EditorGUI.BeginDisabledGroup(!developmentBuild);
+        allowDebugging = EditorGUILayout.Toggle("允许 Script Debugging", allowDebugging);
+        EditorGUI.EndDisabledGroup();
+        compressionType = (CompressionType)EditorGUILayout.EnumPopup("压缩方式", compressionType);
+        incrementalBuild = EditorGUILayout.Toggle("增量构建", incrementalBuild);
+        openFolderAfterBuild = EditorGUILayout.Toggle("构建完成后打开文件夹", openFolderAfterBuild);
+        EditorGUILayout.Space(8);
+
+        // ── 输出路径 ──
+        EditorGUILayout.LabelField("输出路径", EditorStyles.boldLabel);
+        outputPath = EditorGUILayout.TextField("输出目录", outputPath);
+        outputFileName = EditorGUILayout.TextField("输出文件名", outputFileName);
+        EditorGUILayout.Space(8);
+
+        // ── Player Settings ──
+        EditorGUILayout.LabelField("Player Settings 快速配置", EditorStyles.boldLabel);
+        companyName = EditorGUILayout.TextField("Company Name", companyName);
+        productName = EditorGUILayout.TextField("Product Name", productName);
+        bundleVersion = EditorGUILayout.TextField("版本号", bundleVersion);
+        if (targetPlatform == BuildPlatform.Android)
+        {
+            bundleVersionCode = EditorGUILayout.IntField("Bundle Version Code (Android)", bundleVersionCode);
+            androidPackageName = EditorGUILayout.TextField("Package Name (Android)", androidPackageName);
+        }
+        EditorGUILayout.Space(8);
+
+        // ── 操作按钮 ──
+        EditorGUILayout.LabelField("操作", EditorStyles.boldLabel);
+        var defaultBg = GUI.backgroundColor;
+
+        GUI.backgroundColor = new Color(0.3f, 0.7f, 0.4f);
+        EditorGUI.BeginDisabledGroup(!CanBuild());
+        if (GUILayout.Button("▶ 开始打包", GUILayout.Height(32)))
+            BuildForCurrentPlatform();
+        EditorGUI.EndDisabledGroup();
+
+        GUI.backgroundColor = new Color(0.3f, 0.5f, 0.8f);
+        EditorGUI.BeginDisabledGroup(!CanBatchBuild());
+        if (GUILayout.Button("批量打包", GUILayout.Height(28)))
+            BatchBuild();
+        EditorGUI.EndDisabledGroup();
+
+        GUI.backgroundColor = defaultBg;
+        if (GUILayout.Button("打开输出目录", GUILayout.Height(24)))
+            OpenOutputFolder();
+        if (GUILayout.Button("清空构建日志", GUILayout.Height(24)))
+            ClearBuildLog();
+
+        GUI.backgroundColor = new Color(0.5f, 0.5f, 0.7f);
+        if (GUILayout.Button("应用 Player Settings", GUILayout.Height(24)))
+            ApplyPlayerSettingsButton();
+        GUI.backgroundColor = defaultBg;
+
+        EditorGUILayout.Space(8);
+
+        // ── 打包日志 ──
+        if (!string.IsNullOrEmpty(buildLog))
+        {
+            EditorGUILayout.LabelField("构建日志", EditorStyles.boldLabel);
+            EditorGUI.BeginDisabledGroup(true);
+            EditorGUILayout.TextArea(buildLog, GUILayout.MinHeight(200), GUILayout.ExpandHeight(true));
+            EditorGUI.EndDisabledGroup();
+        }
+
+        EditorGUILayout.EndScrollView();
+    }
+
+    #endregion
+#endif
 }
 #endif

@@ -3,11 +3,7 @@ using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
-#if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
-#else
-using UnityToolsHubCompat;
-#endif
 
 /// <summary>
 /// 文件夹规则配置 —— ScriptableObject
@@ -321,7 +317,6 @@ public class FolderRuleConfig : ScriptableObject
         return textureMaxCapSize;
     }
 
-#if ODIN_INSPECTOR
     /// <summary>Odin ValueDropdown 回调 —— 最大尺寸上限选项（与 TextureImportAutoTool 一致）</summary>
     private IEnumerable<int> MaxCapSizeOptions()
     {
@@ -357,6 +352,5 @@ public class FolderRuleConfig : ScriptableObject
 #endif
         return names;
     }
-#endif
 }
 #endif
