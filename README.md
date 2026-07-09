@@ -184,6 +184,23 @@ public class MyTool : EditorWindow
     // NodinDrawer 自动绘制 Inspector
 }
 
+## 包信息
+
+| 属性 | 值 |
+|------|-----|
+| 包名 | `com.zko.unitytoolshub` |
+| 版本 | 1.0.0 |
+| Unity 版本 | 2021.3+ |
+| 仓库地址 | https://github.com/PN-BUG/UnityToolsHub.git |
+
+## 依赖关系
+
+```
+UnityToolsHub
+  └── EditorCore (com.zko.editor.core)
+       └── Nodin (com.zko.nodin)
+```
+
 ## 许可证
 
 Apache License 2.0
