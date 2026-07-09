@@ -48,63 +48,63 @@ using UnityEngine;
 /// </summary>
 public abstract class ToolEditorWindow : EditorWindow
 {
-    #region ═══ 颜色调色板（统一深色主题）═══════════════════════
+    #region ═══ 颜色调色板（统一深色主题，引用 HubPalette 单一来源）════
 
     // ── 背景色 ─────────────────────────────────────────────
-    protected static readonly Color ClrBg           = new Color(0.16f, 0.16f, 0.17f, 1f);
-    protected static readonly Color ClrToolbarBg    = new Color(0.14f, 0.14f, 0.15f, 1f);
-    protected static readonly Color ClrSearchBg     = new Color(0.12f, 0.12f, 0.13f, 1f);
-    protected static readonly Color ClrItemBg       = new Color(0.19f, 0.19f, 0.20f, 1f);
-    protected static readonly Color ClrItemHover    = new Color(0.24f, 0.24f, 0.26f, 1f);
-    protected static readonly Color ClrItemSelected = new Color(0.22f, 0.45f, 0.85f, 0.30f);
-    protected static readonly Color ClrCardBg       = new Color(0.21f, 0.21f, 0.22f, 1f);
-    protected static readonly Color ClrGroupBoxBg   = new Color(0.17f, 0.17f, 0.18f, 1f);
-    protected static readonly Color ClrTagBg        = new Color(0.25f, 0.25f, 0.27f, 1f);
-    protected static readonly Color ClrStatusBar    = new Color(0.13f, 0.13f, 0.14f, 1f);
-    protected static readonly Color ClrIconBg       = new Color(0.28f, 0.28f, 0.30f, 1f);
-    protected static readonly Color ClrHelpBoxBg    = new Color(0.18f, 0.18f, 0.20f, 1f);
-    protected static readonly Color ClrProgressBg   = new Color(0.15f, 0.15f, 0.16f, 1f);
-    protected static readonly Color ClrKeyCapBg     = new Color(0.20f, 0.20f, 0.22f, 1f);
+    protected static readonly Color ClrBg           = HubPalette.Bg;
+    protected static readonly Color ClrToolbarBg    = HubPalette.ToolbarBg;
+    protected static readonly Color ClrSearchBg     = HubPalette.SearchBg;
+    protected static readonly Color ClrItemBg       = HubPalette.ItemBg;
+    protected static readonly Color ClrItemHover    = HubPalette.ItemHover;
+    protected static readonly Color ClrItemSelected = HubPalette.ItemSelected;
+    protected static readonly Color ClrCardBg       = HubPalette.CardBg;
+    protected static readonly Color ClrGroupBoxBg   = HubPalette.GroupBoxBg;
+    protected static readonly Color ClrTagBg        = HubPalette.TagBg;
+    protected static readonly Color ClrStatusBar    = HubPalette.StatusBar;
+    protected static readonly Color ClrIconBg       = HubPalette.IconBg;
+    protected static readonly Color ClrHelpBoxBg    = HubPalette.HelpBoxBg;
+    protected static readonly Color ClrProgressBg   = HubPalette.ProgressBg;
+    protected static readonly Color ClrKeyCapBg     = HubPalette.KeyCapBg;
 
     // ── 文字色 ─────────────────────────────────────────────
-    protected static readonly Color ClrText       = new Color(0.88f, 0.88f, 0.88f, 1f);
-    protected static readonly Color ClrTextDim    = new Color(0.55f, 0.55f, 0.55f, 1f);
-    protected static readonly Color ClrTextBright = new Color(0.95f, 0.95f, 0.95f, 1f);
+    protected static readonly Color ClrText       = HubPalette.Text;
+    protected static readonly Color ClrTextDim    = HubPalette.TextDim;
+    protected static readonly Color ClrTextBright = HubPalette.TextBright;
 
     // ── 主题色 ─────────────────────────────────────────────
-    protected static readonly Color ClrAccent    = new Color(0.30f, 0.55f, 0.95f, 1f);
-    protected static readonly Color ClrAccentDim = new Color(0.22f, 0.45f, 0.85f, 0.5f);
-    protected static readonly Color ClrDivider   = new Color(1f, 1f, 1f, 0.06f);
+    protected static readonly Color ClrAccent    = HubPalette.Accent;
+    protected static readonly Color ClrAccentDim = HubPalette.AccentDim;
+    protected static readonly Color ClrDivider   = HubPalette.Divider;
 
     // ── 按钮色 ─────────────────────────────────────────────
-    protected static readonly Color ClrBtnNormal    = new Color(0.24f, 0.48f, 0.88f, 1f);
-    protected static readonly Color ClrBtnHover     = new Color(0.30f, 0.55f, 0.95f, 1f);
-    protected static readonly Color ClrBtnDanger    = new Color(0.75f, 0.28f, 0.28f, 1f);
-    protected static readonly Color ClrBtnDangerHov = new Color(0.85f, 0.35f, 0.35f, 1f);
-    protected static readonly Color ClrBtnSuccess   = new Color(0.25f, 0.65f, 0.35f, 1f);
-    protected static readonly Color ClrBtnSuccessHov= new Color(0.30f, 0.75f, 0.40f, 1f);
-    protected static readonly Color ClrBtnWarn      = new Color(0.80f, 0.58f, 0.18f, 1f);
-    protected static readonly Color ClrBtnWarnHov   = new Color(0.90f, 0.65f, 0.25f, 1f);
+    protected static readonly Color ClrBtnNormal    = HubPalette.BtnNormal;
+    protected static readonly Color ClrBtnHover     = HubPalette.BtnHover;
+    protected static readonly Color ClrBtnDanger    = HubPalette.BtnDanger;
+    protected static readonly Color ClrBtnDangerHov = HubPalette.BtnDangerHov;
+    protected static readonly Color ClrBtnSuccess   = HubPalette.BtnSuccess;
+    protected static readonly Color ClrBtnSuccessHov= HubPalette.BtnSuccessHov;
+    protected static readonly Color ClrBtnWarn      = HubPalette.BtnWarn;
+    protected static readonly Color ClrBtnWarnHov   = HubPalette.BtnWarnHov;
 
     // ── 语义色 ─────────────────────────────────────────────
-    protected static readonly Color ClrSuccess  = new Color(0.35f, 0.75f, 0.45f, 1f);
-    protected static readonly Color ClrWarning  = new Color(0.90f, 0.70f, 0.20f, 1f);
-    protected static readonly Color ClrError    = new Color(0.85f, 0.30f, 0.30f, 1f);
-    protected static readonly Color ClrInfo     = new Color(0.30f, 0.65f, 0.80f, 1f);
+    protected static readonly Color ClrSuccess  = HubPalette.Success;
+    protected static readonly Color ClrWarning  = HubPalette.Warning;
+    protected static readonly Color ClrError    = HubPalette.Error;
+    protected static readonly Color ClrInfo     = HubPalette.Info;
 
     // ── 拖拽叠加色 ────────────────────────────────────────
-    protected static readonly Color ClrDropOverlay = new Color(0.30f, 0.55f, 0.95f, 0.18f);
-    protected static readonly Color ClrDropBorder  = new Color(0.30f, 0.55f, 0.95f, 0.60f);
+    protected static readonly Color ClrDropOverlay = HubPalette.DropOverlay;
+    protected static readonly Color ClrDropBorder  = HubPalette.DropBorder;
 
     // ── 分类配色（供工具卡片等场景复用）──────────────────
-    protected static readonly Color ClrCatDefault = new Color(0.30f, 0.65f, 0.80f, 1f);
-    protected static readonly Color ClrCatGreen   = new Color(0.35f, 0.75f, 0.45f, 1f);
-    protected static readonly Color ClrCatOrange  = new Color(0.90f, 0.65f, 0.25f, 1f);
-    protected static readonly Color ClrCatPurple  = new Color(0.55f, 0.45f, 0.85f, 1f);
-    protected static readonly Color ClrCatRed     = new Color(0.80f, 0.45f, 0.35f, 1f);
-    protected static readonly Color ClrCatTeal    = new Color(0.35f, 0.70f, 0.75f, 1f);
-    protected static readonly Color ClrCatPink    = new Color(0.85f, 0.40f, 0.55f, 1f);
-    protected static readonly Color ClrCatYellow  = new Color(0.85f, 0.75f, 0.25f, 1f);
+    protected static readonly Color ClrCatDefault = HubPalette.CatDefault;
+    protected static readonly Color ClrCatGreen   = HubPalette.CatGreen;
+    protected static readonly Color ClrCatOrange  = HubPalette.CatOrange;
+    protected static readonly Color ClrCatPurple  = HubPalette.CatPurple;
+    protected static readonly Color ClrCatRed     = HubPalette.CatRed;
+    protected static readonly Color ClrCatTeal    = HubPalette.CatTeal;
+    protected static readonly Color ClrCatPink    = HubPalette.CatPink;
+    protected static readonly Color ClrCatYellow  = HubPalette.CatYellow;
 
     #endregion
 
@@ -496,15 +496,54 @@ public abstract class ToolEditorWindow : EditorWindow
         DrawGradientRect(new Rect(0, 0, position.width, height), left, right);
     }
 
+    // ── 渐变纹理缓存（按颜色对缓存，替代逐像素 DrawRect 循环）──
+    private static readonly System.Collections.Generic.Dictionary<int, Texture2D> _gradientCache
+        = new System.Collections.Generic.Dictionary<int, Texture2D>();
+    private const int GradientTexWidth = 64;
+
+    private static int ColorPairKey(Color a, Color b)
+    {
+        unchecked
+        {
+            int ha = ((int)(a.r * 255) << 24) | ((int)(a.g * 255) << 16) | ((int)(a.b * 255) << 8) | (int)(a.a * 255);
+            int hb = ((int)(b.r * 255) << 24) | ((int)(b.g * 255) << 16) | ((int)(b.b * 255) << 8) | (int)(b.a * 255);
+            return (ha * 397) ^ hb;
+        }
+    }
+
+    /// <summary>获取或生成水平渐变纹理（按颜色对缓存）</summary>
+    private static Texture2D GetGradientTexture(Color left, Color right)
+    {
+        int key = ColorPairKey(left, right);
+        if (_gradientCache.TryGetValue(key, out var cached))
+            return cached;
+
+        var tex = new Texture2D(GradientTexWidth, 1, TextureFormat.RGBA32, false);
+        var px = new Color32[GradientTexWidth];
+        for (int i = 0; i < GradientTexWidth; i++)
+        {
+            float t = (float)i / (GradientTexWidth - 1);
+            px[i] = Color.Lerp(left, right, t);
+        }
+        tex.SetPixels32(px);
+        tex.Apply();
+        tex.hideFlags = HideFlags.HideAndDontSave;
+        _gradientCache[key] = tex;
+        return tex;
+    }
+
     protected static void DrawGradientRect(Rect rect, Color left, Color right)
     {
-        int steps = Mathf.Max(1, (int)rect.width);
-        float stepW = rect.width / steps;
-        for (int i = 0; i < steps; i++)
+        var tex = GetGradientTexture(left, right);
+        if (tex == null)
         {
-            float t = (float)i / steps;
-            EditorGUI.DrawRect(new Rect(rect.x + i * stepW, rect.y, stepW + 1, rect.height), Color.Lerp(left, right, t));
+            EditorGUI.DrawRect(rect, left);
+            return;
         }
+        var prevColor = GUI.color;
+        GUI.color = Color.white;
+        GUI.DrawTexture(rect, tex, ScaleMode.StretchToFill);
+        GUI.color = prevColor;
     }
 
     protected void DrawDivider(float height = 1f)
@@ -836,6 +875,14 @@ public abstract class ToolEditorWindow : EditorWindow
         if (_texSelected != null)    { DestroyImmediate(_texSelected);    _texSelected = null; }
         if (_texTransparent != null) { DestroyImmediate(_texTransparent); _texTransparent = null; }
         if (_texCardBg != null)      { DestroyImmediate(_texCardBg);      _texCardBg = null; }
+
+        // 清理渐变纹理缓存
+        foreach (var tex in _gradientCache.Values)
+        {
+            if (tex != null) DestroyImmediate(tex);
+        }
+        _gradientCache.Clear();
+
         _stylesReady = false;
     }
 

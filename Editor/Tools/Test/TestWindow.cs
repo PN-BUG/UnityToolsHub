@@ -77,19 +77,36 @@ public class TestWindow : EditorWindow
     private void OnEnable()
     {
         RefreshEntries();
-        // 监听场景变化，自动刷新
+        // 监听场景变化，标记为脏（防抖，避免频繁 FindObjectsOfType 全场景扫描）
         EditorApplication.hierarchyChanged += OnHierarchyChanged;
+        EditorApplication.update += OnEditorUpdate;
     }
 
     private void OnDisable()
     {
         EditorApplication.hierarchyChanged -= OnHierarchyChanged;
+        EditorApplication.update -= OnEditorUpdate;
     }
+
+    // ── 防抖：层级变化后延迟 1 秒再刷新，避免拖拽/编辑时频繁扫描 ──
+    private bool _isDirty;
+    private double _dirtyTime;
 
     private void OnHierarchyChanged()
     {
-        RefreshEntries();
-        Repaint();
+        _isDirty = true;
+        _dirtyTime = EditorApplication.timeSinceStartup;
+    }
+
+    private void OnEditorUpdate()
+    {
+        // 延迟 1 秒后自动刷新（避免编辑过程中频繁 FindObjectsOfType）
+        if (_isDirty && EditorApplication.timeSinceStartup - _dirtyTime > 1.0)
+        {
+            _isDirty = false;
+            RefreshEntries();
+            Repaint();
+        }
     }
 
     /// <summary>

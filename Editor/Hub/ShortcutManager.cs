@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -10,6 +11,26 @@ public partial class UnityToolsHub
 {
     #region 快捷键管理
     private const string ShortcutPrefsPrefix = "UnityToolsHub.Shortcut.";
+
+    /// <summary>
+    /// 构建（或刷新）快捷键→工具的索引，使 HandleShortcutNavigation 可 O(1) 查找。
+    /// 在 DiscoverTools 后或快捷键变更后调用。
+    /// </summary>
+    private void RebuildShortcutIndex()
+    {
+        _shortcutIndex.Clear();
+        foreach (var cat in _categories)
+        {
+            foreach (var tool in cat.tools)
+            {
+                if (string.IsNullOrEmpty(tool.typeName)) continue;
+                var shortcut = GetEffectiveShortcut(tool.typeName);
+                if (shortcut.IsValid && !_shortcutIndex.ContainsKey(shortcut))
+                    _shortcutIndex[shortcut] = tool;
+            }
+        }
+        _shortcutIndexVersion++;
+    }
 
     /// <summary>获取工具的有效快捷键（优先使用 EditorPrefs 自定义，其次使用 ToolInfo 属性默认值）</summary>
     private ShortcutBinding GetEffectiveShortcut(string typeName)
@@ -45,12 +66,16 @@ public partial class UnityToolsHub
             EditorPrefs.SetString(ShortcutPrefsPrefix + typeName, binding.ToString());
         else
             EditorPrefs.DeleteKey(ShortcutPrefsPrefix + typeName);
+        // 快捷键变更后刷新索引
+        RebuildShortcutIndex();
     }
 
     /// <summary>清除工具的自定义快捷键</summary>
     private void ClearShortcut(string typeName)
     {
         EditorPrefs.DeleteKey(ShortcutPrefsPrefix + typeName);
+        // 快捷键变更后刷新索引
+        RebuildShortcutIndex();
     }
 
     /// <summary>检查快捷键是否与已有工具的快捷键冲突（排除自身）</summary>
@@ -154,26 +179,21 @@ public partial class UnityToolsHub
         // 不拦截 Hub 自身的切换快捷键（Ctrl+Shift+E）
         if (pressed.Equals(_hubToggleShortcut)) return;
 
-        // 在工具列表中查找匹配快捷键的工具
-        foreach (var cat in _categories)
+        // 懒构建快捷键索引（首次或版本变化时重建）
+        if (_shortcutIndexVersion != _categoriesVersion)
+            RebuildShortcutIndex();
+
+        // O(1) 字典查找，替代每帧遍历所有分类所有工具
+        if (_shortcutIndex.TryGetValue(pressed, out var tool))
         {
-            foreach (var tool in cat.tools)
-            {
-                if (string.IsNullOrEmpty(tool.typeName)) continue;
-                var shortcut = GetEffectiveShortcut(tool.typeName);
-                if (shortcut.IsValid && shortcut.Equals(pressed))
-                {
-                    _selectedTool = tool;
-                    _selectedCategory = cat;
-                    _rightScroll = Vector2.zero;
-                    _showCreateForm = false;
-                    _showHiddenManager = false;
-                    RecordToolUsage(tool);
-                    evt.Use();
-                    Repaint();
-                    return;
-                }
-            }
+            _selectedTool = tool;
+            _selectedCategory = _categories.FirstOrDefault(c => c.tools.Contains(tool));
+            _rightScroll = Vector2.zero;
+            _showCreateForm = false;
+            _showHiddenManager = false;
+            RecordToolUsage(tool);
+            evt.Use();
+            Repaint();
         }
     }
 

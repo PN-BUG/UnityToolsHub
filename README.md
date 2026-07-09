@@ -118,7 +118,9 @@ UnityToolsHub/
     ├── OdinDetector/               # 第三方插件检测（独立程序集）
     │   ├── OdinAutoDetector.cs     # 通用插件检测器（支持自定义规则）
     │   └── UnityToolsHub.OdinDetector.Editor.asmdef
-    ├── OdinCompat.cs               # Odin 兼容层（桩类型+反射绘制器）
+    ├── Nodin/                     # Nodin 属性层（独立包）
+    │   ├── Runtime/Attributes.cs  # Nodin 命名空间特性定义
+    │   └── Editor/NodinDrawer.cs  # 反射绘制器
     ├── ToolInfoAttribute.cs        # 工具信息特性定义
     ├── UnityPathUtility.cs         # 路径工具
     └── _NewToolTemplate.cs.txt     # 新建工具模板
@@ -130,8 +132,8 @@ UnityToolsHub/
 
 - **自动检测**：`OdinAutoDetector` 编辑器启动时自动扫描项目中是否存在第三方插件 DLL
 - **自动宏管理**：检测到 Odin 自动添加 `ODIN_INSPECTOR` 宏定义，移除后自动清理
-- **属性兼容**：`OdinCompat.cs` 提供 `UnityToolsHubCompat` 命名空间下的属性定义（`[FoldoutGroup]`、`[LabelText]`、`[Button]` 等），通过反射自动绘制 Inspector
-- **反射自动绘制**：`OdinEditorWindow` 桩和 `OdinCompatEditor` 通过反射读取属性，自动绘制 Inspector UI
+- **属性兼容**：`Nodin` 包提供 `Nodin` 命名空间下的属性定义（`[FoldoutGroup]`、`[LabelText]`、`[Button]` 等），通过反射自动绘制 Inspector
+- **反射自动绘制**：`NodinEditorWindow` 桩和 `NodinEditor` 通过反射读取属性，自动绘制 Inspector UI
 - **零配置**：无需手动设置宏，开箱即用
 
 ### 工作原理
@@ -166,10 +168,10 @@ public static class MyPluginDetector
 
 ### 编写兼容工具
 
-工具直接使用 `UnityToolsHubCompat` 命名空间的属性，无需条件编译：
+工具直接使用 `Nodin` 命名空间的属性，无需条件编译：
 
 ```csharp
-using UnityToolsHubCompat;
+using Nodin;
 using UnityEditor;
 using UnityEngine;
 
@@ -179,7 +181,7 @@ public class MyTool : EditorWindow
     [LabelText("速度")]
     public float speed = 5f;
 
-    // 有 Odin 时自动渲染，无 Odin 时由 OdinCompatEditor/OdinEditorWindow 桩渲染
+    // NodinDrawer 自动绘制 Inspector
 }
 
 ## 许可证

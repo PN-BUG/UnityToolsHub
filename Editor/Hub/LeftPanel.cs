@@ -84,24 +84,16 @@ public partial class UnityToolsHub
         // 预留垂直滚动条宽度（约 15px），避免快捷键被遮挡
         const float ScrollbarReserve = 16f;
 
+        // 获取（带缓存的）过滤后的工具列表映射，避免每帧 LINQ + ToList 分配
+        var filteredMap = GetFilteredToolsMap(hasSearch);
+
         foreach (var category in _categories)
         {
             // 跳过隐藏的分类（搜索模式下仍显示，方便用户找到后取消隐藏）
             if (!hasSearch && _hiddenItems.IsCategoryHidden(category.name)) continue;
 
-            var filtered = hasSearch
-                ? category.tools.Where(t =>
-                    t.name.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    t.description.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    (t.tags != null && t.tags.Any(tag => tag.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0))
-                  ).ToList()
-                : category.tools;
-
-            // 非搜索模式下过滤隐藏工具
-            if (!hasSearch)
-                filtered = filtered.Where(t => !_hiddenItems.IsToolHidden(t.typeName)).ToList();
-
-            if (filtered.Count == 0) continue;
+            // 从缓存映射中获取过滤后的工具列表
+            if (!filteredMap.TryGetValue(category, out var filtered) || filtered.Count == 0) continue;
 
             // ── 分类标题（手动绘制折叠箭头 + 文字）──────
             if (!hasSearch)
@@ -302,6 +294,74 @@ public partial class UnityToolsHub
             _selectedCategory = null;
         });
         menu.ShowAsContext();
+    }
+    #endregion
+
+    #region 搜索过滤缓存
+    /// <summary>
+    /// 获取（带缓存的）过滤后的工具列表映射（CategoryNode → 过滤后的工具列表）。
+    /// 仅在搜索文本或分类版本变化时重算，避免每帧 LINQ + ToList 分配。
+    /// 遍历仍使用原始 _categories（保持 expanded 状态同步），仅工具列表为缓存副本。
+    /// </summary>
+    private Dictionary<CategoryNode, List<ToolEntry>> GetFilteredToolsMap(bool hasSearch)
+    {
+        // 缓存命中条件：搜索文本相同 且 分类版本相同
+        if (_lastSearchText == _searchText && _lastSearchVersion == _categoriesVersion)
+            return _filteredToolsMapCache;
+
+        _lastSearchText = _searchText;
+        _lastSearchVersion = _categoriesVersion;
+        _filteredToolsMapCache.Clear();
+
+        if (hasSearch)
+        {
+            // 搜索模式：按名称/描述/标签过滤工具，分类不过滤隐藏项（方便找到后取消隐藏）
+            foreach (var category in _categories)
+            {
+                var filteredTools = new List<ToolEntry>();
+                foreach (var t in category.tools)
+                {
+                    if (t.name.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        t.description.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        (t.tags != null && TagContains(t.tags, _searchText)))
+                    {
+                        filteredTools.Add(t);
+                    }
+                }
+
+                if (filteredTools.Count > 0)
+                    _filteredToolsMapCache[category] = filteredTools;
+            }
+        }
+        else
+        {
+            // 非搜索模式：过滤隐藏工具（隐藏分类在调用方处理）
+            foreach (var category in _categories)
+            {
+                var filteredTools = new List<ToolEntry>();
+                foreach (var t in category.tools)
+                {
+                    if (!_hiddenItems.IsToolHidden(t.typeName))
+                        filteredTools.Add(t);
+                }
+
+                if (filteredTools.Count > 0)
+                    _filteredToolsMapCache[category] = filteredTools;
+            }
+        }
+
+        return _filteredToolsMapCache;
+    }
+
+    /// <summary>标签数组是否包含指定文本（OrdinalIgnoreCase）</summary>
+    private static bool TagContains(string[] tags, string text)
+    {
+        foreach (var tag in tags)
+        {
+            if (tag.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+        return false;
     }
     #endregion
 

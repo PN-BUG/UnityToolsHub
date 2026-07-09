@@ -73,17 +73,61 @@ public partial class UnityToolsHub
 
     private void DrawGradientRect(Rect rect, Color left, Color right)
     {
-        if (_texWhite == null) return;
-        int steps = Mathf.Max(1, (int)rect.width);
-        float stepW = rect.width / steps;
+        DrawHorizontalGradient(rect, left, right);
+    }
 
-        for (int i = 0; i < steps; i++)
+    // ── 渐变纹理缓存（按颜色对缓存，避免逐像素 DrawRect 循环）──
+    private static readonly System.Collections.Generic.Dictionary<int, Texture2D> _gradientCache
+        = new System.Collections.Generic.Dictionary<int, Texture2D>();
+    private const int GradientTexWidth = 64;
+
+    private static int ColorPairKey(Color a, Color b)
+    {
+        // 将 Color（32bit rgba）打包为 int，组合两色为 key
+        unchecked
         {
-            float t = (float)i / steps;
-            Color c = Color.Lerp(left, right, t);
-            var stepRect = new Rect(rect.x + i * stepW, rect.y, stepW + 1, rect.height);
-            EditorGUI.DrawRect(stepRect, c);
+            int ha = ((int)(a.r * 255) << 24) | ((int)(a.g * 255) << 16) | ((int)(a.b * 255) << 8) | (int)(a.a * 255);
+            int hb = ((int)(b.r * 255) << 24) | ((int)(b.g * 255) << 16) | ((int)(b.b * 255) << 8) | (int)(b.a * 255);
+            return (ha * 397) ^ hb;
         }
+    }
+
+    /// <summary>绘制水平渐变矩形（带纹理缓存，替代逐像素 DrawRect 循环）</summary>
+    private static void DrawHorizontalGradient(Rect rect, Color left, Color right)
+    {
+        var tex = GetGradientTexture(left, right);
+        if (tex == null)
+        {
+            // 回退：单色填充
+            EditorGUI.DrawRect(rect, left);
+            return;
+        }
+        // 保存并恢复 GUI.color，避免污染外部着色状态
+        var prevColor = GUI.color;
+        GUI.color = Color.white;
+        GUI.DrawTexture(rect, tex, ScaleMode.StretchToFill);
+        GUI.color = prevColor;
+    }
+
+    /// <summary>获取或生成水平渐变纹理（按颜色对缓存）</summary>
+    private static Texture2D GetGradientTexture(Color left, Color right)
+    {
+        int key = ColorPairKey(left, right);
+        if (_gradientCache.TryGetValue(key, out var cached))
+            return cached;
+
+        var tex = new Texture2D(GradientTexWidth, 1, TextureFormat.RGBA32, false);
+        var px = new Color32[GradientTexWidth];
+        for (int i = 0; i < GradientTexWidth; i++)
+        {
+            float t = (float)i / (GradientTexWidth - 1);
+            px[i] = Color.Lerp(left, right, t);
+        }
+        tex.SetPixels32(px);
+        tex.Apply();
+        tex.hideFlags = HideFlags.HideAndDontSave;
+        _gradientCache[key] = tex;
+        return tex;
     }
 
     private void OnDestroy()
@@ -94,6 +138,13 @@ public partial class UnityToolsHub
         if (_texTransparent != null) DestroyImmediate(_texTransparent);
         if (_texArrowExpanded != null) DestroyImmediate(_texArrowExpanded);
         if (_texArrowCollapsed != null) DestroyImmediate(_texArrowCollapsed);
+
+        // 清理渐变纹理缓存
+        foreach (var tex in _gradientCache.Values)
+        {
+            if (tex != null) DestroyImmediate(tex);
+        }
+        _gradientCache.Clear();
     }
     #endregion
 }

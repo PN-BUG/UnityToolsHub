@@ -457,9 +457,8 @@ public partial class UnityToolsHub
         GUILayout.Label("分类使用统计", _styleSectionHeader);
         GUILayout.Space(4);
 
-        var sortedCategories = _usageStats.categories
-            .OrderByDescending(e => e.count)
-            .ToList();
+        // 使用缓存的排序结果，避免每帧 OrderByDescending + ToList 分配
+        var sortedCategories = GetSortedUsageCategories();
 
         if (sortedCategories.Count == 0)
         {
@@ -479,9 +478,8 @@ public partial class UnityToolsHub
         GUILayout.Label("工具使用统计", _styleSectionHeader);
         GUILayout.Space(4);
 
-        var sortedTools = _usageStats.tools
-            .OrderByDescending(e => e.count)
-            .ToList();
+        // 使用缓存的排序结果，避免每帧 OrderByDescending + ToList 分配
+        var sortedTools = GetSortedUsageTools();
 
         if (sortedTools.Count == 0)
         {
@@ -546,6 +544,34 @@ public partial class UnityToolsHub
             normal = { textColor = ClrAccent }
         };
         GUI.Label(countRect, $"{count} 次", countStyle);
+    }
+
+    /// <summary>获取（带缓存的）按使用次数降序排列的分类统计列表</summary>
+    private List<UsageEntry> GetSortedUsageCategories()
+    {
+        if (_usageStatsVersion == _usageStatsSnapshotVersion)
+            return _sortedCategoriesCache;
+
+        _usageStatsVersion = _usageStatsSnapshotVersion;
+        _sortedCategoriesCache.Clear();
+        // 手动排序，避免 LINQ 分配
+        _sortedCategoriesCache.AddRange(_usageStats.categories);
+        _sortedCategoriesCache.Sort((a, b) => b.count.CompareTo(a.count));
+        return _sortedCategoriesCache;
+    }
+
+    /// <summary>获取（带缓存的）按使用次数降序排列的工具统计列表</summary>
+    private List<UsageEntry> GetSortedUsageTools()
+    {
+        if (_usageStatsVersion == _usageStatsSnapshotVersion)
+            return _sortedToolsCache;
+
+        // 注意：_usageStatsVersion 在上面 GetSortedUsageCategories 中已更新，
+        // 这里直接复用同一版本号（两者同时失效）
+        _sortedToolsCache.Clear();
+        _sortedToolsCache.AddRange(_usageStats.tools);
+        _sortedToolsCache.Sort((a, b) => b.count.CompareTo(a.count));
+        return _sortedToolsCache;
     }
     #endregion
 

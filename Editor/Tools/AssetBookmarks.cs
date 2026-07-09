@@ -88,41 +88,41 @@ public class AssetBookmarks : EditorWindow
     private const float GroupTabHeight = 28f;
     #endregion
 
-    #region 调色板（与 UnityToolsHub 统一）
-    private static readonly Color ClrBg           = new Color(0.16f, 0.16f, 0.17f, 1f);
-    private static readonly Color ClrToolbarBg    = new Color(0.14f, 0.14f, 0.15f, 1f);
-    private static readonly Color ClrSearchBg     = new Color(0.12f, 0.12f, 0.13f, 1f);
-    private static readonly Color ClrItemBg       = new Color(0.19f, 0.19f, 0.20f, 1f);
-    private static readonly Color ClrItemHover    = new Color(0.24f, 0.24f, 0.26f, 1f);
-    private static readonly Color ClrItemSelected = new Color(0.22f, 0.45f, 0.85f, 0.30f);
+    #region 调色板（引用 HubPalette 单一来源，仅保留工具特有颜色）
+    private static readonly Color ClrBg           = HubPalette.Bg;
+    private static readonly Color ClrToolbarBg    = HubPalette.ToolbarBg;
+    private static readonly Color ClrSearchBg     = HubPalette.SearchBg;
+    private static readonly Color ClrItemBg       = HubPalette.ItemBg;
+    private static readonly Color ClrItemHover    = HubPalette.ItemHover;
+    private static readonly Color ClrItemSelected = HubPalette.ItemSelected;
     private static readonly Color ClrGroupBg      = new Color(0.15f, 0.15f, 0.16f, 1f);
     private static readonly Color ClrGroupActive  = new Color(0.22f, 0.45f, 0.85f, 0.45f);
     private static readonly Color ClrGroupNormal  = new Color(0.20f, 0.20f, 0.21f, 1f);
-    private static readonly Color ClrText         = new Color(0.88f, 0.88f, 0.88f, 1f);
+    private static readonly Color ClrText         = HubPalette.Text;
     private static readonly Color ClrTextDim      = new Color(0.50f, 0.50f, 0.52f, 1f);
-    private static readonly Color ClrTextBright   = new Color(0.95f, 0.95f, 0.95f, 1f);
-    private static readonly Color ClrAccent       = new Color(0.30f, 0.55f, 0.95f, 1f);
-    private static readonly Color ClrAccentDim    = new Color(0.22f, 0.45f, 0.85f, 0.5f);
+    private static readonly Color ClrTextBright   = HubPalette.TextBright;
+    private static readonly Color ClrAccent       = HubPalette.Accent;
+    private static readonly Color ClrAccentDim    = HubPalette.AccentDim;
     private static readonly Color ClrStar         = new Color(1f, 0.82f, 0.28f, 1f);
     private static readonly Color ClrStarDim      = new Color(0.60f, 0.55f, 0.35f, 1f);
-    private static readonly Color ClrDivider      = new Color(1f, 1f, 1f, 0.05f);
-    private static readonly Color ClrDropOverlay  = new Color(0.30f, 0.55f, 0.95f, 0.18f);
-    private static readonly Color ClrDropBorder   = new Color(0.30f, 0.55f, 0.95f, 0.60f);
-    private static readonly Color ClrTagBg        = new Color(0.25f, 0.25f, 0.27f, 1f);
-    private static readonly Color ClrStatusBar    = new Color(0.13f, 0.13f, 0.14f, 1f);
-    private static readonly Color ClrCardBg       = new Color(0.21f, 0.21f, 0.22f, 1f);
-    private static readonly Color ClrBtnNormal    = new Color(0.24f, 0.48f, 0.88f, 1f);
-    private static readonly Color ClrBtnHover     = new Color(0.30f, 0.55f, 0.95f, 1f);
-    private static readonly Color ClrBtnDanger    = new Color(0.75f, 0.28f, 0.28f, 1f);
-    private static readonly Color ClrBtnDangerHov = new Color(0.85f, 0.35f, 0.35f, 1f);
-    private static readonly Color ClrIconBg       = new Color(0.28f, 0.28f, 0.30f, 1f);
+    private static readonly Color ClrDivider      = HubPalette.Divider;
+    private static readonly Color ClrDropOverlay  = HubPalette.DropOverlay;
+    private static readonly Color ClrDropBorder   = HubPalette.DropBorder;
+    private static readonly Color ClrTagBg        = HubPalette.TagBg;
+    private static readonly Color ClrStatusBar    = HubPalette.StatusBar;
+    private static readonly Color ClrCardBg       = HubPalette.CardBg;
+    private static readonly Color ClrBtnNormal    = HubPalette.BtnNormal;
+    private static readonly Color ClrBtnHover     = HubPalette.BtnHover;
+    private static readonly Color ClrBtnDanger    = HubPalette.BtnDanger;
+    private static readonly Color ClrBtnDangerHov = HubPalette.BtnDangerHov;
+    private static readonly Color ClrIconBg       = HubPalette.IconBg;
     // 分类配色
-    private static readonly Color ClrCatDefault   = new Color(0.30f, 0.65f, 0.80f, 1f);
-    private static readonly Color ClrCatAudio     = new Color(0.85f, 0.55f, 0.40f, 1f);
-    private static readonly Color ClrCatScene     = new Color(0.55f, 0.75f, 0.45f, 1f);
-    private static readonly Color ClrCatMaterial  = new Color(0.90f, 0.65f, 0.25f, 1f);
-    private static readonly Color ClrCatScript    = new Color(0.75f, 0.50f, 0.70f, 1f);
-    private static readonly Color ClrCatPrefab    = new Color(0.40f, 0.75f, 0.85f, 1f);
+    private static readonly Color ClrCatDefault   = HubPalette.CatDefault;
+    private static readonly Color ClrCatAudio     = HubPalette.CatOrange;
+    private static readonly Color ClrCatScene     = HubPalette.CatGreen;
+    private static readonly Color ClrCatMaterial  = HubPalette.CatYellow;
+    private static readonly Color ClrCatScript    = HubPalette.CatPurple;
+    private static readonly Color ClrCatPrefab    = HubPalette.CatTeal;
     #endregion
 
     #region 纹理缓存
@@ -344,26 +344,17 @@ public class AssetBookmarks : EditorWindow
     #endregion
 
     #region 纹理 & 样式初始化
-    private Texture2D MakeTex(int w, int h, Color c)
-    {
-        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-        var px = new Color[w * h];
-        for (int i = 0; i < px.Length; i++) px[i] = c;
-        tex.SetPixels(px);
-        tex.Apply();
-        tex.hideFlags = HideFlags.HideAndDontSave;
-        return tex;
-    }
+    // MakeTex 已统一到 HubPalette.MakeTex，此处不再重复定义
 
     private void InitStyles()
     {
         if (_stylesInitialized) return;
 
         // 纹理
-        _texWhite       = MakeTex(1, 1, Color.white);
-        _texHover        = MakeTex(1, 1, ClrItemHover);
-        _texSelected     = MakeTex(1, 1, ClrItemSelected);
-        _texTransparent  = MakeTex(1, 1, new Color(0, 0, 0, 0));
+        _texWhite       = HubPalette.MakeTex(1, 1, Color.white);
+        _texHover        = HubPalette.MakeTex(1, 1, ClrItemHover);
+        _texSelected     = HubPalette.MakeTex(1, 1, ClrItemSelected);
+        _texTransparent  = HubPalette.MakeTex(1, 1, new Color(0, 0, 0, 0));
 
         // 搜索框
         _styleSearchField = new GUIStyle("ToolbarSeachTextField")
@@ -396,7 +387,7 @@ public class AssetBookmarks : EditorWindow
 
         _styleGroupTabActive = new GUIStyle(_styleGroupTab)
         {
-            normal = { textColor = ClrTextBright, background = MakeTex(1, 1, ClrGroupActive) }
+            normal = { textColor = ClrTextBright, background = HubPalette.MakeTex(1, 1, ClrGroupActive) }
         };
 
         // 分组标题
@@ -483,9 +474,9 @@ public class AssetBookmarks : EditorWindow
             fontSize = 11,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = Color.white, background = MakeTex(1, 1, ClrBtnNormal) },
-            hover = { textColor = Color.white, background = MakeTex(1, 1, ClrBtnHover) },
-            active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = MakeTex(1, 1, ClrAccent) },
+            normal = { textColor = Color.white, background = HubPalette.MakeTex(1, 1, ClrBtnNormal) },
+            hover = { textColor = Color.white, background = HubPalette.MakeTex(1, 1, ClrBtnHover) },
+            active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = HubPalette.MakeTex(1, 1, ClrAccent) },
             padding = new RectOffset(12, 12, 4, 4)
         };
 
@@ -810,13 +801,16 @@ public class AssetBookmarks : EditorWindow
         }
 
         GUILayout.BeginArea(rect);
+        // 预留垂直滚动条宽度（约 15px），避免内容被滚动条遮挡
+        const float ScrollbarReserve = 15f;
+        float listWidth = rect.width - ScrollbarReserve;
         _scrollPos = GUILayout.BeginScrollView(_scrollPos, false, true);
 
         int globalIndex = 0;
         foreach (var group in groups)
         {
             // ── 分组标题 ──
-            var groupRect = GUILayoutUtility.GetRect(rect.width, GroupHeaderHeight);
+            var groupRect = GUILayoutUtility.GetRect(listWidth, GroupHeaderHeight, GUILayout.ExpandWidth(true));
             EditorGUI.DrawRect(groupRect, ClrGroupBg);
             // 左侧色条
             var groupColor = GetGroupColor(group.Key);
@@ -847,7 +841,7 @@ public class AssetBookmarks : EditorWindow
 
             foreach (var item in sortedItems)
             {
-                var itemRect = GUILayoutUtility.GetRect(rect.width, ItemHeight);
+                var itemRect = GUILayoutUtility.GetRect(listWidth, ItemHeight, GUILayout.ExpandWidth(true));
                 DrawItem(itemRect, item, globalIndex);
                 globalIndex++;
             }

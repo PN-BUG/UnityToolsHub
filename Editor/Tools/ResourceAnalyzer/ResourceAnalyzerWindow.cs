@@ -792,10 +792,7 @@ namespace ResourceAnalyzer
 
             // 交替行背景
             _altRowStyle = new GUIStyle(GUI.skin.box);
-            var bg = new Texture2D(1, 1);
-            bg.SetPixel(0, 0, new Color(0, 0, 0, 0.04f));
-            bg.Apply();
-            _altRowStyle.normal.background = bg;
+            _altRowStyle.normal.background = HubPalette.MakeTex(1, 1, new Color(0, 0, 0, 0.04f));
 
             // 偶数行：与 box 相同 padding 但透明背景，保证列对齐
             _evenRowStyle = new GUIStyle(GUI.skin.box)

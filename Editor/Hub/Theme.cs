@@ -10,22 +10,23 @@ using UnityEngine;
 public partial class UnityToolsHub
 {
     #region 深色主题配色
-    private static readonly Color ClrBg           = new Color(0.16f, 0.16f, 0.17f, 1f);
-    private static readonly Color ClrLeftBg       = new Color(0.14f, 0.14f, 0.15f, 1f);
-    private static readonly Color ClrRightBg      = new Color(0.18f, 0.18f, 0.19f, 1f);
-    private static readonly Color ClrSplitter     = new Color(0.10f, 0.10f, 0.10f, 1f);
-    private static readonly Color ClrSelection    = new Color(0.22f, 0.45f, 0.85f, 0.35f);
-    private static readonly Color ClrHover        = new Color(1f, 1f, 1f, 0.04f);
-    private static readonly Color ClrText         = new Color(0.88f, 0.88f, 0.88f, 1f);
-    private static readonly Color ClrTextDim      = new Color(0.55f, 0.55f, 0.55f, 1f);
-    private static readonly Color ClrTextBright   = new Color(0.95f, 0.95f, 0.95f, 1f);
-    private static readonly Color ClrAccent       = new Color(0.30f, 0.55f, 0.95f, 1f);
-    private static readonly Color ClrAccentDim    = new Color(0.22f, 0.45f, 0.85f, 0.5f);
-    private static readonly Color ClrCardBg       = new Color(0.22f, 0.22f, 0.23f, 1f);
-    private static readonly Color ClrTagBg        = new Color(0.25f, 0.25f, 0.27f, 1f);
-    private static readonly Color ClrDivider      = new Color(1f, 1f, 1f, 0.06f);
-    private static readonly Color ClrBtnNormal    = new Color(0.24f, 0.48f, 0.88f, 1f);
-    private static readonly Color ClrBtnHover     = new Color(0.30f, 0.55f, 0.95f, 1f);
+    // 统一引用 HubPalette 单一来源，保留 ClrXxx 别名以兼容现有代码
+    private static readonly Color ClrBg           = HubPalette.Bg;
+    private static readonly Color ClrLeftBg       = HubPalette.LeftBg;
+    private static readonly Color ClrRightBg      = HubPalette.RightBg;
+    private static readonly Color ClrSplitter     = HubPalette.Splitter;
+    private static readonly Color ClrSelection    = HubPalette.Selection;
+    private static readonly Color ClrHover        = HubPalette.Hover;
+    private static readonly Color ClrText         = HubPalette.Text;
+    private static readonly Color ClrTextDim      = HubPalette.TextDim;
+    private static readonly Color ClrTextBright   = HubPalette.TextBright;
+    private static readonly Color ClrAccent       = HubPalette.Accent;
+    private static readonly Color ClrAccentDim    = HubPalette.AccentDim;
+    private static readonly Color ClrCardBg       = HubPalette.CardBg;
+    private static readonly Color ClrTagBg        = HubPalette.TagBg;
+    private static readonly Color ClrDivider      = HubPalette.Divider;
+    private static readonly Color ClrBtnNormal    = HubPalette.BtnNormal;
+    private static readonly Color ClrBtnHover     = HubPalette.BtnHover;
     #endregion
 
     #region 分类配色（已知分类 → 固定颜色）

@@ -98,6 +98,9 @@ public partial class UnityToolsHub
                 _totalToolCount++;
             }
         }
+
+        // 使搜索过滤缓存失效
+        _categoriesVersion++;
     }
 
     private static int GetPriority(ToolEntry t)
