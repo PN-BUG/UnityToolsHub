@@ -1,3 +1,6 @@
 [submodule "EditorCore"]
 	path = EditorCore
 	url = https://github.com/PN-BUG/EditorCore.git
+[submodule "ProjectInitializer"]
+	path = ProjectInitializer
+	url = https://github.com/PN-BUG/ProjectInitializer.git
