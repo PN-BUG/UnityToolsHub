@@ -6,8 +6,8 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
-using UnityToolsHubCompat;
-using UnityToolsHubCompat.Editor;
+using Nodin;
+using Nodin.Editor;
 
 /// <summary>
 /// ═══════════════════════════════════════════════════════════════
@@ -39,7 +39,7 @@ public enum CompressionType
     Tags = new[] { "打包", "构建", "Build", "发布" },
     Shortcut = "Ctrl+Shift+B",
     Priority = 10)]
-public class ProjectBuilder : OdinEditorWindow
+public class ProjectBuilder : NodinEditorWindow
 {
     #region 平台定义
     /// <summary>支持的构建平台</summary>

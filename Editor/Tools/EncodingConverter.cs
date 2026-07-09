@@ -6,8 +6,8 @@ using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
-using UnityToolsHubCompat;
-using UnityToolsHubCompat.Editor;
+using Nodin;
+using Nodin.Editor;
 
 // ═══════════════════════════════════════════════════════════════
 // 编码转换工具 — 将项目文件批量转换为指定编码
@@ -20,7 +20,7 @@ using UnityToolsHubCompat.Editor;
         + "• 支持预览模式，转换前先查看影响范围\n"
         + "• 支持按文件夹和文件类型过滤",
     Icon = "🔤", Tags = new[] { "编码", "UTF-8", "转换" })]
-public class EncodingConverterSafe : OdinEditorWindow
+public class EncodingConverterSafe : NodinEditorWindow
 {
     #region ── 字段 ────────────────────────────────────────
 

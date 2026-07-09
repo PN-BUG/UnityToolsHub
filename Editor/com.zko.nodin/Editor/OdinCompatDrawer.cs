@@ -1,13 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-//  自定义属性兼容层 —— 反射式自动绘制
-//
-//  通过反射读取 [FoldoutGroup]、[ShowIf]、[EnableIf]、[Button]、
-//  [LabelText]、[InfoBox]、[ReadOnly]、[MultiLineProperty] 等属性，
+//  Nodin — 反射式自动绘制器
+//  读取 [FoldoutGroup]、[ShowIf]、[Button]、[LabelText] 等属性，
 //  在 OnGUI 中自动绘制所有 public 字段和标记了 [Button] 的方法。
-//
-//  支持：FoldoutGroup 分组折叠 / ShowIf 条件显示 / EnableIf 条件启用 /
-//        Button 按钮调用 / LabelText 自定义标签 / InfoBox 信息提示 /
-//        ReadOnly 只读 / MultiLineProperty 多行文本 / FolderPath 文件夹选择
 // ═══════════════════════════════════════════════════════════════
 
 using System;
@@ -16,228 +10,17 @@ using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using Nodin;
 
-namespace UnityToolsHubCompat
-{
-    // ── 属性定义 ──
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class FoldoutGroupAttribute : Attribute
-    {
-        public int Order { get; set; }
-        public string GroupName { get; }
-        public bool Expanded { get; }
-        public FoldoutGroupAttribute(string groupName) { GroupName = groupName; }
-        public FoldoutGroupAttribute(string groupName, bool expanded = false) { GroupName = groupName; Expanded = expanded; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class BoxGroupAttribute : Attribute
-    {
-        public string GroupName { get; }
-        public BoxGroupAttribute(string groupName) { GroupName = groupName; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class LabelTextAttribute : Attribute
-    {
-        public string Text { get; }
-        public LabelTextAttribute(string text) { Text = text; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class HideLabelAttribute : Attribute { }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class ValueDropdownAttribute : Attribute
-    {
-        public string MemberName { get; }
-        public ValueDropdownAttribute(string memberName) { MemberName = memberName; }
-    }
-
-    public enum ButtonSizes { Small, Medium, Large }
-
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Property)]
-    public class ButtonAttribute : Attribute
-    {
-        public string Name { get; }
-        public ButtonSizes Size { get; }
-        public ButtonAttribute() { Name = null; Size = ButtonSizes.Medium; }
-        public ButtonAttribute(string name) { Name = name; Size = ButtonSizes.Medium; }
-        public ButtonAttribute(ButtonSizes size) { Name = null; Size = size; }
-        public ButtonAttribute(string name, ButtonSizes size) { Name = name; Size = size; }
-    }
-
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Property)]
-    public class GUIColorAttribute : Attribute
-    {
-        public Color Color { get; }
-        public GUIColorAttribute(float r, float g, float b) { Color = new Color(r, g, b); }
-        public GUIColorAttribute(string hex) { Color = ColorUtility.TryParseHtmlString(hex, out var c) ? c : Color.white; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class ShowIfAttribute : Attribute
-    {
-        public string MemberName { get; }
-        public object Value { get; }
-        public ShowIfAttribute(string memberName) { MemberName = memberName; Value = true; }
-        public ShowIfAttribute(string memberName, object value) { MemberName = memberName; Value = value; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class HideIfAttribute : Attribute
-    {
-        public string MemberName { get; }
-        public object Value { get; }
-        public HideIfAttribute(string memberName) { MemberName = memberName; Value = true; }
-        public HideIfAttribute(string memberName, object value) { MemberName = memberName; Value = value; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class EnableIfAttribute : Attribute
-    {
-        public string MemberName { get; }
-        public object Value { get; }
-        public EnableIfAttribute(string memberName) { MemberName = memberName; Value = true; }
-        public EnableIfAttribute(string memberName, object value) { MemberName = memberName; Value = value; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class DisableIfAttribute : Attribute
-    {
-        public string MemberName { get; }
-        public object Value { get; }
-        public DisableIfAttribute(string memberName) { MemberName = memberName; Value = true; }
-        public DisableIfAttribute(string memberName, object value) { MemberName = memberName; Value = value; }
-    }
-
-    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field | AttributeTargets.Property)]
-    public class OnInspectorGUIAttribute : Attribute
-    {
-        public string MethodName { get; }
-        public OnInspectorGUIAttribute() { MethodName = null; }
-        public OnInspectorGUIAttribute(string methodName) { MethodName = methodName; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class ShowInInspectorAttribute : Attribute { }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class ReadOnlyAttribute : Attribute { }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class MultiLinePropertyAttribute : Attribute
-    {
-        public int Lines { get; }
-        public MultiLinePropertyAttribute(int lines) { Lines = lines; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class FolderPathAttribute : Attribute
-    {
-        public bool AbsolutePath { get; set; }
-        public bool RequireExistingPath { get; set; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class AssetsOnlyAttribute : Attribute { }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class OnValueChangedAttribute : Attribute
-    {
-        public string MethodName { get; }
-        public OnValueChangedAttribute(string methodName) { MethodName = methodName; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
-    public class ListDrawerSettingsAttribute : Attribute
-    {
-        public bool ShowFoldout { get; set; } = true;
-        public bool DraggableItems { get; set; } = true;
-        public int NumberOfItemsPerPage { get; set; }
-        public bool ShowIndexLabels { get; set; }
-        public bool HideAddButton { get; set; }
-    }
-
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method, AllowMultiple = true)]
-    public class InfoBoxAttribute : Attribute
-    {
-        public string Message { get; }
-        public InfoMessageType Type { get; }
-        public string VisibleIfMemberName { get; }
-        public InfoBoxAttribute(string message) { Message = message; Type = InfoMessageType.Info; VisibleIfMemberName = null; }
-        public InfoBoxAttribute(string message, object type) { Message = message; Type = (InfoMessageType)type; VisibleIfMemberName = null; }
-        public InfoBoxAttribute(string message, object type, string visibleIfMemberName) { Message = message; Type = (InfoMessageType)type; VisibleIfMemberName = visibleIfMemberName; }
-    }
-
-    public enum InfoMessageType { None, Info, Warning, Error }
-}
-
-namespace UnityToolsHubCompat.Editor
+namespace Nodin.Editor
 {
     /// <summary>
-    /// OdinEditorWindow 桩 —— 通过反射自动绘制 Inspector。
-    /// 业务代码 protected override void OnEnable() 可编译。
-    /// 子类无需手写 OnGUI。
+    /// 反射式自动绘制器 —— 通过 Attribute 元数据驱动 Inspector 绘制。
+    /// 支持 FoldoutGroup 分组折叠 / ShowIf 条件显示 / EnableIf 条件启用 /
+    ///       Button 按钮调用 / LabelText 自定义标签 / InfoBox 信息提示 /
+    ///       ReadOnly 只读 / MultiLineProperty 多行文本 / FolderPath 文件夹选择
     /// </summary>
-    public class OdinEditorWindow : EditorWindow
-    {
-        private OdinCompatDrawer _drawer;
-
-        protected virtual void OnEnable()
-        {
-            _drawer = new OdinCompatDrawer(this);
-        }
-
-        protected virtual void OnDisable() { }
-
-        private void OnGUI()
-        {
-            _drawer?.Draw();
-        }
-    }
-
-    /// <summary>ValueDropdownItem 桩</summary>
-    public struct ValueDropdownItem<T>
-    {
-        public string Text { get; }
-        public T Value { get; }
-        public ValueDropdownItem(string text, T value) { Text = text; Value = value; }
-    }
-
-    /// <summary>ValueDropdownList 桩</summary>
-    public class ValueDropdownList<T> : List<ValueDropdownItem<T>>
-    {
-        public void Add(string name, T value) => Add(new ValueDropdownItem<T>(name, value));
-    }
-
-    /// <summary>
-    /// 通用 ScriptableObject / MonoBehaviour 编辑器桩。
-    /// 无 Odin 时通过 OdinCompatDrawer 反射自动绘制 Inspector。
-    /// 有 Odin 时由 Odin 的 OdinEditor 自动接管（CustomEditor 优先级更高）。
-    /// </summary>
-    [CustomEditor(typeof(ScriptableObject), true)]
-    public class OdinCompatEditor : UnityEditor.Editor
-    {
-        private OdinCompatDrawer _drawer;
-
-        private void OnEnable()
-        {
-            _drawer = new OdinCompatDrawer(target);
-        }
-
-        public override void OnInspectorGUI()
-        {
-            _drawer?.Draw();
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  反射式自动绘制器
-    // ═══════════════════════════════════════════════════════════════
-
-    internal class OdinCompatDrawer
+    public class NodinDrawer
     {
         private readonly object _target;
         private readonly Type _type;
@@ -245,7 +28,7 @@ namespace UnityToolsHubCompat.Editor
         private readonly MethodInfo[] _methods;
         private readonly Dictionary<string, bool> _foldoutStates = new();
 
-        public OdinCompatDrawer(object target)
+        public NodinDrawer(object target)
         {
             _target = target;
             _type = target.GetType();
@@ -260,11 +43,9 @@ namespace UnityToolsHubCompat.Editor
 
         public void Draw()
         {
-            // 绘制无分组的独立字段和方法
             DrawUngroupedFields();
             DrawUngroupedButtons();
 
-            // 绘制分组（按顶层分组，子分组嵌套渲染）
             var topGroups = GetOrderedTopGroupNames();
             foreach (var groupName in topGroups)
             {
@@ -285,7 +66,6 @@ namespace UnityToolsHubCompat.Editor
 
             EditorGUILayout.Space(3);
 
-            // 分组标题栏
             DrawGroupHeader(groupName, _foldoutStates[groupName], isSubGroup: false, out var toggled);
             if (toggled) _foldoutStates[groupName] = !_foldoutStates[groupName];
 
@@ -294,17 +74,14 @@ namespace UnityToolsHubCompat.Editor
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.Space(2);
 
-                // 直接属于该分组的字段
                 DrawFieldsInGroup(groupName, exactMatch: true);
 
-                // 子分组
                 var subGroups = GetSubGroupNames(groupName);
                 foreach (var sub in subGroups)
                 {
                     DrawSubGroup(sub, groupName);
                 }
 
-                // 直接属于该分组的按钮
                 DrawButtonsInGroup(groupName, exactMatch: true);
 
                 EditorGUILayout.Space(2);
@@ -351,22 +128,15 @@ namespace UnityToolsHubCompat.Editor
                 Event.current.Use();
             }
 
-            // 背景
             var bgRect = rect;
             if (isSubGroup)
-            {
                 EditorGUI.DrawRect(bgRect, new Color(0.22f, 0.22f, 0.24f, 0.6f));
-            }
             else
-            {
                 EditorGUI.DrawRect(bgRect, new Color(0.26f, 0.52f, 0.88f, 0.18f));
-            }
 
-            // 左侧色条
             var barRect = new Rect(rect.x, rect.y, 3, rect.height);
             EditorGUI.DrawRect(barRect, isSubGroup ? new Color(0.4f, 0.4f, 0.45f, 0.8f) : new Color(0.3f, 0.55f, 0.95f, 0.9f));
 
-            // 箭头
             var arrowRect = new Rect(rect.x + 8, rect.y, 16, rect.height);
             var arrow = expanded ? "▼" : "▶";
             var oldColor = GUI.color;
@@ -374,10 +144,8 @@ namespace UnityToolsHubCompat.Editor
             GUI.Label(arrowRect, arrow, EditorStyles.miniLabel);
             GUI.color = oldColor;
 
-            // 标题
             var labelRect = new Rect(rect.x + 26, rect.y, rect.width - 26, rect.height);
-            var style = isSubGroup ? EditorStyles.boldLabel : EditorStyles.boldLabel;
-            EditorGUI.LabelField(labelRect, title, style);
+            EditorGUI.LabelField(labelRect, title, EditorStyles.boldLabel);
         }
 
         // ── 分组排序 ──────────────────────────────────────
@@ -469,7 +237,6 @@ namespace UnityToolsHubCompat.Editor
                 }
                 else
                 {
-                    // 不再使用模糊匹配
                     continue;
                 }
                 if (!ShouldShow(field)) continue;
@@ -535,7 +302,6 @@ namespace UnityToolsHubCompat.Editor
 
         private void DrawField(FieldInfo field)
         {
-            // InfoBox
             DrawInfoBox(field);
 
             var labelAttr = field.GetCustomAttribute<LabelTextAttribute>();
@@ -587,7 +353,6 @@ namespace UnityToolsHubCompat.Editor
             if (folderPathAttr != null && type == typeof(string))
             {
                 var path = (string)value;
-                var btnLabel = hideLabel ? "📁 选择文件夹" : label;
                 EditorGUILayout.BeginHorizontal();
                 if (!hideLabel) EditorGUILayout.PrefixLabel(label);
                 path = EditorGUILayout.TextField(path ?? "");
@@ -665,7 +430,6 @@ namespace UnityToolsHubCompat.Editor
             var listType = type.GetGenericArguments()[0];
             var list = (System.Collections.IList)value;
 
-            // 列表标题栏
             EditorGUILayout.BeginHorizontal();
             if (!hideLabel)
                 EditorGUILayout.LabelField($"{label}  ({list.Count})", EditorStyles.boldLabel);
@@ -679,7 +443,6 @@ namespace UnityToolsHubCompat.Editor
             }
             EditorGUILayout.EndHorizontal();
 
-            // 列表内容框
             EditorGUILayout.BeginVertical(EditorStyles.textArea);
             EditorGUI.indentLevel++;
 
@@ -693,11 +456,9 @@ namespace UnityToolsHubCompat.Editor
                 var itemValue = list[i];
                 EditorGUILayout.BeginHorizontal();
 
-                // 序号标签
                 var numStyle = new GUIStyle(EditorStyles.miniLabel) { fixedWidth = 28 };
                 EditorGUILayout.LabelField($"#{i}", numStyle);
 
-                // 字段绘制
                 if (listType == typeof(bool))
                     list[i] = EditorGUILayout.Toggle((bool)itemValue);
                 else if (listType == typeof(int))
@@ -719,7 +480,6 @@ namespace UnityToolsHubCompat.Editor
                 else
                     EditorGUILayout.LabelField(itemValue?.ToString() ?? "null");
 
-                // 移除按钮
                 if (GUILayout.Button("✕", GUILayout.Width(22), GUILayout.Height(16)))
                 {
                     list.RemoveAt(i);
