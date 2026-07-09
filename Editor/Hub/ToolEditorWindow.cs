@@ -4,14 +4,14 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// ═══════════════════════════════════════════════════════════════
+/// ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ///  ToolEditorWindow — UnityToolsHub 工具编辑器面板基类
-/// ═══════════════════════════════════════════════════════════════
+/// ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ///
-///  统一深色主题、样式系统、绘制工具方法。
+///  统一深色主题、样式系统、绘图工具方法。
 ///  消除各工具面板中大量重复的调色板 / 纹理 / GUIStyle / 通用绘制代码。
 ///
-///  ── 使用方式 ─────────────────────────────────────────────
+///  ── 使用方式 ──────────────────────────────────────────────
 ///  继承 ToolEditorWindow 替代 EditorWindow：
 ///
 ///     [ToolInfo("我的工具", "编辑器工具", Description = "...", Icon = "🔧")]
@@ -26,13 +26,13 @@ using UnityEngine;
 ///         }
 ///     }
 ///
-///  ── 可选重写 ─────────────────────────────────────────────
+///  ── 可选重写 ──────────────────────────────────────────────
 ///  DrawToolbarContent()   — 工具栏右侧自定义区域
 ///  DrawStatusBarContent() — 底部状态栏内容
 ///  OnToolEnable()         — 初始化逻辑（替代 OnEnable）
 ///  OnToolDisable()        — 清理逻辑（替代 OnDisable）
 ///
-///  ── 内置绘制方法速查 ───────────────────────────────────
+///  ── 内置绘制方法速查 ──────────────────────────────────────
 ///  按钮:  DrawPrimaryButton / DrawDangerButton / DrawSuccessButton
 ///         DrawWarnButton / DrawFlatButton / DrawBackButton / DrawIconButton
 ///  标签:  DrawTag / DrawTags / DrawKeyCap
@@ -43,14 +43,12 @@ using UnityEngine;
 ///  输入:  DrawSearchField / DrawDropArea
 ///  文本:  DrawTitle / DrawSubtitle / DrawBody / DrawLabelDim
 ///  颜色:  DrawColorSwatch
-///
-/// ═══════════════════════════════════════════════════════════════
 /// </summary>
 public abstract class ToolEditorWindow : EditorWindow
 {
-    #region ═══ 颜色调色板（统一深色主题，引用 HubPalette 单一来源）════
+    #region ── 颜色调色板（统一深色主题，引用 HubPalette 单一来源）──
 
-    // ── 背景色 ─────────────────────────────────────────────
+    // ── 背景色 ──────────────────────────────────────────────
     protected static readonly Color ClrBg           = HubPalette.Bg;
     protected static readonly Color ClrToolbarBg    = HubPalette.ToolbarBg;
     protected static readonly Color ClrSearchBg     = HubPalette.SearchBg;
@@ -66,17 +64,17 @@ public abstract class ToolEditorWindow : EditorWindow
     protected static readonly Color ClrProgressBg   = HubPalette.ProgressBg;
     protected static readonly Color ClrKeyCapBg     = HubPalette.KeyCapBg;
 
-    // ── 文字色 ─────────────────────────────────────────────
+    // ── 文字色 ──────────────────────────────────────────────
     protected static readonly Color ClrText       = HubPalette.Text;
     protected static readonly Color ClrTextDim    = HubPalette.TextDim;
     protected static readonly Color ClrTextBright = HubPalette.TextBright;
 
-    // ── 主题色 ─────────────────────────────────────────────
+    // ── 主题色 ──────────────────────────────────────────────
     protected static readonly Color ClrAccent    = HubPalette.Accent;
     protected static readonly Color ClrAccentDim = HubPalette.AccentDim;
     protected static readonly Color ClrDivider   = HubPalette.Divider;
 
-    // ── 按钮色 ─────────────────────────────────────────────
+    // ── 按钮色 ──────────────────────────────────────────────
     protected static readonly Color ClrBtnNormal    = HubPalette.BtnNormal;
     protected static readonly Color ClrBtnHover     = HubPalette.BtnHover;
     protected static readonly Color ClrBtnDanger    = HubPalette.BtnDanger;
@@ -86,13 +84,13 @@ public abstract class ToolEditorWindow : EditorWindow
     protected static readonly Color ClrBtnWarn      = HubPalette.BtnWarn;
     protected static readonly Color ClrBtnWarnHov   = HubPalette.BtnWarnHov;
 
-    // ── 语义色 ─────────────────────────────────────────────
+    // ── 语义色 ──────────────────────────────────────────────
     protected static readonly Color ClrSuccess  = HubPalette.Success;
     protected static readonly Color ClrWarning  = HubPalette.Warning;
     protected static readonly Color ClrError    = HubPalette.Error;
     protected static readonly Color ClrInfo     = HubPalette.Info;
 
-    // ── 拖拽叠加色 ────────────────────────────────────────
+    // ── 拖拽叠加色 ──────────────────────────────────────────
     protected static readonly Color ClrDropOverlay = HubPalette.DropOverlay;
     protected static readonly Color ClrDropBorder  = HubPalette.DropBorder;
 
@@ -108,7 +106,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    #region ═══ 配置属性（子类可重写）══════════════════════════
+    #region ── 配置属性（子类可重写）──
 
     protected virtual string ToolTitle => titleContent.text;
     protected virtual string ToolIcon  => "";
@@ -121,7 +119,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    #region ═══ 纹理缓存 ══════════════════════════════════════
+    #region ── 纹理缓存 ──
 
     private static Texture2D _texWhite;
     private static Texture2D _texHover;
@@ -137,7 +135,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    #region ═══ 样式缓存 ═══════════════════════════════════════
+    #region ── 样式缓存 ──
 
     private static GUIStyle _stToolbar;
     private static GUIStyle _stSearchField;
@@ -196,14 +194,14 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    #region ═══ 搜索状态 ═══════════════════════════════════════
+    #region ── 搜索状态 ──
 
     protected string SearchText = "";
     protected Vector2 ContentScroll;
 
     #endregion
 
-    #region ═══ 生命周期 ═══════════════════════════════════════
+    #region ── 生命周期 ──
 
     private void OnEnable()
     {
@@ -223,7 +221,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
         float y = 0;
 
-        // ── 工具栏 + 搜索栏 ───────────────────────────────
+        // ── 工具栏 + 搜索栏 ──
         if (ShowSearchBar)
         {
             var toolbarRect = new Rect(0, y, position.width, ToolbarHeight);
@@ -235,7 +233,7 @@ public abstract class ToolEditorWindow : EditorWindow
             y += SearchBarHeight;
         }
 
-        // ── 主内容区 ──────────────────────────────────────
+        // ── 主内容区 ──
         float statusH = ShowStatusBar ? StatusBarHeight : 0;
         float contentH = position.height - y - statusH;
         EditorGUI.DrawRect(new Rect(0, y, position.width, contentH), ClrBg);
@@ -247,7 +245,7 @@ public abstract class ToolEditorWindow : EditorWindow
         EditorGUILayout.EndScrollView();
         GUILayout.EndArea();
 
-        // ── 状态栏 ────────────────────────────────────────
+        // ── 状态栏 ──
         if (ShowStatusBar)
         {
             var statusRect = new Rect(0, position.height - StatusBarHeight, position.width, StatusBarHeight);
@@ -257,7 +255,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    #region ═══ 虚拟方法 ═══════════════════════════════════════
+    #region ── 虚拟方法 ──
 
     protected abstract void DrawToolContent();
     protected virtual void OnToolEnable() { }
@@ -267,11 +265,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  工具栏 & 搜索栏
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 工具栏 ═════════════════════════════════════════
+    #region ── 工具栏 ──
 
     private void DrawToolbar(Rect rect)
     {
@@ -323,11 +321,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  按钮
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 按钮 ═══════════════════════════════════════════
+    #region ── 按钮 ──
 
     protected bool DrawPrimaryButton(string text, params GUILayoutOption[] options)
         => DrawColoredButton(text, ClrBtnNormal, ClrBtnHover, options);
@@ -376,11 +374,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  标签 & 文本
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 标签 & 文本 ════════════════════════════════════
+    #region ── 标签 & 文本 ──
 
     protected void DrawTag(string text, Color? color = null)
     {
@@ -453,11 +451,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  区域布局
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 区域布局 ═══════════════════════════════════════
+    #region ── 区域布局 ──
 
     protected void DrawSection(string title, Color? accentColor = null)
     {
@@ -493,57 +491,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
     protected void DrawGradientBar(Color left, Color right, float height = 4f)
     {
-        DrawGradientRect(new Rect(0, 0, position.width, height), left, right);
-    }
-
-    // ── 渐变纹理缓存（按颜色对缓存，替代逐像素 DrawRect 循环）──
-    private static readonly System.Collections.Generic.Dictionary<int, Texture2D> _gradientCache
-        = new System.Collections.Generic.Dictionary<int, Texture2D>();
-    private const int GradientTexWidth = 64;
-
-    private static int ColorPairKey(Color a, Color b)
-    {
-        unchecked
-        {
-            int ha = ((int)(a.r * 255) << 24) | ((int)(a.g * 255) << 16) | ((int)(a.b * 255) << 8) | (int)(a.a * 255);
-            int hb = ((int)(b.r * 255) << 24) | ((int)(b.g * 255) << 16) | ((int)(b.b * 255) << 8) | (int)(b.a * 255);
-            return (ha * 397) ^ hb;
-        }
-    }
-
-    /// <summary>获取或生成水平渐变纹理（按颜色对缓存）</summary>
-    private static Texture2D GetGradientTexture(Color left, Color right)
-    {
-        int key = ColorPairKey(left, right);
-        if (_gradientCache.TryGetValue(key, out var cached))
-            return cached;
-
-        var tex = new Texture2D(GradientTexWidth, 1, TextureFormat.RGBA32, false);
-        var px = new Color32[GradientTexWidth];
-        for (int i = 0; i < GradientTexWidth; i++)
-        {
-            float t = (float)i / (GradientTexWidth - 1);
-            px[i] = Color.Lerp(left, right, t);
-        }
-        tex.SetPixels32(px);
-        tex.Apply();
-        tex.hideFlags = HideFlags.HideAndDontSave;
-        _gradientCache[key] = tex;
-        return tex;
-    }
-
-    protected static void DrawGradientRect(Rect rect, Color left, Color right)
-    {
-        var tex = GetGradientTexture(left, right);
-        if (tex == null)
-        {
-            EditorGUI.DrawRect(rect, left);
-            return;
-        }
-        var prevColor = GUI.color;
-        GUI.color = Color.white;
-        GUI.DrawTexture(rect, tex, ScaleMode.StretchToFill);
-        GUI.color = prevColor;
+        HubDrawing.DrawGradientRect(new Rect(0, 0, position.width, height), left, right);
     }
 
     protected void DrawDivider(float height = 1f)
@@ -622,11 +570,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  列表 & 输入
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 列表 & 输入 ════════════════════════════════════
+    #region ── 列表 & 输入 ──
 
     protected void DrawRemovableListItem(string text, Action onRemove)
     {
@@ -637,7 +585,7 @@ public abstract class ToolEditorWindow : EditorWindow
         EditorGUILayout.EndHorizontal();
     }
 
-    /// <summary>绘制可选中列表项（返回是否点击）</summary>
+    /// <summary>绘制可选中的列表项（返回是否点击）</summary>
     protected bool DrawSelectableItem(string text, bool selected, Color? accentColor = null)
     {
         var rect = GUILayoutUtility.GetRect(0, 24, GUILayout.ExpandWidth(true));
@@ -708,11 +656,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  持久化辅助
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 持久化辅助 ═════════════════════════════════════
+    #region ── 持久化辅助 ──
 
     protected static string MakePrefsKey(string toolName, string suffix = "")
     {
@@ -740,11 +688,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  纹理创建
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 纹理创建 ═══════════════════════════════════════
+    #region ── 纹理创建 ──
 
     protected static Texture2D CreateTex(int w, int h, Color color)
     {
@@ -759,11 +707,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  样式初始化
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 样式初始化 ═════════════════════════════════════
+    #region ── 样式初始化 ──
 
     private static bool EnsureInit()
     {
@@ -856,11 +804,11 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #endregion
 
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  资源清理
-    // ═══════════════════════════════════════════════════════════
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #region ═══ 资源清理 ═══════════════════════════════════════
+    #region ── 资源清理 ──
 
     [InitializeOnLoadMethod]
     private static void RegisterCleanup()
@@ -875,13 +823,6 @@ public abstract class ToolEditorWindow : EditorWindow
         if (_texSelected != null)    { DestroyImmediate(_texSelected);    _texSelected = null; }
         if (_texTransparent != null) { DestroyImmediate(_texTransparent); _texTransparent = null; }
         if (_texCardBg != null)      { DestroyImmediate(_texCardBg);      _texCardBg = null; }
-
-        // 清理渐变纹理缓存
-        foreach (var tex in _gradientCache.Values)
-        {
-            if (tex != null) DestroyImmediate(tex);
-        }
-        _gradientCache.Clear();
 
         _stylesReady = false;
     }

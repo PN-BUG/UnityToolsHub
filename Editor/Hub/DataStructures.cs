@@ -87,11 +87,6 @@ public partial class UnityToolsHub
     }
     #endregion
 
-    #region 设置标签页枚举
-    /// <summary>设置面板标签页</summary>
-    private enum SettingsTab { HiddenItems, UsageStats, About }
-    #endregion
-
     #region 隐藏项管理
     /// <summary>隐藏项管理（可序列化存储到 EditorPrefs）</summary>
     [Serializable]

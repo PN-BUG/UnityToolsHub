@@ -17,5 +17,8 @@
         "email": "320653195@qq.com",
         "url": "https://github.com/PN-BUG"
     },
-    "type": "tool"
+    "type": "tool",
+    "dependencies": {
+        "com.zko.editor.core": "https://github.com/PN-BUG/EditorCore.git"
+    }
 }

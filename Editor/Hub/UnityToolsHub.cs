@@ -61,34 +61,11 @@ public partial class UnityToolsHub : EditorWindow
     private HiddenItems _hiddenItems = new HiddenItems();
     private bool _showHiddenManager;
     private Vector2 _hiddenMgrScroll;
-    // ── 设置面板状态 ──────────────────────────────────
-    private SettingsTab _settingsTab = SettingsTab.HiddenItems;
-    private Vector2 _settingsScroll;
-    private string _updateCheckResult = "";
-    private double _updateCheckTime;
     // ── 缓存索引（避免每帧 LINQ 遍历）───────────────
     private Dictionary<string, ToolEntry> _toolIndex = new Dictionary<string, ToolEntry>();
     private int _totalToolCount;
     private const string UsageStatsPrefsKey   = "UnityToolsHub.UsageStats";
     private const string HiddenItemsPrefsKey  = "UnityToolsHub.HiddenItems";
-
-    // ── 搜索过滤缓存（避免每帧 LINQ + ToList 分配）──
-    private string _lastSearchText = null;
-    private int _lastSearchVersion = -1; // _categories 变化时递增
-    private int _categoriesVersion;
-    private readonly Dictionary<CategoryNode, List<ToolEntry>> _filteredToolsMapCache
-        = new Dictionary<CategoryNode, List<ToolEntry>>();
-
-    // ── 使用统计排序缓存（避免每帧 OrderByDescending + ToList 分配）──
-    private int _usageStatsVersion = -1;
-    private int _usageStatsSnapshotVersion; // UsageStats 变化时递增
-    private readonly List<UsageEntry> _sortedCategoriesCache = new List<UsageEntry>();
-    private readonly List<UsageEntry> _sortedToolsCache = new List<UsageEntry>();
-
-    // ── 快捷键索引（避免每帧遍历所有工具查找快捷键）──
-    private readonly Dictionary<ShortcutBinding, ToolEntry> _shortcutIndex
-        = new Dictionary<ShortcutBinding, ToolEntry>();
-    private int _shortcutIndexVersion = -1;
     #endregion
 
     #region 多显示器 P/Invoke
@@ -104,10 +81,6 @@ public partial class UnityToolsHub : EditorWindow
     #endregion
 
     #region DockArea / ContainerWindow 反射操作
-    // 详细反射日志默认关闭，定义 UNITYTOOLS_HUB_VERBOSE 宏可启用
-    [System.Diagnostics.Conditional("UNITYTOOLS_HUB_VERBOSE")]
-    private static void VerboseLog(string msg) => Debug.Log($"[Hub] {msg}");
-
     private static object GetDockArea(EditorWindow wnd)
     {
         foreach (var fieldName in new[] { "m_Parent", "m_DockArea", "m_ParentWindow" })
@@ -118,7 +91,7 @@ public partial class UnityToolsHub : EditorWindow
                 var val = f.GetValue(wnd);
                 if (val != null)
                 {
-                    VerboseLog($"GetDockArea: field='{fieldName}', type='{val.GetType().FullName}'");
+                    Debug.Log($"[Hub] GetDockArea: field='{fieldName}', type='{val.GetType().FullName}'");
                     return val;
                 }
             }
@@ -140,7 +113,7 @@ public partial class UnityToolsHub : EditorWindow
                 var val = prop.GetValue(dockArea);
                 if (val != null)
                 {
-                    VerboseLog($"GetContainerWindow: '{dockType.Name}.{propName}' → '{val.GetType().FullName}'");
+                    Debug.Log($"[Hub] GetContainerWindow: '{dockType.Name}.{propName}' → '{val.GetType().FullName}'");
                     return val;
                 }
             }
@@ -160,7 +133,7 @@ public partial class UnityToolsHub : EditorWindow
             if (posProp != null && posProp.CanRead)
             {
                 var val = (Rect)posProp.GetValue(container);
-                VerboseLog($"GetFloatingWindowPosition: ContainerWindow.position = {val}");
+                Debug.Log($"[Hub] GetFloatingWindowPosition: ContainerWindow.position = {val}");
                 return val;
             }
         }
@@ -171,11 +144,11 @@ public partial class UnityToolsHub : EditorWindow
             if (posProp != null && posProp.CanRead)
             {
                 var val = (Rect)posProp.GetValue(dockArea);
-                VerboseLog($"GetFloatingWindowPosition fallback: DockArea.position = {val}");
+                Debug.Log($"[Hub] GetFloatingWindowPosition fallback: DockArea.position = {val}");
                 return val;
             }
         }
-        VerboseLog($"GetFloatingWindowPosition final fallback: wnd.position = {wnd.position}");
+        Debug.Log($"[Hub] GetFloatingWindowPosition final fallback: wnd.position = {wnd.position}");
         return wnd.position;
     }
 
@@ -189,7 +162,7 @@ public partial class UnityToolsHub : EditorWindow
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             if (posProp != null && posProp.CanWrite)
             {
-                VerboseLog($"SetFloatingWindowPosition: ContainerWindow.position = {pos}");
+                Debug.Log($"[Hub] SetFloatingWindowPosition: ContainerWindow.position = {pos}");
                 posProp.SetValue(container, pos);
                 wnd.Repaint();
                 return;
@@ -201,13 +174,13 @@ public partial class UnityToolsHub : EditorWindow
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             if (posProp != null && posProp.CanWrite)
             {
-                VerboseLog($"SetFloatingWindowPosition fallback1: DockArea.position = {pos}");
+                Debug.Log($"[Hub] SetFloatingWindowPosition fallback1: DockArea.position = {pos}");
                 posProp.SetValue(dockArea, pos);
                 wnd.Repaint();
                 return;
             }
         }
-        VerboseLog($"SetFloatingWindowPosition fallback2: wnd.position = {pos}");
+        Debug.Log($"[Hub] SetFloatingWindowPosition fallback2: wnd.position = {pos}");
         wnd.position = pos;
     }
     #endregion
@@ -220,7 +193,7 @@ public partial class UnityToolsHub : EditorWindow
         if (HasOpenInstances<UnityToolsHub>())
         {
             var existing = GetWindow<UnityToolsHub>();
-            VerboseLog($"ShowWindow toggle: _isHidden={_isHidden}, existing.position={existing.position}");
+            Debug.Log($"[Hub] ShowWindow toggle: _isHidden={_isHidden}, existing.position={existing.position}");
 
             // 安全检查：如果 _isHidden 为 true 但保存的位置无效，直接显示窗口
             if (_isHidden && (_savedPosition.width <= 1 || _savedPosition.height <= 1))
@@ -232,7 +205,7 @@ public partial class UnityToolsHub : EditorWindow
             if (_isHidden)
             {
                 // 恢复：还原位置 + 原始尺寸 + minSize
-                VerboseLog($"恢复位置到: {_savedPosition}, minSize={_savedMinSize}");
+                Debug.Log($"[Hub] 恢复位置到: {_savedPosition}, minSize={_savedMinSize}");
                 existing.minSize = _savedMinSize.magnitude > 0 ? _savedMinSize : new Vector2(720, 460);
                 SetFloatingWindowPosition(existing, _savedPosition);
                 _isHidden = false;
@@ -244,7 +217,7 @@ public partial class UnityToolsHub : EditorWindow
                 // 隐藏：保存当前位置/尺寸/minSize
                 _savedPosition = GetFloatingWindowPosition(existing);
                 _savedMinSize = existing.minSize;
-                VerboseLog($"保存位置: {_savedPosition}, minSize={_savedMinSize}");
+                Debug.Log($"[Hub] 保存位置: {_savedPosition}, minSize={_savedMinSize}");
                 EditorPrefs.SetString(SavedPositionKey, JsonUtility.ToJson(_savedPosition));
                 existing.minSize = new Vector2(1, 1);
                 var (vsX, _) = GetVirtualScreenBounds();
@@ -253,7 +226,7 @@ public partial class UnityToolsHub : EditorWindow
                     _savedPosition.y,
                     1,
                     1);
-                VerboseLog($"隐藏到: {hidePos}, 虚拟屏幕左边界 vsX={vsX}");
+                Debug.Log($"[Hub] 隐藏到: {hidePos}, 虚拟屏幕左边界 vsX={vsX}");
                 SetFloatingWindowPosition(existing, hidePos);
                 _isHidden = true;
             }
@@ -331,8 +304,6 @@ public partial class UnityToolsHub : EditorWindow
         _usageStats.IncrementTool(tool.typeName);
         _usageStats.IncrementCategory(tool.category);
         SaveUsageStats();
-        // 使使用统计排序缓存失效
-        _usageStatsSnapshotVersion++;
     }
 
     private void LoadUsageStats()
@@ -392,8 +363,6 @@ public partial class UnityToolsHub : EditorWindow
         _usageStats = new UsageStats();
         SaveUsageStats();
         DiscoverTools();
-        // 使使用统计排序缓存失效
-        _usageStatsSnapshotVersion++;
     }
 
     private void UnhideAllItems()
