@@ -1,5 +1,5 @@
 #if UNITY_EDITOR
-using Sirenix.OdinInspector;
+using Sirenix.OdinInspector;  // 兼容层提供桩类型，无需 Odin 实际安装
 using UnityEditor;
 using UnityEngine;
 
@@ -31,6 +31,11 @@ using UnityEngine;
 ///
 ///  如需新分类，直接在 category 参数填写新名称即可，
 ///  Hub 会自动分配颜色。
+///
+///  ── 属性特性说明 ─────────────────────────────────────────
+///  使用 Sirenix.OdinInspector 命名空间的特性（如 [LabelText]、
+///  [FoldoutGroup]、[Button] 等）。当 Odin 未安装时，OdinCompat.cs
+///  提供桩类型保证编译通过，OdinCompatEditor 自动绘制 Inspector。
 ///
 ///  ── 基类 ToolEditorWindow 提供 ───────────────────────────
 ///  统一深色调色板、样式系统、绘制工具方法，无需重复定义。

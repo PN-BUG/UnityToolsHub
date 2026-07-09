@@ -10,7 +10,7 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **快速搜索**：支持关键字搜索和标签过滤
 - **快捷键**：为常用工具绑定键盘快捷键
 - **使用统计**：记录工具使用频率，常用工具自动置顶
-- **Odin Inspector 可选支持**：自动检测 Odin，有则使用 Odin 属性渲染，无则回退原生 IMGUI
+- **Odin Inspector 兼容**：自动检测 Odin，有则使用原生属性渲染，无则通过兼容层桩类型+反射绘制器回退
 
 ## 快速开始
 
@@ -115,8 +115,10 @@ UnityToolsHub/
     │   ├── VideoFirstFrameExporter.cs  # 视频首帧导出
     │   ├── Unity Package Creator/  # 包创建器（子包）
     │   └── Test/                   # 测试工具
-    ├── OdinCompat.cs               # Odin Inspector 兼容层（空特性占位）
-    ├── OdinAutoDetector.cs         # Odin 自动检测与宏定义管理
+    ├── OdinDetector/               # 第三方插件检测（独立程序集）
+    │   ├── OdinAutoDetector.cs     # 通用插件检测器（支持自定义规则）
+    │   └── UnityToolsHub.OdinDetector.Editor.asmdef
+    ├── OdinCompat.cs               # Odin 兼容层（桩类型+反射绘制器）
     ├── ToolInfoAttribute.cs        # 工具信息特性定义
     ├── UnityPathUtility.cs         # 路径工具
     └── _NewToolTemplate.cs.txt     # 新建工具模板
@@ -126,49 +128,59 @@ UnityToolsHub/
 
 工具内置对 [Odin Inspector](https://odininspector.com/) 的可选支持：
 
-- **自动检测**：编辑器启动时自动扫描项目中是否存在 Sirenix DLL
+- **自动检测**：`OdinAutoDetector` 编辑器启动时自动扫描项目中是否存在 Sirenix DLL
 - **自动宏管理**：检测到 Odin 自动添加 `ODIN_INSPECTOR` 宏定义，移除后自动清理
-- **无缝切换**：有 Odin 时使用 `[FoldoutGroup]`、`[LabelText]`、`[Button]` 等属性渲染；无 Odin 时回退原生 IMGUI `OnGUI()` 绘制
+- **桩类型兼容**：`OdinCompat.cs` 在无 Odin 时提供 `Sirenix.OdinInspector` 命名空间下的桩类型（`[FoldoutGroup]`、`[LabelText]`、`[Button]` 等），代码无需 `#if` 条件编译
+- **反射自动绘制**：`OdinEditorWindow` 桩和 `OdinCompatEditor` 通过反射读取属性，自动绘制 Inspector UI
 - **零配置**：无需手动设置宏，开箱即用
 
 ### 工作原理
 
 ```
 项目启动 → OdinAutoDetector 扫描 Sirenix DLL
-  ├─ 找到 → 添加 ODIN_INSPECTOR 宏 → 使用 Odin 属性自动渲染
-  └─ 未找到 → 移除 ODIN_INSPECTOR 宏 → 回退原生 OnGUI 手动绘制
+  ├─ 找到 → 添加 ODIN_INSPECTOR 宏 → 使用 Odin 原生属性渲染
+  └─ 未找到 → 移除 ODIN_INSPECTOR 宏 → 使用桩类型 + 反射绘制器
 ```
 
-### 添加 Odin 兼容到自定义工具
+### 扩展插件检测
 
-工具如需使用 Odin 属性，按以下模式编写：
+`OdinAutoDetector` 支持注册自定义插件检测规则：
 
 ```csharp
-#if ODIN_INSPECTOR
-using Sirenix.OdinInspector;
-#else
-using UnityToolsHubCompat;  // 空特性占位，保证编译通过
-#endif
-
-public class MyTool : EditorWindow
-#if ODIN_INSPECTOR
-    // Odin 会自动渲染带属性的字段
-#endif
+[InitializeOnLoad]
+public static class MyPluginDetector
 {
-#if ODIN_INSPECTOR
-    [FoldoutGroup("设置")]
-    [LabelText("速度")]
-#endif
-    public float speed = 5f;
-
-#if !ODIN_INSPECTOR
-    private void OnGUI()
+    static MyPluginDetector()
     {
-        speed = EditorGUILayout.FloatField("速度", speed);
+        OdinAutoDetector.AddPlugin(new OdinAutoDetector.PluginDefinition
+        {
+            DefineSymbol    = "MY_PLUGIN",
+            MarkerDll       = "MyPlugin.dll",
+            SearchKeyword   = "MyPlugin t:DLL",
+            FoundMessage    = "检测到 MyPlugin",
+            NotFoundMessage = "未检测到 MyPlugin",
+        });
     }
-#endif
 }
 ```
+
+### 编写兼容工具
+
+工具直接使用 `Sirenix.OdinInspector` 命名空间的属性，无需条件编译：
+
+```csharp
+using Sirenix.OdinInspector;
+using UnityEditor;
+using UnityEngine;
+
+public class MyTool : EditorWindow
+{
+    [FoldoutGroup("设置")]
+    [LabelText("速度")]
+    public float speed = 5f;
+
+    // 有 Odin 时自动渲染，无 Odin 时由 OdinCompatEditor/OdinEditorWindow 桩渲染
+}
 
 ## 许可证
 
