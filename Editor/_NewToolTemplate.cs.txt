@@ -1,5 +1,5 @@
 #if UNITY_EDITOR
-using Sirenix.OdinInspector;  // 兼容层提供桩类型，无需 Odin 实际安装
+using UnityToolsHubCompat;  // 自定义属性兼容层，提供 [LabelText]、[FoldoutGroup] 等属性
 using UnityEditor;
 using UnityEngine;
 
@@ -33,7 +33,7 @@ using UnityEngine;
 ///  Hub 会自动分配颜色。
 ///
 ///  ── 属性特性说明 ─────────────────────────────────────────
-///  使用 Sirenix.OdinInspector 命名空间的特性（如 [LabelText]、
+///  使用 UnityToolsHubCompat 命名空间的特性（如 [LabelText]、
 ///  [FoldoutGroup]、[Button] 等）。当 Odin 未安装时，OdinCompat.cs
 ///  提供桩类型保证编译通过，OdinCompatEditor 自动绘制 Inspector。
 ///
@@ -100,7 +100,7 @@ public class MyToolTemplate : ToolEditorWindow
         // ── 分段标题 ──────────────────────────────────────
         DrawSection("基础设置");
 
-        // 使用 EditorGUILayout 或 Odin 的 SirenixEditorFields
+        // 使用 EditorGUILayout 绘制
         enableFeature = EditorGUILayout.Toggle("启用功能", enableFeature);
         speed = EditorGUILayout.Slider("速度", speed, 0f, 100f);
         target = (GameObject)EditorGUILayout.ObjectField("目标对象", target, typeof(GameObject), true);

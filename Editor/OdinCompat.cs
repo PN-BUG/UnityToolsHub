@@ -181,7 +181,7 @@ namespace UnityToolsHubCompat.Editor
     /// 业务代码 protected override void OnEnable() 可编译。
     /// 子类无需手写 OnGUI。
     /// </summary>
-    public class OdinEditorWindow : UnityEditor.EditorWindow
+    public class OdinEditorWindow : EditorWindow
     {
         private OdinCompatDrawer _drawer;
 

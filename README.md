@@ -128,16 +128,16 @@ UnityToolsHub/
 
 工具内置对 [Odin Inspector](https://odininspector.com/) 的可选支持：
 
-- **自动检测**：`OdinAutoDetector` 编辑器启动时自动扫描项目中是否存在 Sirenix DLL
+- **自动检测**：`OdinAutoDetector` 编辑器启动时自动扫描项目中是否存在第三方插件 DLL
 - **自动宏管理**：检测到 Odin 自动添加 `ODIN_INSPECTOR` 宏定义，移除后自动清理
-- **桩类型兼容**：`OdinCompat.cs` 在无 Odin 时提供 `Sirenix.OdinInspector` 命名空间下的桩类型（`[FoldoutGroup]`、`[LabelText]`、`[Button]` 等），代码无需 `#if` 条件编译
+- **属性兼容**：`OdinCompat.cs` 提供 `UnityToolsHubCompat` 命名空间下的属性定义（`[FoldoutGroup]`、`[LabelText]`、`[Button]` 等），通过反射自动绘制 Inspector
 - **反射自动绘制**：`OdinEditorWindow` 桩和 `OdinCompatEditor` 通过反射读取属性，自动绘制 Inspector UI
 - **零配置**：无需手动设置宏，开箱即用
 
 ### 工作原理
 
 ```
-项目启动 → OdinAutoDetector 扫描 Sirenix DLL
+项目启动 → OdinAutoDetector 扫描第三方插件 DLL
   ├─ 找到 → 添加 ODIN_INSPECTOR 宏 → 使用 Odin 原生属性渲染
   └─ 未找到 → 移除 ODIN_INSPECTOR 宏 → 使用桩类型 + 反射绘制器
 ```
@@ -166,10 +166,10 @@ public static class MyPluginDetector
 
 ### 编写兼容工具
 
-工具直接使用 `Sirenix.OdinInspector` 命名空间的属性，无需条件编译：
+工具直接使用 `UnityToolsHubCompat` 命名空间的属性，无需条件编译：
 
 ```csharp
-using Sirenix.OdinInspector;
+using UnityToolsHubCompat;
 using UnityEditor;
 using UnityEngine;
 
