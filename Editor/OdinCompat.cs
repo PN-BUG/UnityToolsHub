@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-//  Odin Inspector 兼容层 —— 无 Odin 时的反射式自动绘制
+//  自定义属性兼容层 —— 反射式自动绘制
 //
 //  通过反射读取 [FoldoutGroup]、[ShowIf]、[EnableIf]、[Button]、
 //  [LabelText]、[InfoBox]、[ReadOnly]、[MultiLineProperty] 等属性，
@@ -10,7 +10,6 @@
 //        ReadOnly 只读 / MultiLineProperty 多行文本 / FolderPath 文件夹选择
 // ═══════════════════════════════════════════════════════════════
 
-#if !ODIN_INSPECTOR
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,9 +17,9 @@ using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
-namespace Sirenix.OdinInspector
+namespace UnityToolsHubCompat
 {
-    // ── 属性桩（与 Odin 真实属性签名一致，业务代码零 #if） ──
+    // ── 属性定义 ──
 
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class FoldoutGroupAttribute : Attribute
@@ -175,10 +174,10 @@ namespace Sirenix.OdinInspector
     public enum InfoMessageType { None, Info, Warning, Error }
 }
 
-namespace Sirenix.OdinInspector.Editor
+namespace UnityToolsHubCompat.Editor
 {
     /// <summary>
-    /// OdinEditorWindow 桩 —— 无 Odin 时通过反射自动绘制 Inspector。
+    /// OdinEditorWindow 桩 —— 通过反射自动绘制 Inspector。
     /// 业务代码 protected override void OnEnable() 可编译。
     /// 子类无需手写 OnGUI。
     /// </summary>
@@ -851,4 +850,3 @@ namespace Sirenix.OdinInspector.Editor
         }
     }
 }
-#endif

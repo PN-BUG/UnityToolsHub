@@ -317,7 +317,7 @@ public class DefaultValueSyncTool : EditorWindow
     {
         // 优先使用 Odin [LabelText]
         var labelText = field.GetCustomAttribute(
-            typeof(Sirenix.OdinInspector.LabelTextAttribute), false);
+            typeof(UnityToolsHubCompat.LabelTextAttribute), false);
         if (labelText != null)
         {
             var prop = labelText.GetType().GetProperty("Text");

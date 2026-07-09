@@ -6,8 +6,8 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
-using Sirenix.OdinInspector;
-using Sirenix.OdinInspector.Editor;
+using UnityToolsHubCompat;
+using UnityToolsHubCompat.Editor;
 
 /// <summary>
 /// ═══════════════════════════════════════════════════════════════

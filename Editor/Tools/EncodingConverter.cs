@@ -6,8 +6,8 @@ using System.Linq;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
-using Sirenix.OdinInspector;
-using Sirenix.OdinInspector.Editor;
+using UnityToolsHubCompat;
+using UnityToolsHubCompat.Editor;
 
 // ═══════════════════════════════════════════════════════════════
 // 编码转换工具 — 将项目文件批量转换为指定编码

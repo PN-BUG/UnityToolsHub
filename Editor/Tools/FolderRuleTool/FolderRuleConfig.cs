@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
-using Sirenix.OdinInspector;
+using UnityToolsHubCompat;
 
 /// <summary>
 /// 文件夹规则配置 —— ScriptableObject
