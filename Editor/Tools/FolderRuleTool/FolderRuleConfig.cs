@@ -21,25 +21,33 @@ public class FolderRuleConfig : ScriptableObject
     // ══════════════════════════════════════════════════════════
     //  基础配置
     // ══════════════════════════════════════════════════════════
-
-    [FoldoutGroup("基础设置")]
-    [FolderPath(AbsolutePath = false)]
-    [LabelText("文件夹路径")]
-    public string folderPath = "Assets/";
-
-    [FoldoutGroup("基础设置")]
-    [LabelText("递归子文件夹")]
-    public bool recursive = true;
-
     [FoldoutGroup("基础设置")]
     [LabelText("启用此规则")]
     public bool enabled = true;
+
+    [FoldoutGroup("基础设置")]
+    [LabelText("递归子文件夹")]
+    [Tooltip("开启后子文件夹中的资源也会被检查")]
+    public bool recursive = true;
 
     [FoldoutGroup("基础设置")]
     [LabelText("忽略的资源")]
     [AssetsOnly]
     [ListDrawerSettings(ShowFoldout = true, DraggableItems = true, NumberOfItemsPerPage = 10)]
     public List<UnityEngine.Object> ignoredAssets = new List<UnityEngine.Object>();
+
+    [FoldoutGroup("基础设置")]
+    [LabelText("自动扫描")]
+    [Tooltip("开启后管理面板将按间隔自动扫描此配置的违规项")]
+    public bool autoScan;
+
+    [FoldoutGroup("基础设置")]
+    [ShowIf("autoScan")]
+    [LabelText("扫描间隔（秒）")]
+    [Tooltip("自动扫描的时间间隔（最小 5 秒）")]
+    public float scanInterval = 30f;
+
+
 
     // ══════════════════════════════════════════════════════════
     //  文件命名规范
@@ -169,14 +177,15 @@ public class FolderRuleConfig : ScriptableObject
     //  辅助方法
     // ══════════════════════════════════════════════════════════
 
-    /// <summary>获取规范化的文件夹路径</summary>
+    /// <summary>获取规范化的文件夹路径（= 此 SO 资产所在的文件夹）</summary>
     public string NormalizedFolderPath
     {
         get
         {
-            string p = folderPath.Replace('\\', '/').TrimEnd('/');
-            if (!p.StartsWith("Assets")) p = "Assets/" + p.TrimStart('/');
-            return p;
+            string soPath = AssetDatabase.GetAssetPath(this);
+            if (string.IsNullOrEmpty(soPath)) return "Assets";
+            string dir = System.IO.Path.GetDirectoryName(soPath)?.Replace('\\', '/');
+            return string.IsNullOrEmpty(dir) ? "Assets" : dir;
         }
     }
 

@@ -125,8 +125,19 @@ public class FolderRulePostprocessor : AssetPostprocessor
         if (group == null)
             group = settings.DefaultGroup;
 
+        if (group == null)
+        {
+            Debug.LogWarning($"[FolderRule] 无法获取或创建 Addressable 分组，跳过: {assetPath}");
+            return false;
+        }
+
         // 创建条目
         var entry = settings.CreateOrMoveEntry(guid, group, readOnly: false, postEvent: true);
+        if (entry == null)
+        {
+            Debug.LogWarning($"[FolderRule] 创建 Addressable 条目失败，跳过: {assetPath}");
+            return false;
+        }
 
         // 设置地址名称
         string address = config.ResolveAddressableName(assetPath);

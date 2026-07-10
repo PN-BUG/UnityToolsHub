@@ -41,12 +41,14 @@ public class FolderRuleManager : EditorWindow
     private Vector2 _configScroll;
     private Vector2 _violationScroll;
     private int _selectedConfigIndex = -1;
+    private HashSet<int> _selectedIndices = new HashSet<int>();  // 多选
     private bool _showViolations = true;
     private Vector2 _rightScroll;
     private bool _showConfigDetail = true;
     private bool _scanned;
     private string _statusMessage = "";
     private double _statusTime;
+    private Dictionary<string, double> _lastScanTimes = new Dictionary<string, double>();  // 每配置上次扫描时间
 
     // ── 过滤状态 ──────────────────────────────────────────────
     private string _filterRuleType = "全部";
@@ -63,11 +65,52 @@ public class FolderRuleManager : EditorWindow
     private void OnEnable()
     {
         RefreshConfigs();
+        ScanViolations();
+        EditorApplication.update += OnEditorUpdate;
+    }
+
+    private void OnDisable()
+    {
+        EditorApplication.update -= OnEditorUpdate;
+    }
+
+    /// <summary>逐配置自动扫描：只扫描开启 autoScan 且到达间隔的配置</summary>
+    private void OnEditorUpdate()
+    {
+        bool anyScanned = false;
+        double now = EditorApplication.timeSinceStartup;
+
+        foreach (var config in _configs)
+        {
+            if (config == null || !config.enabled || !config.autoScan) continue;
+
+            string key = config.name;
+            float interval = Mathf.Max(5f, config.scanInterval);
+
+            if (!_lastScanTimes.TryGetValue(key, out double last) || now - last >= interval)
+            {
+                _lastScanTimes[key] = now;
+                // 清除该配置旧违规，重新扫描
+                _violations.RemoveAll(v => v.config == config);
+                ScanSingleConfigInternal(config);
+                anyScanned = true;
+            }
+        }
+
+        if (anyScanned) Repaint();
     }
 
     private void OnProjectChange()
     {
         RefreshConfigs();
+        // 逐配置：只自动扫描开启 autoScan 的
+        foreach (var config in _configs)
+        {
+            if (config == null || !config.enabled || !config.autoScan) continue;
+            _violations.RemoveAll(v => v.config == config);
+            ScanSingleConfigInternal(config);
+        }
+        Repaint();
     }
 
     // ── 刷新配置列表 ──────────────────────────────────────────
@@ -95,17 +138,22 @@ public class FolderRuleManager : EditorWindow
 
         EditorGUILayout.BeginHorizontal();
         {
-            // 左侧：配置列表
+            // 左侧：配置列表（固定宽度）
             EditorGUILayout.BeginVertical(GUILayout.Width(position.width * 0.4f));
             DrawConfigList();
             EditorGUILayout.EndVertical();
 
-            // 右侧：详情 + 违规列表（整体可滚动）
+            // 右侧：配置详情（自适应）+ 违规列表（填充剩余）
             EditorGUILayout.BeginVertical();
-            _rightScroll = EditorGUILayout.BeginScrollView(_rightScroll);
-            DrawConfigDetail();
-            DrawViolationList();
-            EditorGUILayout.EndScrollView();
+            {
+                // 配置详情区 —— 用 BeginScrollView 让长内容可滚动
+                _rightScroll = EditorGUILayout.BeginScrollView(_rightScroll, GUILayout.MaxHeight(position.height * 0.45f));
+                DrawConfigDetail();
+                EditorGUILayout.EndScrollView();
+
+                // 违规列表区 —— 自动填充剩余空间
+                DrawViolationList();
+            }
             EditorGUILayout.EndVertical();
         }
         EditorGUILayout.EndHorizontal();
@@ -122,19 +170,53 @@ public class FolderRuleManager : EditorWindow
                 SetStatus("配置列表已刷新");
             }
 
-            if (GUILayout.Button("扫描违规", EditorStyles.toolbarButton, GUILayout.Width(70)))
+            // 扫描选中（高亮）
+            var prevBg = GUI.backgroundColor;
+            GUI.backgroundColor = new Color(0.4f, 0.8f, 0.4f);
+            string scanLabel = _selectedIndices.Count > 0
+                ? $"🔍 扫描选中({_selectedIndices.Count})"
+                : "🔍 扫描全部";
+            if (GUILayout.Button(scanLabel, EditorStyles.toolbarButton, GUILayout.Width(100)))
             {
-                ScanViolations();
+                ScanSelectedConfigs();
+            }
+            GUI.backgroundColor = prevBg;
+
+            // 应用规则（选中模式 / 全部模式）
+            string applyLabel = _selectedIndices.Count > 0
+                ? $"应用选中({_selectedIndices.Count})"
+                : "应用全部";
+            if (GUILayout.Button(applyLabel, EditorStyles.toolbarButton, GUILayout.Width(80)))
+            {
+                var targets = GetApplyTargets();
+                var nameList = targets.Select(c => $"  • {c.name}").ToArray();
+                string names = string.Join("\n", nameList);
+                if (EditorUtility.DisplayDialog("确认应用规则",
+                    $"将对以下配置应用规则：\n{names}\n\n确定执行？",
+                    "应用", "取消"))
+                {
+                    ApplyRulesToConfigs(targets);
+                }
             }
 
-            if (GUILayout.Button("应用规则", EditorStyles.toolbarButton, GUILayout.Width(70)))
-            {
-                ApplyAllRules();
-            }
-
-            if (GUILayout.Button("全部修复", EditorStyles.toolbarButton, GUILayout.Width(70)))
+            string fixAllLabel = _selectedIndices.Count > 0
+                ? $"全部修复({_selectedIndices.Count})"
+                : "全部修复";
+            if (GUILayout.Button(fixAllLabel, EditorStyles.toolbarButton, GUILayout.Width(80)))
             {
                 FixAllViolations();
+            }
+
+            GUILayout.Space(8);
+
+            // 多选操作
+            if (GUILayout.Button("全选", EditorStyles.toolbarButton, GUILayout.Width(40)))
+            {
+                for (int i = 0; i < _configs.Count; i++) _selectedIndices.Add(i);
+            }
+            if (GUILayout.Button("取消", EditorStyles.toolbarButton, GUILayout.Width(40)))
+            {
+                _selectedIndices.Clear();
             }
 
             GUILayout.FlexibleSpace();
@@ -162,7 +244,9 @@ public class FolderRuleManager : EditorWindow
     private void DrawConfigList()
     {
         EditorGUILayout.Space(4);
-        GUILayout.Label($"规则配置（{_configs.Count} 个）", EditorStyles.boldLabel);
+        int autoCount = _configs.Count(c => c != null && c.autoScan);
+        string subtitle = autoCount > 0 ? $"（{autoCount} 个自动扫描）" : "";
+        GUILayout.Label($"规则配置（{_configs.Count} 个）{subtitle}", EditorStyles.boldLabel);
         EditorGUILayout.Space(2);
 
         _configScroll = EditorGUILayout.BeginScrollView(_configScroll);
@@ -177,14 +261,23 @@ public class FolderRuleManager : EditorWindow
                 var config = _configs[i];
                 if (config == null) continue;
 
-                bool selected = i == _selectedConfigIndex;
+                bool isSelected = i == _selectedConfigIndex;
+                bool isMultiSelected = _selectedIndices.Contains(i);
                 var bgColor = GUI.backgroundColor;
-                if (selected) GUI.backgroundColor = new Color(0.3f, 0.5f, 0.8f, 1f);
+                if (isSelected) GUI.backgroundColor = new Color(0.3f, 0.5f, 0.8f, 1f);
 
                 EditorGUILayout.BeginVertical("box");
                 {
                     EditorGUILayout.BeginHorizontal();
                     {
+                        // 多选复选框
+                        bool newCheck = EditorGUILayout.Toggle(isMultiSelected, GUILayout.Width(16));
+                        if (newCheck != isMultiSelected)
+                        {
+                            if (newCheck) _selectedIndices.Add(i);
+                            else _selectedIndices.Remove(i);
+                        }
+
                         // 启用开关
                         bool newEnabled = EditorGUILayout.Toggle(config.enabled, GUILayout.Width(20));
                         if (newEnabled != config.enabled)
@@ -213,6 +306,8 @@ public class FolderRuleManager : EditorWindow
                             GUILayout.Label("📦Addressable", smallStyle);
                         if (config.enableTextureRule)
                             GUILayout.Label("🖼贴图", smallStyle);
+                        if (config.autoScan)
+                            GUILayout.Label("🔄自动", smallStyle);
                         if (!config.enableNamingRule && !config.enableAddressable && !config.enableTextureRule)
                             GUILayout.Label("（未启用任何规则）", smallStyle);
                     }
@@ -231,7 +326,6 @@ public class FolderRuleManager : EditorWindow
     {
         if (_selectedConfigIndex < 0 || _selectedConfigIndex >= _configs.Count)
         {
-            EditorGUILayout.Space(10);
             EditorGUILayout.HelpBox("← 选择左侧配置查看详情", MessageType.Info);
             return;
         }
@@ -329,9 +423,34 @@ public class FolderRuleManager : EditorWindow
     // ── 右侧下：违规列表 ─────────────────────────────────────
     private void DrawViolationList()
     {
-        EditorGUILayout.Space(6);
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
+
+        // 未选中配置时提示
+        if (_selectedConfigIndex < 0 || _selectedConfigIndex >= _configs.Count)
+        {
+            _showViolations = EditorGUILayout.Foldout(_showViolations, "违规资源", true);
+            if (_showViolations)
+                EditorGUILayout.HelpBox("← 请先在左侧选择配置，此处将显示该配置的违规资源。", MessageType.Info);
+            return;
+        }
+
+        var selectedConfig = _configs[_selectedConfigIndex];
+
+        // 按选中配置过滤违规
+        var configViolations = _violations.Where(v => v.config == selectedConfig).ToList();
+        int totalCount = configViolations.Count;
+
+        // 有违规时用醒目的标题
+        var headerStyle = new GUIStyle(EditorStyles.foldoutHeader);
+        if (totalCount > 0)
+        {
+            headerStyle.normal.textColor = new Color(1f, 0.5f, 0.2f);
+            headerStyle.fontStyle = FontStyle.Bold;
+        }
         _showViolations = EditorGUILayout.Foldout(_showViolations,
-            $"违规资源（{_violations.Count} 项）", true);
+            totalCount > 0 ? $"⚠ {selectedConfig.name} 违规（{totalCount} 项）" : $"✓ {selectedConfig.name} 无违规",
+            true, headerStyle);
         if (!_showViolations) return;
 
         // 过滤工具栏
@@ -344,24 +463,26 @@ public class FolderRuleManager : EditorWindow
 
             GUILayout.FlexibleSpace();
 
-            if (_violations.Count > 0 && GUILayout.Button("全部修复", GUILayout.Width(70)))
+            if (totalCount > 0 && GUILayout.Button("修复此配置", GUILayout.Width(74)))
             {
-                FixAllViolations();
+                FixConfigViolations(selectedConfig);
             }
         }
         EditorGUILayout.EndHorizontal();
 
-        // 过滤后的违规列表
+        // 按类型二次过滤
         var filtered = _filterRuleType == "全部"
-            ? _violations
-            : _violations.Where(v => v.ruleType == _filterRuleType).ToList();
+            ? configViolations
+            : configViolations.Where(v => v.ruleType == _filterRuleType).ToList();
 
-        _violationScroll = EditorGUILayout.BeginScrollView(_violationScroll, GUILayout.MaxHeight(250));
+        _violationScroll = EditorGUILayout.BeginScrollView(_violationScroll);
         {
             if (filtered.Count == 0)
             {
-                EditorGUILayout.LabelField(_scanned ? "无违规项 ✓" : "尚未扫描，请点击「扫描违规」",
-                    EditorStyles.centeredGreyMiniLabel);
+                var msg = totalCount == 0
+                    ? (_scanned ? "当前配置无违规项 ✓" : "尚未扫描，请点击配置详情中的「扫描此配置违规」")
+                    : "当前筛选下无违规项";
+                EditorGUILayout.HelpBox(msg, MessageType.Info);
             }
 
             for (int i = 0; i < filtered.Count; i++)
@@ -439,14 +560,49 @@ public class FolderRuleManager : EditorWindow
     {
         _violations.Clear();
         _scanned = true;
+        _lastScanTimes.Clear();
 
+        double now = EditorApplication.timeSinceStartup;
         foreach (var config in _configs)
         {
             if (config == null || !config.enabled) continue;
             ScanSingleConfigInternal(config);
+            _lastScanTimes[config.name] = now;
         }
 
         SetStatus($"扫描完成，发现 {_violations.Count} 项违规");
+    }
+
+    /// <summary>扫描选中的配置（无选中则扫描全部）</summary>
+    private void ScanSelectedConfigs()
+    {
+        if (_selectedIndices.Count == 0)
+        {
+            ScanViolations();
+            return;
+        }
+
+        // 只清除选中配置的违规
+        foreach (int idx in _selectedIndices)
+        {
+            if (idx < 0 || idx >= _configs.Count) continue;
+            var cfg = _configs[idx];
+            if (cfg != null) _violations.RemoveAll(v => v.config == cfg);
+        }
+
+        _scanned = true;
+        double now = EditorApplication.timeSinceStartup;
+
+        foreach (int idx in _selectedIndices)
+        {
+            if (idx < 0 || idx >= _configs.Count) continue;
+            var config = _configs[idx];
+            if (config == null || !config.enabled) continue;
+            ScanSingleConfigInternal(config);
+            _lastScanTimes[config.name] = now;
+        }
+
+        SetStatus($"已扫描 {_selectedIndices.Count} 个配置，发现 {_violations.Count} 项违规");
     }
 
     private void ScanSingleConfig(FolderRuleConfig config)
@@ -467,6 +623,9 @@ public class FolderRuleManager : EditorWindow
             return;
         }
 
+        // SO 自身路径，扫描时自动跳过
+        string configPath = AssetDatabase.GetAssetPath(config);
+
         string[] guids = AssetDatabase.FindAssets("", new[] { folder });
         foreach (string guid in guids)
         {
@@ -474,6 +633,8 @@ public class FolderRuleManager : EditorWindow
             if (string.IsNullOrEmpty(assetPath)) continue;
             // 跳过文件夹自身
             if (AssetDatabase.IsValidFolder(assetPath)) continue;
+            // 跳过 SO 自身
+            if (string.Equals(assetPath, configPath, StringComparison.OrdinalIgnoreCase)) continue;
             // 跳过忽略列表中的资源
             if (config.IsIgnored(assetPath)) continue;
 
@@ -486,6 +647,67 @@ public class FolderRuleManager : EditorWindow
     // ══════════════════════════════════════════════════════════
     //  应用规则（手动刷新）
     // ══════════════════════════════════════════════════════════
+
+    /// <summary>获取应用规则的目标配置（有选中则选中，无选中则全部）</summary>
+    private List<FolderRuleConfig> GetApplyTargets()
+    {
+        if (_selectedIndices.Count == 0)
+            return _configs.Where(c => c != null && c.enabled).ToList();
+
+        return _selectedIndices
+            .Where(i => i >= 0 && i < _configs.Count && _configs[i] != null && _configs[i].enabled)
+            .Select(i => _configs[i])
+            .ToList();
+    }
+
+    /// <summary>对指定配置应用规则</summary>
+    private void ApplyRulesToConfigs(List<FolderRuleConfig> configs)
+    {
+        int totalApplied = 0;
+
+        foreach (var config in configs)
+        {
+            string folder = config.NormalizedFolderPath;
+            if (!AssetDatabase.IsValidFolder(folder))
+            {
+                Debug.LogWarning($"[FolderRule] 文件夹不存在，跳过: {folder}");
+                continue;
+            }
+
+            string configPath = AssetDatabase.GetAssetPath(config);
+            string[] guids = AssetDatabase.FindAssets("", new[] { folder });
+            foreach (string guid in guids)
+            {
+                string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrEmpty(assetPath)) continue;
+                if (AssetDatabase.IsValidFolder(assetPath)) continue;
+                if (string.Equals(assetPath, configPath, StringComparison.OrdinalIgnoreCase)) continue;
+                if (config.IsIgnored(assetPath)) continue;
+
+                bool applied = false;
+
+                CheckAndWarnNaming(config, assetPath);
+
+                if (config.enableAddressable)
+                {
+                    if (ApplyAddressableToAsset(config, assetPath))
+                        applied = true;
+                }
+
+                if (config.enableTextureRule)
+                {
+                    if (ApplyTextureSettingsToAsset(config, assetPath))
+                        applied = true;
+                }
+
+                if (applied) totalApplied++;
+            }
+        }
+
+        AssetDatabase.SaveAssets();
+        RefreshConfigs();
+        SetStatus($"规则已应用到 {configs.Count} 个配置，共处理 {totalApplied} 个资源");
+    }
 
     /// <summary>对所有配置范围内的资源重新应用规则（Addressable + 贴图设置）</summary>
     private void ApplyAllRules()
@@ -504,12 +726,14 @@ public class FolderRuleManager : EditorWindow
                 continue;
             }
 
+            string configPath = AssetDatabase.GetAssetPath(config);
             string[] guids = AssetDatabase.FindAssets("", new[] { folder });
             foreach (string guid in guids)
             {
                 string assetPath = AssetDatabase.GUIDToAssetPath(guid);
                 if (string.IsNullOrEmpty(assetPath)) continue;
                 if (AssetDatabase.IsValidFolder(assetPath)) continue;
+                if (string.Equals(assetPath, configPath, StringComparison.OrdinalIgnoreCase)) continue;
                 if (config.IsIgnored(assetPath)) continue;
 
                 bool applied = false;
@@ -555,35 +779,51 @@ public class FolderRuleManager : EditorWindow
         string guid = AssetDatabase.AssetPathToGUID(assetPath);
         if (string.IsNullOrEmpty(guid)) return false;
 
+        // 获取目标分组
+        string groupName = config.addressableGroupName;
+        var targetGroup = settings.FindGroup(groupName);
+        if (targetGroup == null && !string.IsNullOrEmpty(groupName))
+        {
+            targetGroup = settings.CreateGroup(groupName, false, false, false, null,
+                typeof(UnityEditor.AddressableAssets.Settings.GroupSchemas.BundledAssetGroupSchema));
+        }
+        if (targetGroup == null) targetGroup = settings.DefaultGroup;
+        if (targetGroup == null) return false;
+
         var existingEntry = settings.FindAssetEntry(guid);
         if (existingEntry != null)
         {
-            // 已存在，检查地址名称是否需要更新
+            bool dirty = false;
+
+            // 检查分组是否需要移动
+            if (existingEntry.parentGroup != targetGroup)
+            {
+                settings.MoveEntry(existingEntry, targetGroup, false, true);
+                Debug.Log($"[FolderRule] 移动 Addressable 分组: {assetPath} → {targetGroup.Name}");
+                dirty = true;
+            }
+
+            // 检查地址名称是否需要更新
             string expectedName = config.ResolveAddressableName(assetPath);
             if (!string.IsNullOrEmpty(expectedName) && existingEntry.address != expectedName)
             {
                 existingEntry.address = expectedName;
+                Debug.Log($"[FolderRule] 更新 Addressable 地址: {assetPath} → {expectedName}");
+                dirty = true;
+            }
+
+            if (dirty)
+            {
                 settings.SetDirty(
                     UnityEditor.AddressableAssets.Settings.AddressableAssetSettings.ModificationEvent.EntryModified,
                     existingEntry, true);
-                Debug.Log($"[FolderRule] 更新 Addressable 地址: {assetPath} → {expectedName}");
                 return true;
             }
             return false;
         }
 
         // 不存在，创建条目
-        string groupName = config.addressableGroupName;
-        var group = settings.FindGroup(groupName);
-        if (group == null && !string.IsNullOrEmpty(groupName))
-        {
-            group = settings.CreateGroup(groupName, false, false, false, null,
-                typeof(UnityEditor.AddressableAssets.Settings.GroupSchemas.BundledAssetGroupSchema));
-        }
-        if (group == null)
-            group = settings.DefaultGroup;
-
-        var entry = settings.CreateOrMoveEntry(guid, group, readOnly: false, postEvent: true);
+        var entry = settings.CreateOrMoveEntry(guid, targetGroup, readOnly: false, postEvent: true);
 
         string address = config.ResolveAddressableName(assetPath);
         if (!string.IsNullOrEmpty(address))
@@ -601,7 +841,7 @@ public class FolderRuleManager : EditorWindow
             UnityEditor.AddressableAssets.Settings.AddressableAssetSettings.ModificationEvent.EntryMoved,
             entry, true);
 
-        Debug.Log($"[FolderRule] 已添加 Addressable: {assetPath} → {entry.address} (分组: {group.Name})");
+        Debug.Log($"[FolderRule] 已添加 Addressable: {assetPath} → {entry.address} (分组: {targetGroup.Name})");
         return true;
 #else
         return false;
@@ -725,22 +965,37 @@ public class FolderRuleManager : EditorWindow
                 message = "资源未添加到 Addressable",
                 config = config
             });
+            return;
         }
-        else
+
+        // 检查分组是否匹配
+        string expectedGroup = config.addressableGroupName;
+        string actualGroup = entry.parentGroup?.Name ?? "";
+        if (!string.IsNullOrEmpty(expectedGroup) &&
+            !string.Equals(actualGroup, expectedGroup, StringComparison.Ordinal))
         {
-            // 检查命名是否符合模板
-            string expectedName = config.ResolveAddressableName(assetPath);
-            if (!string.IsNullOrEmpty(expectedName) && entry.address != expectedName)
+            _violations.Add(new ViolationEntry
             {
-                _violations.Add(new ViolationEntry
-                {
-                    assetPath = assetPath,
-                    configName = config.name,
-                    ruleType = "Addressable",
-                    message = $"Addressable 命名不匹配，期望「{expectedName}」，实际「{entry.address}」",
-                    config = config
-                });
-            }
+                assetPath = assetPath,
+                configName = config.name,
+                ruleType = "Addressable",
+                message = $"分组不匹配，期望「{expectedGroup}」，实际「{actualGroup}」",
+                config = config
+            });
+        }
+
+        // 检查命名是否符合模板
+        string expectedName = config.ResolveAddressableName(assetPath);
+        if (!string.IsNullOrEmpty(expectedName) && entry.address != expectedName)
+        {
+            _violations.Add(new ViolationEntry
+            {
+                assetPath = assetPath,
+                configName = config.name,
+                ruleType = "Addressable",
+                message = $"命名不匹配，期望「{expectedName}」，实际「{entry.address}」",
+                config = config
+            });
         }
 #endif
     }
@@ -840,17 +1095,125 @@ public class FolderRuleManager : EditorWindow
             return;
         }
 
-        int fixedCount = 0;
-        var toFix = new List<ViolationEntry>(_violations);
-
-        foreach (var v in toFix)
+        // 有选中配置时只修复选中的
+        List<ViolationEntry> toFix;
+        if (_selectedIndices.Count > 0)
         {
+            var selectedConfigs = _selectedIndices
+                .Where(i => i >= 0 && i < _configs.Count)
+                .Select(i => _configs[i])
+                .ToHashSet();
+            toFix = _violations.Where(v => selectedConfigs.Contains(v.config)).ToList();
+        }
+        else
+        {
+            toFix = new List<ViolationEntry>(_violations);
+        }
+
+        if (toFix.Count == 0)
+        {
+            SetStatus("选中配置无违规项可修复");
+            return;
+        }
+
+        // 按类型统计
+        int naming = toFix.Count(v => v.ruleType == "命名");
+        int addr = toFix.Count(v => v.ruleType == "Addressable");
+        int tex = toFix.Count(v => v.ruleType == "贴图");
+
+        string detail = $"共 {toFix.Count} 项违规：";
+        if (naming > 0) detail += $"\n  命名 {naming} 项（需手动重命名的将跳过）";
+        if (addr > 0) detail += $"\n  Addressable {addr} 项";
+        if (tex > 0) detail += $"\n  贴图 {tex} 项（会触发 Reimport）";
+        detail += "\n\n确定修复？";
+
+        if (!EditorUtility.DisplayDialog("确认修复", detail, "修复", "取消"))
+            return;
+
+        Undo.SetCurrentGroupName("FolderRule 全部修复");
+        int undoGroup = Undo.GetCurrentGroup();
+
+        int fixedCount = 0;
+
+        for (int i = 0; i < toFix.Count; i++)
+        {
+            var v = toFix[i];
+
+            // 进度条 + 可取消
+            bool cancel = EditorUtility.DisplayCancelableProgressBar(
+                "修复违规", $"[{i + 1}/{toFix.Count}] {Path.GetFileName(v.assetPath)}",
+                (float)(i + 1) / toFix.Count);
+
+            if (cancel)
+            {
+                Debug.Log($"[FolderRule] 用户中断修复，已完成 {fixedCount}/{i}");
+                break;
+            }
+
             if (FixViolationInternal(v))
                 fixedCount++;
         }
 
-        _violations.Clear();
-        SetStatus($"已修复 {fixedCount}/{toFix.Count} 项违规");
+        EditorUtility.ClearProgressBar();
+        Undo.CollapseUndoOperations(undoGroup);
+
+        // 只移除已修复的违规
+        foreach (var v in toFix)
+            _violations.Remove(v);
+
+        SetStatus($"已修复 {fixedCount}/{toFix.Count} 项违规（可 Ctrl+Z 撤销）");
+    }
+
+    /// <summary>修复指定配置的违规项</summary>
+    private void FixConfigViolations(FolderRuleConfig config)
+    {
+        var toFix = _violations.Where(v => v.config == config).ToList();
+        if (toFix.Count == 0)
+        {
+            SetStatus($"[{config.name}] 无违规项可修复");
+            return;
+        }
+
+        int naming = toFix.Count(v => v.ruleType == "命名");
+        int addr = toFix.Count(v => v.ruleType == "Addressable");
+        int tex = toFix.Count(v => v.ruleType == "贴图");
+
+        string detail = $"[{config.name}] 共 {toFix.Count} 项违规：";
+        if (naming > 0) detail += $"\n  命名 {naming} 项";
+        if (addr > 0) detail += $"\n  Addressable {addr} 项";
+        if (tex > 0) detail += $"\n  贴图 {tex} 项（会触发 Reimport）";
+        detail += "\n\n确定修复？";
+
+        if (!EditorUtility.DisplayDialog($"确认修复 [{config.name}]", detail, "修复", "取消"))
+            return;
+
+        Undo.SetCurrentGroupName($"FolderRule 修复 {config.name}");
+        int undoGroup = Undo.GetCurrentGroup();
+
+        int fixedCount = 0;
+        for (int i = 0; i < toFix.Count; i++)
+        {
+            var v = toFix[i];
+
+            bool cancel = EditorUtility.DisplayCancelableProgressBar(
+                $"修复 [{config.name}]", $"[{i + 1}/{toFix.Count}] {Path.GetFileName(v.assetPath)}",
+                (float)(i + 1) / toFix.Count);
+
+            if (cancel)
+            {
+                Debug.Log($"[FolderRule] 用户中断修复 [{config.name}]，已完成 {fixedCount}/{i}");
+                break;
+            }
+
+            if (FixViolationInternal(v))
+                fixedCount++;
+        }
+
+        EditorUtility.ClearProgressBar();
+        Undo.CollapseUndoOperations(undoGroup);
+
+        _violations.RemoveAll(v => v.config == config);
+        SetStatus($"[{config.name}] 已修复 {fixedCount}/{toFix.Count} 项违规（可 Ctrl+Z 撤销）");
     }
 
     private void FixViolation(ViolationEntry v)
@@ -953,26 +1316,36 @@ public class FolderRuleManager : EditorWindow
             return false;
         }
 
+        Undo.RecordObject(settings, "FolderRule 修复 Addressable");
+
+        // 获取目标分组
+        string groupName = v.config.addressableGroupName;
+        var targetGroup = settings.FindGroup(groupName);
+        if (targetGroup == null && !string.IsNullOrEmpty(groupName))
+        {
+            targetGroup = settings.CreateGroup(groupName, false, false, false, null,
+                typeof(UnityEditor.AddressableAssets.Settings.GroupSchemas.BundledAssetGroupSchema));
+        }
+        if (targetGroup == null) targetGroup = settings.DefaultGroup;
+        if (targetGroup == null)
+        {
+            Debug.LogWarning("[FolderRuleManager] 无法获取或创建 Addressable 分组");
+            return false;
+        }
+
         string guid = AssetDatabase.AssetPathToGUID(v.assetPath);
         var entry = settings.FindAssetEntry(guid);
 
         if (entry == null)
         {
-            // 添加到 Addressable
-            string groupName = v.config.addressableGroupName;
-            var group = settings.FindGroup(groupName);
-
-            if (group == null && !string.IsNullOrEmpty(groupName))
-            {
-                // 创建分组
-                group = settings.CreateGroup(groupName, false, false, false, null,
-                    typeof(UnityEditor.AddressableAssets.Settings.GroupSchemas.BundledAssetGroupSchema));
-            }
-
-            if (group == null)
-                group = settings.DefaultGroup;
-
-            entry = settings.CreateOrMoveEntry(guid, group, readOnly: false, postEvent: true);
+            // 不存在，创建条目
+            entry = settings.CreateOrMoveEntry(guid, targetGroup, readOnly: false, postEvent: true);
+        }
+        else
+        {
+            // 已存在，移动到正确分组
+            if (entry.parentGroup != targetGroup)
+                settings.MoveEntry(entry, targetGroup, false, true);
         }
 
         // 设置 Addressable 名称
@@ -1003,6 +1376,8 @@ public class FolderRuleManager : EditorWindow
     {
         var importer = AssetImporter.GetAtPath(v.assetPath) as TextureImporter;
         if (importer == null) return false;
+
+        Undo.RecordObject(importer, "FolderRule 修复贴图");
 
         bool isUi = v.config.IsUiTexture(v.assetPath);
 
@@ -1038,14 +1413,13 @@ public class FolderRuleManager : EditorWindow
         if (string.IsNullOrEmpty(path)) return;
 
         var config = CreateInstance<FolderRuleConfig>();
-        config.folderPath = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "Assets";
         AssetDatabase.CreateAsset(config, path);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
         RefreshConfigs();
         _selectedConfigIndex = _configs.FindIndex(c => AssetDatabase.GetAssetPath(c) == path);
-        SetStatus($"已创建配置: {path}");
+        SetStatus($"已创建配置: {path}（生效范围 = 此 SO 所在文件夹）");
     }
 
     // ── 工具方法 ──────────────────────────────────────────────
