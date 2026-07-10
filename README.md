@@ -115,60 +115,25 @@ UnityToolsHub/
     │   ├── VideoFirstFrameExporter.cs  # 视频首帧导出
     │   ├── Unity Package Creator/  # 包创建器（子包）
     │   └── Test/                   # 测试工具
-    ├── OdinDetector/               # 第三方插件检测（独立程序集）
-    │   ├── OdinAutoDetector.cs     # 通用插件检测器（支持自定义规则）
-    │   └── UnityToolsHub.OdinDetector.Editor.asmdef
-    ├── Nodin/                     # Nodin 属性层（独立包）
-    │   ├── Runtime/Attributes.cs  # Nodin 命名空间特性定义
-    │   └── Editor/NodinDrawer.cs  # 反射绘制器
+    ├── PluginDetector/              # 第三方插件自动检测（独立程序集）
+    │   ├── PluginAutoDetector.cs   # 通用插件检测器（支持自定义规则）
+    │   └── UnityToolsHub.PluginDetector.Editor.asmdef
     ├── ToolInfoAttribute.cs        # 工具信息特性定义
     ├── UnityPathUtility.cs         # 路径工具
     └── _NewToolTemplate.cs.txt     # 新建工具模板
 ```
 
-## Odin Inspector 兼容
+## Nodin 属性系统
 
-工具内置对 [Odin Inspector](https://odininspector.com/) 的可选支持：
+工具使用 [Nodin](https://github.com/PN-BUG/Nodin) 作为 Inspector 属性系统，提供轻量级的属性定义和自动绘制能力：
 
-- **自动检测**：`OdinAutoDetector` 编辑器启动时自动扫描项目中是否存在第三方插件 DLL
-- **自动宏管理**：检测到 Odin 自动添加 `ODIN_INSPECTOR` 宏定义，移除后自动清理
-- **属性兼容**：`Nodin` 包提供 `Nodin` 命名空间下的属性定义（`[FoldoutGroup]`、`[LabelText]`、`[Button]` 等），通过反射自动绘制 Inspector
-- **反射自动绘制**：`NodinEditorWindow` 桩和 `NodinEditor` 通过反射读取属性，自动绘制 Inspector UI
-- **零配置**：无需手动设置宏，开箱即用
+- **属性定义**：`Nodin` 命名空间提供 `[FoldoutGroup]`、`[LabelText]`、`[Button]` 等常用属性
+- **反射自动绘制**：`NodinEditor` 通过反射读取属性，自动绘制 Inspector UI
+- **零配置**：作为 UPM 包自动安装，开箱即用
 
-### 工作原理
+### 编写工具
 
-```
-项目启动 → OdinAutoDetector 扫描第三方插件 DLL
-  ├─ 找到 → 添加 ODIN_INSPECTOR 宏 → 使用 Odin 原生属性渲染
-  └─ 未找到 → 移除 ODIN_INSPECTOR 宏 → 使用桩类型 + 反射绘制器
-```
-
-### 扩展插件检测
-
-`OdinAutoDetector` 支持注册自定义插件检测规则：
-
-```csharp
-[InitializeOnLoad]
-public static class MyPluginDetector
-{
-    static MyPluginDetector()
-    {
-        OdinAutoDetector.AddPlugin(new OdinAutoDetector.PluginDefinition
-        {
-            DefineSymbol    = "MY_PLUGIN",
-            MarkerDll       = "MyPlugin.dll",
-            SearchKeyword   = "MyPlugin t:DLL",
-            FoundMessage    = "检测到 MyPlugin",
-            NotFoundMessage = "未检测到 MyPlugin",
-        });
-    }
-}
-```
-
-### 编写兼容工具
-
-工具直接使用 `Nodin` 命名空间的属性，无需条件编译：
+直接使用 `Nodin` 命名空间的属性即可：
 
 ```csharp
 using Nodin;
@@ -183,6 +148,29 @@ public class MyTool : EditorWindow
 
     // NodinDrawer 自动绘制 Inspector
 }
+```
+
+### 第三方插件自动检测
+
+项目内置通用插件检测器，编辑器启动时自动扫描第三方 DLL 并管理预编译宏。支持注册自定义检测规则：
+
+```csharp
+[InitializeOnLoad]
+public static class MyPluginDetector
+{
+    static MyPluginDetector()
+    {
+        PluginAutoDetector.AddPlugin(new PluginAutoDetector.PluginDefinition
+        {
+            DefineSymbol    = "MY_PLUGIN",
+            MarkerDll       = "MyPlugin.dll",
+            SearchKeyword   = "MyPlugin t:DLL",
+            FoundMessage    = "检测到 MyPlugin",
+            NotFoundMessage = "未检测到 MyPlugin",
+        });
+    }
+}
+```
 
 ## 包信息
 
