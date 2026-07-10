@@ -195,10 +195,7 @@ public class MyTool : EditorWindow
 
 ## 依赖关系
 
-```
-UnityToolsHub
-  └── Nodin (com.zko.nodin)
-```
+Nodin (com.zko.nodin) 由项目 manifest.json 统一提供。
 
 ## 许可证
 
