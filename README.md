@@ -197,7 +197,7 @@ public class MyTool : EditorWindow
 
 ```
 UnityToolsHub
-  └── Nodin (com.zko.nodin) — package.json 自动解析
+  └── Nodin (com.zko.nodin) — 由项目 manifest.json 提供
 ```
 
 ## 许可证
