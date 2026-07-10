@@ -4,8 +4,8 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// UnityToolsHub 兼容层 — 将已迁移到 EditorCore 的成员别名回 partial class
-/// 原 Hub/Styles.cs、Hub/Theme.cs、Hub/DrawingUtils.cs 已移至 EditorCore 包
+/// UnityToolsHub 兼容层 — 将已迁移到 Nodin 的成员别名回 partial class
+/// 原 Hub/Styles.cs、Hub/Theme.cs、Hub/DrawingUtils.cs 已移至 Nodin 包 (Editor/EditorCore/)
 /// 此文件提供透明代理，使剩余 partial class 文件无需修改
 /// </summary>
 public partial class UnityToolsHub
