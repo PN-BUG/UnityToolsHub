@@ -118,6 +118,9 @@ UnityToolsHub/
     ├── PluginDetector/              # 第三方插件自动检测（独立程序集）
     │   ├── PluginAutoDetector.cs   # 通用插件检测器（支持自定义规则）
     │   └── UnityToolsHub.PluginDetector.Editor.asmdef
+    ├── Setup/                        # 自动配置（独立程序集，不引用 Nodin）
+    │   ├── UnityToolsHub.Setup.asmdef
+    │   └── NodinSetup.cs            # [InitializeOnLoad] 自动写入 manifest.json
     ├── ToolInfoAttribute.cs        # 工具信息特性定义
     ├── UnityPathUtility.cs         # 路径工具
     └── _NewToolTemplate.cs.txt     # 新建工具模板
@@ -185,8 +188,13 @@ public static class MyPluginDetector
 
 ```
 UnityToolsHub
-  └── Nodin (com.zko.nodin) — 由项目 manifest.json 提供
+  └── Nodin (com.zko.nodin) — 自动安装，无需手动配置
 ```
+
+Nodin 依赖通过 `Editor/Setup/NodinSetup.cs` 自动处理：
+- 首次加载时自动将 `com.zko.nodin` 写入 `manifest.json`
+- Unity 自动解析并下载 Nodin 包
+- 独立 asmdef（`UnityToolsHub.Setup`），不引用 Nodin，确保即使 Nodin 未安装也能编译
 
 ## 许可证
 
