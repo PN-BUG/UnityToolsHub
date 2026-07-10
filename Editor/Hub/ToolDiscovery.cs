@@ -45,16 +45,17 @@ public partial class UnityToolsHub
                     typeName   = type.FullName,
                     icon       = string.IsNullOrEmpty(attr.Icon) ? GetCategoryIcon(attr.Category) : attr.Icon,
                     tags       = attr.Tags,
-                    shortcut   = attr.Shortcut
+                    shortcut   = attr.Shortcut,
+                    priority   = attr.Priority
                 });
             }
         }
 
         // ── 2. 按分类分组 ────────────────────────────────
-        // 排序规则：使用频率高的分类在前（频率相同则按原 Priority）
+        // 排序规则：使用频率高的分类在前（频率相同则按 Priority）
         var groups = discovered.GroupBy(t => t.category)
             .OrderByDescending(g => _usageStats.GetCategoryCount(g.Key))
-            .ThenBy(g => g.Min(t => GetPriority(t)))
+            .ThenBy(g => g.Min(t => t.priority))
             .ToList();
 
         int paletteIdx = 0;
@@ -73,10 +74,10 @@ public partial class UnityToolsHub
             // 获取分类图标（版本自适应，已知分类用字典，未知用工具自带）
             var catIcon = GetCategoryIcon(catName);
 
-            // 工具排序：使用频率高的在前（频率相同则按原 Priority）
+            // 工具排序：使用频率高的在前（频率相同则按缓存的 Priority）
             var tools = group
                 .OrderByDescending(t => _usageStats.GetToolCount(t.typeName))
-                .ThenBy(t => GetPriority(t))
+                .ThenBy(t => t.priority)
                 .ToList();
             var node = new CategoryNode { name = catName, icon = catIcon, accent = accent };
             node.tools.AddRange(tools);
@@ -86,8 +87,9 @@ public partial class UnityToolsHub
         // ── 3. 特殊工具（无 EditorWindow 类，仅菜单项）──
         AddSpecialTools();
 
-        // ── 4. 构建工具索引 + 缓存总数（避免每帧 LINQ 遍历）──
+        // ── 4. 构建工具索引 + 缓存总数 + 快捷键索引（避免每帧遍历）──
         _toolIndex.Clear();
+        _shortcutIndex.Clear();
         _totalToolCount = 0;
         foreach (var cat in _categories)
         {
@@ -96,12 +98,19 @@ public partial class UnityToolsHub
                 if (!string.IsNullOrEmpty(tool.typeName))
                     _toolIndex[tool.typeName] = tool;
                 _totalToolCount++;
+
+                // 构建快捷键索引
+                var sc = GetEffectiveShortcut(tool.typeName);
+                if (sc.IsValid)
+                    _shortcutIndex[sc] = tool;
             }
         }
     }
 
     private static int GetPriority(ToolEntry t)
     {
+        // Priority 在 DiscoverTools() 时已缓存到 ToolEntry.priority
+        // 保留此方法供外部调用（如需要重新计算时）
         if (string.IsNullOrEmpty(t.typeName)) return 999;
         var type = FindType(t.typeName);
         if (type == null) return 999;
@@ -174,6 +183,12 @@ public partial class UnityToolsHub
 
     #region 类型查找
     private static readonly Dictionary<string, Type> _typeCache = new Dictionary<string, Type>();
+
+    [UnityEditor.InitializeOnLoadMethod]
+    private static void RegisterTypeCacheCleanup()
+    {
+        AssemblyReloadEvents.beforeAssemblyReload += () => _typeCache.Clear();
+    }
 
     private static Type FindType(string typeName)
     {

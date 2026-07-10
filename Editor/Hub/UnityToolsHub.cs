@@ -12,13 +12,11 @@ using UnityEngine;
 /// 使用 partial class 拆分为多个文件：
 ///   DataStructures.cs  — 数据结构（ToolEntry, CategoryNode, UsageStats, HiddenItems）
 ///   ShortcutBinding.cs — 快捷键绑定结构体
-///   Theme.cs           — 主题配色与图标
-///   Styles.cs          — GUIStyle 缓存与初始化
+///   HubCompat.cs       — 兼容层，别名引用已迁移到 Nodin 包的 Theme/Styles/Drawing
 ///   ToolDiscovery.cs   — 工具自动发现与创建
 ///   ShortcutManager.cs — 快捷键管理逻辑
 ///   LeftPanel.cs       — 左侧面板绘制
 ///   RightPanel.cs      — 右侧面板绘制（欢迎/详情/创建/隐藏项）
-///   DrawingUtils.cs    — 绘图工具方法
 /// </summary>
 public partial class UnityToolsHub : EditorWindow
 {
@@ -63,12 +61,14 @@ public partial class UnityToolsHub : EditorWindow
     private Vector2 _hiddenMgrScroll;
     // ── 缓存索引（避免每帧 LINQ 遍历）───────────────
     private Dictionary<string, ToolEntry> _toolIndex = new Dictionary<string, ToolEntry>();
+    private Dictionary<ShortcutBinding, ToolEntry> _shortcutIndex = new Dictionary<ShortcutBinding, ToolEntry>();
     private int _totalToolCount;
     private const string UsageStatsPrefsKey   = "UnityToolsHub.UsageStats";
     private const string HiddenItemsPrefsKey  = "UnityToolsHub.HiddenItems";
     #endregion
 
     #region 多显示器 P/Invoke
+#if UNITY_EDITOR_WIN
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
     private const int SM_XVIRTUALSCREEN  = 76;
@@ -78,6 +78,12 @@ public partial class UnityToolsHub : EditorWindow
     {
         return (GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_CXVIRTUALSCREEN));
     }
+#else
+    private static (int x, int width) GetVirtualScreenBounds()
+    {
+        return (-200, 1920);
+    }
+#endif
     #endregion
 
     #region DockArea / ContainerWindow 反射操作
@@ -90,13 +96,9 @@ public partial class UnityToolsHub : EditorWindow
             {
                 var val = f.GetValue(wnd);
                 if (val != null)
-                {
-                    Debug.Log($"[Hub] GetDockArea: field='{fieldName}', type='{val.GetType().FullName}'");
                     return val;
-                }
             }
         }
-        Debug.LogWarning("[Hub] GetDockArea: 所有字段都不存在或为 null");
         return null;
     }
 
@@ -112,13 +114,9 @@ public partial class UnityToolsHub : EditorWindow
             {
                 var val = prop.GetValue(dockArea);
                 if (val != null)
-                {
-                    Debug.Log($"[Hub] GetContainerWindow: '{dockType.Name}.{propName}' → '{val.GetType().FullName}'");
                     return val;
-                }
             }
         }
-        Debug.LogWarning($"[Hub] GetContainerWindow: {dockType.Name} 没有 window/containerWindow 属性");
         return null;
     }
 
@@ -131,24 +129,15 @@ public partial class UnityToolsHub : EditorWindow
             var posProp = container.GetType().GetProperty("position",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             if (posProp != null && posProp.CanRead)
-            {
-                var val = (Rect)posProp.GetValue(container);
-                Debug.Log($"[Hub] GetFloatingWindowPosition: ContainerWindow.position = {val}");
-                return val;
-            }
+                return (Rect)posProp.GetValue(container);
         }
         if (dockArea != null)
         {
             var posProp = dockArea.GetType().GetProperty("position",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             if (posProp != null && posProp.CanRead)
-            {
-                var val = (Rect)posProp.GetValue(dockArea);
-                Debug.Log($"[Hub] GetFloatingWindowPosition fallback: DockArea.position = {val}");
-                return val;
-            }
+                return (Rect)posProp.GetValue(dockArea);
         }
-        Debug.Log($"[Hub] GetFloatingWindowPosition final fallback: wnd.position = {wnd.position}");
         return wnd.position;
     }
 
@@ -162,7 +151,6 @@ public partial class UnityToolsHub : EditorWindow
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             if (posProp != null && posProp.CanWrite)
             {
-                Debug.Log($"[Hub] SetFloatingWindowPosition: ContainerWindow.position = {pos}");
                 posProp.SetValue(container, pos);
                 wnd.Repaint();
                 return;
@@ -174,13 +162,11 @@ public partial class UnityToolsHub : EditorWindow
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             if (posProp != null && posProp.CanWrite)
             {
-                Debug.Log($"[Hub] SetFloatingWindowPosition fallback1: DockArea.position = {pos}");
                 posProp.SetValue(dockArea, pos);
                 wnd.Repaint();
                 return;
             }
         }
-        Debug.Log($"[Hub] SetFloatingWindowPosition fallback2: wnd.position = {pos}");
         wnd.position = pos;
     }
     #endregion
@@ -193,19 +179,16 @@ public partial class UnityToolsHub : EditorWindow
         if (HasOpenInstances<UnityToolsHub>())
         {
             var existing = GetWindow<UnityToolsHub>();
-            Debug.Log($"[Hub] ShowWindow toggle: _isHidden={_isHidden}, existing.position={existing.position}");
 
             // 安全检查：如果 _isHidden 为 true 但保存的位置无效，直接显示窗口
             if (_isHidden && (_savedPosition.width <= 1 || _savedPosition.height <= 1))
             {
-                Debug.LogWarning("[Hub] 检测到无效的隐藏状态，强制显示窗口");
                 _isHidden = false;
             }
 
             if (_isHidden)
             {
                 // 恢复：还原位置 + 原始尺寸 + minSize
-                Debug.Log($"[Hub] 恢复位置到: {_savedPosition}, minSize={_savedMinSize}");
                 existing.minSize = _savedMinSize.magnitude > 0 ? _savedMinSize : new Vector2(720, 460);
                 SetFloatingWindowPosition(existing, _savedPosition);
                 _isHidden = false;
@@ -217,7 +200,6 @@ public partial class UnityToolsHub : EditorWindow
                 // 隐藏：保存当前位置/尺寸/minSize
                 _savedPosition = GetFloatingWindowPosition(existing);
                 _savedMinSize = existing.minSize;
-                Debug.Log($"[Hub] 保存位置: {_savedPosition}, minSize={_savedMinSize}");
                 EditorPrefs.SetString(SavedPositionKey, JsonUtility.ToJson(_savedPosition));
                 existing.minSize = new Vector2(1, 1);
                 var (vsX, _) = GetVirtualScreenBounds();
@@ -226,7 +208,6 @@ public partial class UnityToolsHub : EditorWindow
                     _savedPosition.y,
                     1,
                     1);
-                Debug.Log($"[Hub] 隐藏到: {hidePos}, 虚拟屏幕左边界 vsX={vsX}");
                 SetFloatingWindowPosition(existing, hidePos);
                 _isHidden = true;
             }

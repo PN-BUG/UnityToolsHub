@@ -11,6 +11,45 @@ using UnityEngine;
 /// </summary>
 public partial class UnityToolsHub
 {
+    // ── 缓存样式（避免每帧 OnGUI 分配）──
+    private static GUIStyle _cachedTooltipStyle;
+    private static GUIStyle _cachedCenterLabel;
+    private static GUIStyle _cachedBtnFlatSmall;
+    private static GUIStyle _cachedBtnFlatSmallCenter;
+    private static GUIStyle _cachedHintStyle;
+    private static GUIStyle _cachedDimLabel;
+    private static readonly GUIContent _cachedContent = new GUIContent();
+
+    private static GUIStyle CachedTooltipStyle
+        => _cachedTooltipStyle ?? (_cachedTooltipStyle = new GUIStyle()
+        {
+            fontSize = 9,
+            normal = { textColor = new Color(0.4f, 0.4f, 0.4f, 1f) },
+            padding = new RectOffset(62, 0, 0, 0)
+        });
+
+    private static GUIStyle CachedCenterLabel
+        => _cachedCenterLabel ?? (_cachedCenterLabel = new GUIStyle()
+        {
+            fontSize = 11,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = ClrText }
+        });
+
+    [UnityEditor.InitializeOnLoadMethod]
+    private static void RegisterRightPanelCleanup()
+    {
+        AssemblyReloadEvents.beforeAssemblyReload += () =>
+        {
+            _cachedTooltipStyle = null;
+            _cachedCenterLabel = null;
+            _cachedBtnFlatSmall = null;
+            _cachedBtnFlatSmallCenter = null;
+            _cachedHintStyle = null;
+            _cachedDimLabel = null;
+        };
+    }
+
     #region 右侧面板
     private void DrawRightPanel()
     {
@@ -353,12 +392,8 @@ public partial class UnityToolsHub
         var btnRect = new Rect(rect.xMax - 80, rect.y + 4, 72, 24);
         bool btnHover = btnRect.Contains(Event.current.mousePosition);
         EditorGUI.DrawRect(btnRect, btnHover ? ClrBtnHover : ClrCardBg);
-        GUI.Label(btnRect, "恢复", new GUIStyle()
-        {
-            fontSize = 11,
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = btnHover ? Color.white : ClrText }
-        });
+        CachedCenterLabel.normal.textColor = btnHover ? Color.white : ClrText;
+        GUI.Label(btnRect, "恢复", CachedCenterLabel);
         if (GUI.Button(btnRect, "", GUIStyle.none))
         {
             onRestore?.Invoke();
@@ -441,12 +476,7 @@ public partial class UnityToolsHub
             _lastAutoClassName = autoName;
         }
         GUILayout.Space(1);
-        GUILayout.Label("C# 类名（自动从工具名生成，可手动修改）", new GUIStyle()
-        {
-            fontSize = 9,
-            normal = { textColor = new Color(0.4f, 0.4f, 0.4f, 1f) },
-            padding = new RectOffset(62, 0, 0, 0)
-        });
+        GUILayout.Label("C# 类名（自动从工具名生成，可手动修改）", CachedTooltipStyle);
         GUILayout.Space(4);
 
         GUILayout.Space(10);
@@ -514,12 +544,7 @@ public partial class UnityToolsHub
         EditorGUILayout.EndHorizontal();
         GUILayout.Space(1);
         GUILayout.Label("可选，如 Ctrl+Shift+T。留空则不设默认快捷键，用户可在工具详情页自行设置。",
-            new GUIStyle()
-            {
-                fontSize = 9,
-                normal = { textColor = new Color(0.4f, 0.4f, 0.4f, 1f) },
-                padding = new RectOffset(62, 0, 0, 0)
-            });
+            CachedTooltipStyle);
         GUILayout.Space(4);
 
         EditorGUILayout.EndVertical();
@@ -584,13 +609,14 @@ public partial class UnityToolsHub
         GUILayout.Label("已有分类参考", _styleSectionHeader);
         GUILayout.Space(4);
         string allCategories = string.Join("  •  ", _categoryColors.Keys);
-        GUILayout.Label(allCategories, new GUIStyle()
+        _cachedDimLabel ??= new GUIStyle()
         {
             fontSize = 11,
             wordWrap = true,
             normal = { textColor = ClrTextDim },
             padding = new RectOffset(0, 0, 0, 0)
-        });
+        };
+        GUILayout.Label(allCategories, _cachedDimLabel);
         EditorGUILayout.EndVertical();
         GUILayout.Space(4);
         EditorGUILayout.EndHorizontal();
@@ -610,12 +636,7 @@ public partial class UnityToolsHub
         value = EditorGUILayout.TextField(value, GUILayout.ExpandWidth(true));
         EditorGUILayout.EndHorizontal();
         GUILayout.Space(1);
-        GUILayout.Label(tooltip, new GUIStyle()
-        {
-            fontSize = 9,
-            normal = { textColor = new Color(0.4f, 0.4f, 0.4f, 1f) },
-            padding = new RectOffset(62, 0, 0, 0)
-        });
+        GUILayout.Label(tooltip, CachedTooltipStyle);
         GUILayout.Space(4);
     }
     #endregion
@@ -901,6 +922,16 @@ public partial class UnityToolsHub
         EditorGUILayout.EndHorizontal();
     }
 
+    private static GUIStyle CachedBtnFlatSmall
+        => _cachedBtnFlatSmall ?? (_cachedBtnFlatSmall = new GUIStyle(Styles.BtnFlat) { fontSize = 10 });
+
+    private static GUIStyle CachedBtnFlatSmallCenter
+        => _cachedBtnFlatSmallCenter ?? (_cachedBtnFlatSmallCenter = new GUIStyle(Styles.BtnFlat)
+        {
+            fontSize = 10,
+            alignment = TextAnchor.MiddleCenter
+        });
+
     /// <summary>绘制"录制中"提示</summary>
     private void DrawRecordingPrompt(Color accent)
     {
@@ -940,6 +971,14 @@ public partial class UnityToolsHub
         }
     }
 
+    private static GUIStyle CachedDimSmall
+        => _cachedDimLabel ?? (_cachedDimLabel = new GUIStyle()
+        {
+            fontSize = 10,
+            normal = { textColor = ClrTextDim },
+            wordWrap = true
+        });
+
     /// <summary>绘制已设置的快捷键（含重新设置和清除按钮）</summary>
     private void DrawShortcutDisplay(ShortcutBinding binding, Color accent, string typeName)
     {
@@ -951,12 +990,7 @@ public partial class UnityToolsHub
 
         EditorGUILayout.BeginVertical();
         GUILayout.Space(4);
-        GUILayout.Label("在 Hub 面板中按下此快捷键可快速选中该工具", new GUIStyle()
-        {
-            fontSize = 10,
-            normal = { textColor = ClrTextDim },
-            wordWrap = true
-        });
+        GUILayout.Label("在 Hub 面板中按下此快捷键可快速选中该工具", CachedDimSmall);
         EditorGUILayout.EndVertical();
 
         GUILayout.FlexibleSpace();
@@ -968,11 +1002,7 @@ public partial class UnityToolsHub
         var resetRect = GUILayoutUtility.GetRect(resetW, 24, GUILayout.Width(resetW));
         bool resetHover = resetRect.Contains(Event.current.mousePosition);
         EditorGUI.DrawRect(resetRect, resetHover ? ClrHover : new Color(0, 0, 0, 0));
-        GUI.Label(resetRect, resetContent, new GUIStyle(_styleBtnFlat)
-        {
-            fontSize = 10,
-            alignment = TextAnchor.MiddleCenter
-        });
+        GUI.Label(resetRect, resetContent, CachedBtnFlatSmallCenter);
         if (GUI.Button(resetRect, GUIContent.none, _styleInvisibleBtn))
         {
             StartRecording(typeName);
@@ -987,12 +1017,8 @@ public partial class UnityToolsHub
         var clearRect = GUILayoutUtility.GetRect(clearW, 24, GUILayout.Width(clearW));
         bool clearHover = clearRect.Contains(Event.current.mousePosition);
         EditorGUI.DrawRect(clearRect, clearHover ? new Color(0.6f, 0.2f, 0.2f, 0.3f) : new Color(0, 0, 0, 0));
-        GUI.Label(clearRect, clearContent, new GUIStyle(_styleBtnFlat)
-        {
-            fontSize = 10,
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = new Color(0.85f, 0.35f, 0.35f) }
-        });
+        CachedBtnFlatSmallCenter.normal.textColor = new Color(0.85f, 0.35f, 0.35f);
+        GUI.Label(clearRect, clearContent, CachedBtnFlatSmallCenter);
         if (GUI.Button(clearRect, GUIContent.none, _styleInvisibleBtn))
         {
             ClearShortcut(typeName);
@@ -1022,14 +1048,15 @@ public partial class UnityToolsHub
         var btnRect = GUILayoutUtility.GetRect(btnW, 28, GUILayout.Width(btnW));
         bool btnHover = btnRect.Contains(Event.current.mousePosition);
         EditorGUI.DrawRect(btnRect, btnHover ? ClrBtnHover : ClrBtnNormal);
-        GUI.Label(btnRect, btnContent, new GUIStyle(_styleBtnFlat)
+        _cachedHintStyle ??= new GUIStyle(Styles.BtnFlat)
         {
             fontSize = 11,
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter,
             normal = { textColor = Color.white },
             hover = { textColor = Color.white }
-        });
+        };
+        GUI.Label(btnRect, btnContent, _cachedHintStyle);
         if (GUI.Button(btnRect, "", GUIStyle.none))
         {
             StartRecording(typeName);

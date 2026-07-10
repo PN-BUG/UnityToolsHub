@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -154,26 +155,17 @@ public partial class UnityToolsHub
         // 不拦截 Hub 自身的切换快捷键（Ctrl+Shift+E）
         if (pressed.Equals(_hubToggleShortcut)) return;
 
-        // 在工具列表中查找匹配快捷键的工具
-        foreach (var cat in _categories)
+        // O(1) 字典查找
+        if (_shortcutIndex.TryGetValue(pressed, out var tool))
         {
-            foreach (var tool in cat.tools)
-            {
-                if (string.IsNullOrEmpty(tool.typeName)) continue;
-                var shortcut = GetEffectiveShortcut(tool.typeName);
-                if (shortcut.IsValid && shortcut.Equals(pressed))
-                {
-                    _selectedTool = tool;
-                    _selectedCategory = cat;
-                    _rightScroll = Vector2.zero;
-                    _showCreateForm = false;
-                    _showHiddenManager = false;
-                    RecordToolUsage(tool);
-                    evt.Use();
-                    Repaint();
-                    return;
-                }
-            }
+            _selectedTool = tool;
+            _selectedCategory = _categories.FirstOrDefault(c => c.tools.Contains(tool));
+            _rightScroll = Vector2.zero;
+            _showCreateForm = false;
+            _showHiddenManager = false;
+            RecordToolUsage(tool);
+            evt.Use();
+            Repaint();
         }
     }
 

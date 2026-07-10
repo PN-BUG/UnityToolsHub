@@ -22,7 +22,7 @@ public class ToolInfoAttribute : Attribute
     /// <summary>功能描述（必填），显示在右侧详情面板</summary>
     public string Description { get; set; }
 
-    /// <summary>工具图标（BMP 安全字符，如 "⚙"="⛭"）</summary>
+    /// <summary>工具图标（Emoji 或 BMP 安全字符，默认 "⚙"）</summary>
     public string Icon { get; set; } = "⚙";
 
     /// <summary>搜索标签（可选），用于搜索过滤</summary>

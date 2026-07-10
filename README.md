@@ -5,11 +5,12 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 
 ## 功能特性
 
-- **自动发现**：扫描所有程序集中带有 `[ToolInfo]` 特性的 `EditorWindow` 类
+- **自动发现**：扫描所有程序集中带有 `[ToolInfo]` 特性的 `EditorWindow` 类，Priority 在发现时缓存避免排序时反射
 - **分类管理**：按功能分类展示工具，支持自定义分类图标和颜色
 - **快速搜索**：支持关键字搜索和标签过滤
-- **快捷键**：为常用工具绑定键盘快捷键
-- **使用统计**：记录工具使用频率，常用工具自动置顶
+- **快捷键**：为常用工具绑定键盘快捷键，O(1) 字典查找导航
+- **使用统计**：记录工具使用频率，常用工具自动置顶，O(1) 字典查找
+- **性能优化**：消除 OnGUI 每帧 GUIStyle/GUIContent 分配，反射元数据构造时缓存
 - **Odin Inspector 兼容**：自动检测 Odin，有则使用原生属性渲染，无则通过兼容层桩类型+反射绘制器回退
 
 ## 快速开始
@@ -54,7 +55,7 @@ public class MyCustomTool : EditorWindow
 | `Name` | 工具显示名称（必填） |
 | `Category` | 所属分类（必填） |
 | `Description` | 功能描述，显示在详情面板 |
-| `Icon` | 工具图标（Emoji 或特殊字符） |
+| `Icon` | 工具图标（Emoji 或 BMP 安全字符，默认 "⚙"） |
 | `Tags` | 搜索标签数组 |
 | `Shortcut` | 快捷键提示文本 |
 | `Priority` | 排序优先级，数字越小越靠前 |
@@ -63,16 +64,25 @@ public class MyCustomTool : EditorWindow
 
 | 工具 | 分类 | 说明 |
 |------|------|------|
+| 框架主页 | 框架初始化 | UnityFramework 主页窗口 |
 | 收藏夹 | 资产工具 | 收藏常用资源和场景对象，支持分组和搜索 |
 | 资产导入过滤 | 资产工具 | 自动处理资源导入设置 |
+| 文件夹规则管理 | 资产工具 | 文件夹导入规则管理 |
 | 组件参数复制 | 编辑器工具 | 批量复制粘贴组件参数 |
+| 样式模板 | 编辑器工具 | 样式展示与参考 |
 | 字体替换 | 字体工具 | 批量替换 UGUI / TextMeshPro 字体 |
 | 富文本编辑器(网页版) | 文本工具 | 浏览器版富文本编辑器，解决选区丢失问题 |
 | 编码转换 | 文件工具 | 文件编码批量转换 |
-| 自动添加 Using | 文件工具 | 扫描 .cs 文件自动补全缺失的 using 语句 |
+| Using 管理 | 文件工具 | 扫描 .cs 文件自动补全缺失的 using 语句 |
 | 批量重命名 | 文件工具 | 批量重命名资源文件 |
+| 精灵图集切分 | 媒体工具 | 精灵图集自动切分 |
 | 视频首帧导出 | 媒体工具 | 导出视频文件的首帧图片 |
+| Git 包切换器 | 包管理工具 | Git 包版本切换 |
 | 包创建器 | 项目工具 | 快速创建 UPM 包 |
+| 脚本默认值同步工具 | 序列化工具 | 脚本默认值同步 |
+| 加密解密工具 | 数据处理 | 加密解密工具 |
+| JSON 查看与编辑 | 数据处理 | JSON 格式化查看与编辑 |
+| 项目打包 | 构建工具 | 项目批量打包 |
 | 测试窗口 | 调试工具 | 聚合展示场景中标记了 [Test] 的方法和字段 |
 
 > **注意**：所有工具均通过 `[ToolInfo]` 特性自动注册，无需手动维护此列表。
@@ -87,16 +97,15 @@ UnityToolsHub/
 ├── README.md
 └── Editor/
     ├── Hub/                        # Hub 核心面板
-    │   ├── UnityToolsHub.cs        # 主窗口
-    │   ├── ToolDiscovery.cs        # 工具发现
-    │   ├── LeftPanel.cs            # 左侧分类面板
-    │   ├── RightPanel.cs           # 右侧详情面板
-    │   ├── DataStructures.cs       # 数据结构定义
-    │   ├── DrawingUtils.cs         # 绘图工具
-    │   ├── ShortcutBinding.cs      # 快捷键绑定
-    │   ├── ShortcutManager.cs      # 快捷键管理
-    │   ├── Styles.cs               # 样式定义
-    │   └── Theme.cs                # 主题配置
+    │   ├── UnityToolsHub.cs        # 主窗口（状态管理、生命周期、使用频率/隐藏项管理）
+    │   ├── ToolDiscovery.cs        # 工具发现（反射缓存、快捷键索引、类型查找缓存）
+    │   ├── LeftPanel.cs            # 左侧分类面板（搜索、分类折叠、工具项列表）
+    │   ├── RightPanel.cs           # 右侧详情面板（欢迎/详情/创建表单/隐藏项管理）
+    │   ├── DataStructures.cs       # 数据结构（ToolEntry、CategoryNode、UsageStats、HiddenItems）
+    │   ├── HubCompat.cs            # 兼容层，别名引用已迁移到 Nodin 的 Theme/Styles/Drawing
+    │   ├── ShortcutBinding.cs      # 快捷键绑定结构体（解析/序列化/Event 转换）
+    │   ├── ShortcutManager.cs      # 快捷键管理（录制、导航、冲突检测）
+    │   └── ToolEditorWindow.cs     # 工具编辑器基类（统一深色主题、绘图工具方法）
     ├── InsidersTest/               # 内部测试工具
     │   ├── CryptoUtility.cs        # 加密工具
     │   ├── JsonViewer.cs           # JSON 查看器
@@ -111,20 +120,26 @@ UnityToolsHub/
     │   ├── ResourceAnalyzer/       # 资源分析器（子模块）
     │   ├── RichTextEditorWeb.html  # 富文本编辑器网页
     │   ├── RichTextEditorWebLauncher.cs  # 富文本编辑器启动器
-    │   ├── UsingAdder.cs           # 自动添加 Using
+    │   ├── UsingManager.cs         # 自动添加 Using
     │   ├── VideoFirstFrameExporter.cs  # 视频首帧导出
+    │   ├── FolderRuleTool/         # 文件夹规则工具
+    │   ├── FrameAnimationTool/     # 帧动画工具
     │   ├── Unity Package Creator/  # 包创建器（子包）
     │   └── Test/                   # 测试工具
     ├── PluginDetector/              # 第三方插件自动检测（独立程序集）
     │   ├── PluginAutoDetector.cs   # 通用插件检测器（支持自定义规则）
     │   └── UnityToolsHub.PluginDetector.Editor.asmdef
-    ├── Setup/                        # 自动配置（独立程序集，不引用 Nodin）
+    ├── Setup/                      # 自动配置（独立程序集，不引用 Nodin）
     │   ├── UnityToolsHub.Setup.asmdef
-    │   └── NodinSetup.cs            # [InitializeOnLoad] 自动写入 manifest.json
+    │   └── NodinSetup.cs           # [InitializeOnLoad] 自动写入 manifest.json
     ├── ToolInfoAttribute.cs        # 工具信息特性定义
     ├── UnityPathUtility.cs         # 路径工具
+    ├── CreateLegacyUIMenu.cs       # Unity 版本兼容辅助
+    ├── UnityFrameworkHomeWindow.cs # 框架主页窗口
     └── _NewToolTemplate.cs.txt     # 新建工具模板
 ```
+
+> **注**：原 `Hub/Styles.cs`、`Hub/Theme.cs`、`Hub/DrawingUtils.cs` 已迁移至 Nodin 包的 `Editor/EditorCore/` 目录，通过 `HubCompat.cs` 透明代理。原 `Editor/Nodin/` 空目录已删除。
 
 ## Nodin 属性系统
 
@@ -132,6 +147,8 @@ UnityToolsHub/
 
 - **属性定义**：`Nodin` 命名空间提供 `[FoldoutGroup]`、`[LabelText]`、`[Button]` 等常用属性
 - **反射自动绘制**：`NodinEditor` 通过反射读取属性，自动绘制 Inspector UI
+- **元数据缓存**：`NodinDrawer` 在构造时一次性读取所有字段的 Attribute 元数据（`FieldMeta`/`MethodMeta`），后续 OnGUI 仅查询缓存，避免每帧重复反射调用
+- **分组预计算**：分组排序与子分组映射在构造时完成，绘制时直接遍历预计算结果
 - **零配置**：作为 UPM 包自动安装，开箱即用
 
 ### 编写工具
@@ -180,7 +197,7 @@ public static class MyPluginDetector
 | 属性 | 值 |
 |------|-----|
 | 包名 | `com.zko.unitytoolshub` |
-| 版本 | 1.0.0 |
+| 版本 | 1.1.0 |
 | Unity 版本 | 2021.3+ |
 | 仓库地址 | https://github.com/PN-BUG/UnityToolsHub.git |
 
@@ -195,6 +212,8 @@ Nodin 依赖通过 `Editor/Setup/NodinSetup.cs` 自动处理：
 - 首次加载时自动将 `com.zko.nodin` 写入 `manifest.json`
 - Unity 自动解析并下载 Nodin 包
 - 独立 asmdef（`UnityToolsHub.Setup`），不引用 Nodin，确保即使 Nodin 未安装也能编译
+
+Nodin 包同时提供 `Editor/EditorCore/` 模块（`Palette`、`Theme`、`Styles`、`Drawing`），为 Hub 和各工具窗口提供统一的深色主题配色、GUIStyle 缓存、纹理与绘图工具。
 
 ## 许可证
 

@@ -199,13 +199,14 @@ public abstract class ToolEditorWindow : EditorWindow
     protected string SearchText = "";
     protected Vector2 ContentScroll;
 
+    private static readonly GUIContent _cachedIconContent = new GUIContent();
+
     #endregion
 
     #region ── 生命周期 ──
 
     private void OnEnable()
     {
-        EnsureInit();
         OnToolEnable();
     }
 
@@ -347,24 +348,24 @@ public abstract class ToolEditorWindow : EditorWindow
 
     protected bool DrawIconButton(string icon, string tooltip = "", params GUILayoutOption[] options)
     {
-        var content = new GUIContent(icon, tooltip);
-        var size = _stIconLabel.CalcSize(content);
-        var rect = GUILayoutUtility.GetRect(content, _stIconLabel,
+        _cachedIconContent.text = icon;
+        _cachedIconContent.tooltip = tooltip;
+        var size = _stIconLabel.CalcSize(_cachedIconContent);
+        var rect = GUILayoutUtility.GetRect(_cachedIconContent, _stIconLabel,
             GUILayout.Width(size.x + 8), GUILayout.Height(size.y + 4));
 
         bool hover = rect.Contains(Event.current.mousePosition);
         EditorGUI.DrawRect(rect, hover ? ClrItemHover : new Color(0, 0, 0, 0));
-        GUI.Label(rect, content, _stIconLabel);
+        GUI.Label(rect, _cachedIconContent, _stIconLabel);
         return Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition);
     }
 
     private bool DrawColoredButton(string text, Color normal, Color hover, params GUILayoutOption[] options)
     {
-        var style = new GUIStyle(_stBtnPrimary);
-        var rect = GUILayoutUtility.GetRect(new GUIContent(text), style, options);
+        var rect = GUILayoutUtility.GetRect(GUIContent.none, _stBtnPrimary, options);
         bool isHover = rect.Contains(Event.current.mousePosition);
         EditorGUI.DrawRect(rect, isHover ? hover : normal);
-        return GUI.Button(rect, text, style);
+        return GUI.Button(rect, text, _stBtnPrimary);
     }
 
     #endregion
@@ -375,16 +376,18 @@ public abstract class ToolEditorWindow : EditorWindow
 
     #region ── 标签 & 文本 ──
 
+    private static readonly GUIContent _cachedTagContent = new GUIContent();
+
     protected void DrawTag(string text, Color? color = null)
     {
         var bgColor = color ?? ClrTagBg;
-        var content = new GUIContent(text);
-        var size = _stTag.CalcSize(content);
-        var rect = GUILayoutUtility.GetRect(content, _stTag,
+        _cachedTagContent.text = text;
+        var size = _stTag.CalcSize(_cachedTagContent);
+        var rect = GUILayoutUtility.GetRect(_cachedTagContent, _stTag,
             GUILayout.Width(size.x + 16), GUILayout.Height(size.y + 6));
         EditorGUI.DrawRect(rect, bgColor);
         _stTag.normal.textColor = ClrText;
-        GUI.Label(rect, content, _stTag);
+        GUI.Label(rect, text, _stTag);
     }
 
     protected void DrawTags(string[] tags, Color? color = null)
@@ -498,7 +501,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
     protected void DrawStatCard(string label, string value, Color accent, params GUILayoutOption[] options)
     {
-        var rect = GUILayoutUtility.GetRect(0, 0, options);
+        var rect = GUILayoutUtility.GetRect(0, 60, options);
         EditorGUI.DrawRect(rect, ClrCardBg);
         EditorGUI.DrawRect(new Rect(rect.x + 8, rect.y + 2, rect.width - 16, 2), accent);
 

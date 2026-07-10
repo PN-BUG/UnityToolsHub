@@ -17,6 +17,24 @@ public partial class UnityToolsHub
     private const float ToolItemHeight = 30f;
     private const float SplitterWidth = 1f;
     private const float RightPadding = 16f;
+
+    // ── 缓存样式（避免每帧 OnGUI 分配）──
+    private static GUIStyle _cachedCreateBtnLabel;
+    private static GUIStyle _cachedHiddenBtnLabel;
+    private static GUIStyle CachedCreateBtnLabel
+        => _cachedCreateBtnLabel ?? (_cachedCreateBtnLabel = new GUIStyle(Styles.ToolItem));
+    private static GUIStyle CachedHiddenBtnLabel
+        => _cachedHiddenBtnLabel ?? (_cachedHiddenBtnLabel = new GUIStyle(Styles.ToolItem) { fontSize = 11 });
+
+    [UnityEditor.InitializeOnLoadMethod]
+    private static void RegisterLeftPanelCleanup()
+    {
+        AssemblyReloadEvents.beforeAssemblyReload += () =>
+        {
+            _cachedCreateBtnLabel = null;
+            _cachedHiddenBtnLabel = null;
+        };
+    }
     #endregion
 
     #region 左侧面板
@@ -58,7 +76,7 @@ public partial class UnityToolsHub
         if (!string.IsNullOrEmpty(_searchText))
         {
             var cancelRect = new Rect(searchRect.xMax - 14, searchRect.y + 4, 12, 12);
-            if (GUI.Button(cancelRect, "", GUI.skin.FindStyle("ToolbarSeachCancelButton") ?? EditorStyles.miniButton))
+            if (GUI.Button(cancelRect, "", GUI.skin.GetStyle("ToolbarSeachCancelButton")))
             {
                 _searchText = "";
                 GUI.FocusControl(null);
@@ -207,11 +225,9 @@ public partial class UnityToolsHub
         EditorGUI.DrawRect(createBtnRect, _showCreateForm ? ClrSelection : (createHover ? ClrHover : new Color(0, 0, 0, 0)));
         EditorGUI.DrawRect(new Rect(createBtnRect.x, createBtnRect.y + 4, 3, createBtnRect.height - 8),
             new Color(0.35f, 0.75f, 0.45f, 1f));
-        GUI.Label(createBtnRect, "  ＋  创建新工具", new GUIStyle(_styleToolItem)
-        {
-            normal = { textColor = _showCreateForm ? ClrTextBright : ClrText },
-            fontStyle = _showCreateForm ? FontStyle.Bold : FontStyle.Normal
-        });
+        CachedCreateBtnLabel.normal.textColor = _showCreateForm ? ClrTextBright : ClrText;
+        CachedCreateBtnLabel.fontStyle = _showCreateForm ? FontStyle.Bold : FontStyle.Normal;
+        GUI.Label(createBtnRect, "  ＋  创建新工具", CachedCreateBtnLabel);
         if (GUI.Button(createBtnRect, "", GUIStyle.none))
         {
             _showCreateForm = !_showCreateForm;
@@ -226,12 +242,9 @@ public partial class UnityToolsHub
         EditorGUI.DrawRect(new Rect(hiddenBtnRect.x, hiddenBtnRect.y + 4, 3, hiddenBtnRect.height - 8),
             new Color(0.85f, 0.55f, 0.40f, 1f));
         string hiddenLabel = hiddenCount > 0 ? $"  ⚙  管理隐藏项 ({hiddenCount})" : "  ⚙  管理隐藏项";
-        GUI.Label(hiddenBtnRect, hiddenLabel, new GUIStyle(_styleToolItem)
-        {
-            fontSize = 11,
-            normal = { textColor = _showHiddenManager ? ClrTextBright : ClrTextDim },
-            fontStyle = _showHiddenManager ? FontStyle.Bold : FontStyle.Normal
-        });
+        CachedHiddenBtnLabel.normal.textColor = _showHiddenManager ? ClrTextBright : ClrTextDim;
+        CachedHiddenBtnLabel.fontStyle = _showHiddenManager ? FontStyle.Bold : FontStyle.Normal;
+        GUI.Label(hiddenBtnRect, hiddenLabel, CachedHiddenBtnLabel);
         if (GUI.Button(hiddenBtnRect, "", GUIStyle.none))
         {
             _showHiddenManager = !_showHiddenManager;
