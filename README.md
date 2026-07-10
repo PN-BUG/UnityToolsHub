@@ -197,8 +197,7 @@ public class MyTool : EditorWindow
 
 ```
 UnityToolsHub
-  └── EditorCore (com.zko.editor.core)
-       └── Nodin (com.zko.nodin)
+  └── Nodin (com.zko.nodin)
 ```
 
 ## 许可证
