@@ -19,6 +19,6 @@
     },
     "type": "tool",
     "dependencies": {
-        "com.zko.editor.core": "https://github.com/PN-BUG/EditorCore.git"
+        "com.zko.nodin": "https://github.com/PN-BUG/Nodin.git"
     }
 }

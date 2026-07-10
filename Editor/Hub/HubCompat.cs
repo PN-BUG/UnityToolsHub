@@ -12,77 +12,77 @@ public partial class UnityToolsHub
 {
     // ── 颜色别名（原 Theme.cs，统一引用 HubTheme）──
 
-    private static Color ClrBg           => HubTheme.ClrBg;
-    private static Color ClrLeftBg       => HubTheme.ClrLeftBg;
-    private static Color ClrRightBg      => HubTheme.ClrRightBg;
-    private static Color ClrSplitter     => HubTheme.ClrSplitter;
-    private static Color ClrSelection    => HubTheme.ClrSelection;
-    private static Color ClrHover        => HubTheme.ClrHover;
-    private static Color ClrText         => HubTheme.ClrText;
-    private static Color ClrTextDim      => HubTheme.ClrTextDim;
-    private static Color ClrTextBright   => HubTheme.ClrTextBright;
-    private static Color ClrAccent       => HubTheme.ClrAccent;
-    private static Color ClrAccentDim    => HubTheme.ClrAccentDim;
-    private static Color ClrCardBg       => HubTheme.ClrCardBg;
-    private static Color ClrTagBg        => HubTheme.ClrTagBg;
-    private static Color ClrDivider      => HubTheme.ClrDivider;
-    private static Color ClrBtnNormal    => HubTheme.ClrBtnNormal;
-    private static Color ClrBtnHover     => HubTheme.ClrBtnHover;
+    private static Color ClrBg           => Theme.ClrBg;
+    private static Color ClrLeftBg       => Theme.ClrLeftBg;
+    private static Color ClrRightBg      => Theme.ClrRightBg;
+    private static Color ClrSplitter     => Theme.ClrSplitter;
+    private static Color ClrSelection    => Theme.ClrSelection;
+    private static Color ClrHover        => Theme.ClrHover;
+    private static Color ClrText         => Theme.ClrText;
+    private static Color ClrTextDim      => Theme.ClrTextDim;
+    private static Color ClrTextBright   => Theme.ClrTextBright;
+    private static Color ClrAccent       => Theme.ClrAccent;
+    private static Color ClrAccentDim    => Theme.ClrAccentDim;
+    private static Color ClrCardBg       => Theme.ClrCardBg;
+    private static Color ClrTagBg        => Theme.ClrTagBg;
+    private static Color ClrDivider      => Theme.ClrDivider;
+    private static Color ClrBtnNormal    => Theme.ClrBtnNormal;
+    private static Color ClrBtnHover     => Theme.ClrBtnHover;
 
     // ── 样式别名（原 Styles.cs，统一引用 HubStyles）──
 
-    private GUIStyle _styleCategoryHeader   => HubStyles.CategoryHeader;
-    private GUIStyle _styleToolItem         => HubStyles.ToolItem;
-    private GUIStyle _styleToolItemSelected => HubStyles.ToolItemSelected;
-    private GUIStyle _styleRightTitle       => HubStyles.RightTitle;
-    private GUIStyle _styleRightSubtitle    => HubStyles.RightSubtitle;
-    private GUIStyle _styleDescription      => HubStyles.Description;
-    private GUIStyle _styleCard             => HubStyles.Card;
-    private GUIStyle _styleTag              => HubStyles.Tag;
-    private GUIStyle _styleWelcomeTitle     => HubStyles.WelcomeTitle;
-    private GUIStyle _styleWelcomeSub       => HubStyles.WelcomeSub;
-    private GUIStyle _styleStatNum          => HubStyles.StatNum;
-    private GUIStyle _styleStatLabel        => HubStyles.StatLabel;
-    private GUIStyle _styleBtnPrimary      => HubStyles.BtnPrimary;
-    private GUIStyle _styleBtnFlat          => HubStyles.BtnFlat;
-    private GUIStyle _styleSectionHeader    => HubStyles.SectionHeader;
-    private GUIStyle _styleShortcut         => HubStyles.Shortcut;
-    private GUIStyle _styleInvisibleBtn    => HubStyles.InvisibleBtn;
-    private GUIStyle _styleLogo             => HubStyles.Logo;
-    private GUIStyle _styleVersion          => HubStyles.Version;
-    private GUIStyle _styleCatCardIcon      => HubStyles.CatCardIcon;
-    private GUIStyle _styleCatCardName      => HubStyles.CatCardName;
-    private GUIStyle _styleCatCardCount     => HubStyles.CatCardCount;
-    private GUIStyle _styleBackButton       => HubStyles.BackButton;
-    private GUIStyle _styleEmptyHint        => HubStyles.EmptyHint;
-    private GUIStyle _styleKeyCap           => HubStyles.KeyCap;
-    private GUIStyle _styleHiddenItemName   => HubStyles.HiddenItemName;
-    private GUIStyle _styleHiddenItemDesc   => HubStyles.HiddenItemDesc;
+    private GUIStyle _styleCategoryHeader   => Styles.CategoryHeader;
+    private GUIStyle _styleToolItem         => Styles.ToolItem;
+    private GUIStyle _styleToolItemSelected => Styles.ToolItemSelected;
+    private GUIStyle _styleRightTitle       => Styles.RightTitle;
+    private GUIStyle _styleRightSubtitle    => Styles.RightSubtitle;
+    private GUIStyle _styleDescription      => Styles.Description;
+    private GUIStyle _styleCard             => Styles.Card;
+    private GUIStyle _styleTag              => Styles.Tag;
+    private GUIStyle _styleWelcomeTitle     => Styles.WelcomeTitle;
+    private GUIStyle _styleWelcomeSub       => Styles.WelcomeSub;
+    private GUIStyle _styleStatNum          => Styles.StatNum;
+    private GUIStyle _styleStatLabel        => Styles.StatLabel;
+    private GUIStyle _styleBtnPrimary      => Styles.BtnPrimary;
+    private GUIStyle _styleBtnFlat          => Styles.BtnFlat;
+    private GUIStyle _styleSectionHeader    => Styles.SectionHeader;
+    private GUIStyle _styleShortcut         => Styles.Shortcut;
+    private GUIStyle _styleInvisibleBtn    => Styles.InvisibleBtn;
+    private GUIStyle _styleLogo             => Styles.Logo;
+    private GUIStyle _styleVersion          => Styles.Version;
+    private GUIStyle _styleCatCardIcon      => Styles.CatCardIcon;
+    private GUIStyle _styleCatCardName      => Styles.CatCardName;
+    private GUIStyle _styleCatCardCount     => Styles.CatCardCount;
+    private GUIStyle _styleBackButton       => Styles.BackButton;
+    private GUIStyle _styleEmptyHint        => Styles.EmptyHint;
+    private GUIStyle _styleKeyCap           => Styles.KeyCap;
+    private GUIStyle _styleHiddenItemName   => Styles.HiddenItemName;
+    private GUIStyle _styleHiddenItemDesc   => Styles.HiddenItemDesc;
 
     // ── 纹理别名（原 Styles.cs / DrawingUtils.cs）──
 
-    private Texture2D _texWhite       => HubStyles.TexWhite;
-    private Texture2D _texHover       => HubStyles.TexHover;
-    private Texture2D _texSelected    => HubStyles.TexSelected;
-    private Texture2D _texTransparent => HubStyles.TexTransparent;
+    private Texture2D _texWhite       => Styles.TexWhite;
+    private Texture2D _texHover       => Styles.TexHover;
+    private Texture2D _texSelected    => Styles.TexSelected;
+    private Texture2D _texTransparent => Styles.TexTransparent;
 
     // ── 绘图方法别名（原 DrawingUtils.cs）──
 
     private void DrawGradientRect(Rect rect, Color left, Color right)
-        => HubDrawing.DrawGradientRect(rect, left, right);
+        => Drawing.DrawGradientRect(rect, left, right);
 
     private void DrawFoldoutArrow(Rect rect, bool expanded)
-        => HubDrawing.DrawFoldoutArrow(rect, expanded);
+        => Drawing.DrawFoldoutArrow(rect, expanded);
 
     // ── 主题数据别名（原 Theme.cs）──
 
-    private static Dictionary<string, Color> _categoryColors => HubTheme.CategoryColors;
-    private static Color[] _defaultPalette => HubTheme.DefaultPalette;
+    private static Dictionary<string, Color> _categoryColors => Theme.CategoryColors;
+    private static Color[] _defaultPalette => Theme.DefaultPalette;
     private static string GetCategoryIcon(string categoryName)
-        => HubTheme.GetCategoryIcon(categoryName);
+        => Theme.GetCategoryIcon(categoryName);
 
     // ── 样式初始化（原 Styles.cs，现委托 HubStyles 懒加载）──
 
-    private void EnsureStyles() => HubStyles.EnsureInit();
+    private void EnsureStyles() => Styles.EnsureInit();
 }
 #endif

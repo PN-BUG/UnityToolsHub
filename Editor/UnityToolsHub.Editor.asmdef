@@ -3,8 +3,6 @@
     "rootNamespace": "",
     "references": [
         "GUID:70de3d35ece9b7b44ae69317d3221b51",
-        "EditorCore.Editor",
-        "EditorCore.Runtime",
         "Nodin.Runtime",
         "Nodin.Editor"
     ],

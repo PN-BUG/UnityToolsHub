@@ -49,60 +49,60 @@ public abstract class ToolEditorWindow : EditorWindow
     #region ── 颜色调色板（统一深色主题，引用 HubPalette 单一来源）──
 
     // ── 背景色 ──────────────────────────────────────────────
-    protected static readonly Color ClrBg           = HubPalette.Bg;
-    protected static readonly Color ClrToolbarBg    = HubPalette.ToolbarBg;
-    protected static readonly Color ClrSearchBg     = HubPalette.SearchBg;
-    protected static readonly Color ClrItemBg       = HubPalette.ItemBg;
-    protected static readonly Color ClrItemHover    = HubPalette.ItemHover;
-    protected static readonly Color ClrItemSelected = HubPalette.ItemSelected;
-    protected static readonly Color ClrCardBg       = HubPalette.CardBg;
-    protected static readonly Color ClrGroupBoxBg   = HubPalette.GroupBoxBg;
-    protected static readonly Color ClrTagBg        = HubPalette.TagBg;
-    protected static readonly Color ClrStatusBar    = HubPalette.StatusBar;
-    protected static readonly Color ClrIconBg       = HubPalette.IconBg;
-    protected static readonly Color ClrHelpBoxBg    = HubPalette.HelpBoxBg;
-    protected static readonly Color ClrProgressBg   = HubPalette.ProgressBg;
-    protected static readonly Color ClrKeyCapBg     = HubPalette.KeyCapBg;
+    protected static readonly Color ClrBg           = Palette.Bg;
+    protected static readonly Color ClrToolbarBg    = Palette.ToolbarBg;
+    protected static readonly Color ClrSearchBg     = Palette.SearchBg;
+    protected static readonly Color ClrItemBg       = Palette.ItemBg;
+    protected static readonly Color ClrItemHover    = Palette.ItemHover;
+    protected static readonly Color ClrItemSelected = Palette.ItemSelected;
+    protected static readonly Color ClrCardBg       = Palette.CardBg;
+    protected static readonly Color ClrGroupBoxBg   = Palette.GroupBoxBg;
+    protected static readonly Color ClrTagBg        = Palette.TagBg;
+    protected static readonly Color ClrStatusBar    = Palette.StatusBar;
+    protected static readonly Color ClrIconBg       = Palette.IconBg;
+    protected static readonly Color ClrHelpBoxBg    = Palette.HelpBoxBg;
+    protected static readonly Color ClrProgressBg   = Palette.ProgressBg;
+    protected static readonly Color ClrKeyCapBg     = Palette.KeyCapBg;
 
     // ── 文字色 ──────────────────────────────────────────────
-    protected static readonly Color ClrText       = HubPalette.Text;
-    protected static readonly Color ClrTextDim    = HubPalette.TextDim;
-    protected static readonly Color ClrTextBright = HubPalette.TextBright;
+    protected static readonly Color ClrText       = Palette.Text;
+    protected static readonly Color ClrTextDim    = Palette.TextDim;
+    protected static readonly Color ClrTextBright = Palette.TextBright;
 
     // ── 主题色 ──────────────────────────────────────────────
-    protected static readonly Color ClrAccent    = HubPalette.Accent;
-    protected static readonly Color ClrAccentDim = HubPalette.AccentDim;
-    protected static readonly Color ClrDivider   = HubPalette.Divider;
+    protected static readonly Color ClrAccent    = Palette.Accent;
+    protected static readonly Color ClrAccentDim = Palette.AccentDim;
+    protected static readonly Color ClrDivider   = Palette.Divider;
 
     // ── 按钮色 ──────────────────────────────────────────────
-    protected static readonly Color ClrBtnNormal    = HubPalette.BtnNormal;
-    protected static readonly Color ClrBtnHover     = HubPalette.BtnHover;
-    protected static readonly Color ClrBtnDanger    = HubPalette.BtnDanger;
-    protected static readonly Color ClrBtnDangerHov = HubPalette.BtnDangerHov;
-    protected static readonly Color ClrBtnSuccess   = HubPalette.BtnSuccess;
-    protected static readonly Color ClrBtnSuccessHov= HubPalette.BtnSuccessHov;
-    protected static readonly Color ClrBtnWarn      = HubPalette.BtnWarn;
-    protected static readonly Color ClrBtnWarnHov   = HubPalette.BtnWarnHov;
+    protected static readonly Color ClrBtnNormal    = Palette.BtnNormal;
+    protected static readonly Color ClrBtnHover     = Palette.BtnHover;
+    protected static readonly Color ClrBtnDanger    = Palette.BtnDanger;
+    protected static readonly Color ClrBtnDangerHov = Palette.BtnDangerHov;
+    protected static readonly Color ClrBtnSuccess   = Palette.BtnSuccess;
+    protected static readonly Color ClrBtnSuccessHov= Palette.BtnSuccessHov;
+    protected static readonly Color ClrBtnWarn      = Palette.BtnWarn;
+    protected static readonly Color ClrBtnWarnHov   = Palette.BtnWarnHov;
 
     // ── 语义色 ──────────────────────────────────────────────
-    protected static readonly Color ClrSuccess  = HubPalette.Success;
-    protected static readonly Color ClrWarning  = HubPalette.Warning;
-    protected static readonly Color ClrError    = HubPalette.Error;
-    protected static readonly Color ClrInfo     = HubPalette.Info;
+    protected static readonly Color ClrSuccess  = Palette.Success;
+    protected static readonly Color ClrWarning  = Palette.Warning;
+    protected static readonly Color ClrError    = Palette.Error;
+    protected static readonly Color ClrInfo     = Palette.Info;
 
     // ── 拖拽叠加色 ──────────────────────────────────────────
-    protected static readonly Color ClrDropOverlay = HubPalette.DropOverlay;
-    protected static readonly Color ClrDropBorder  = HubPalette.DropBorder;
+    protected static readonly Color ClrDropOverlay = Palette.DropOverlay;
+    protected static readonly Color ClrDropBorder  = Palette.DropBorder;
 
     // ── 分类配色（供工具卡片等场景复用）──────────────────
-    protected static readonly Color ClrCatDefault = HubPalette.CatDefault;
-    protected static readonly Color ClrCatGreen   = HubPalette.CatGreen;
-    protected static readonly Color ClrCatOrange  = HubPalette.CatOrange;
-    protected static readonly Color ClrCatPurple  = HubPalette.CatPurple;
-    protected static readonly Color ClrCatRed     = HubPalette.CatRed;
-    protected static readonly Color ClrCatTeal    = HubPalette.CatTeal;
-    protected static readonly Color ClrCatPink    = HubPalette.CatPink;
-    protected static readonly Color ClrCatYellow  = HubPalette.CatYellow;
+    protected static readonly Color ClrCatDefault = Palette.CatDefault;
+    protected static readonly Color ClrCatGreen   = Palette.CatGreen;
+    protected static readonly Color ClrCatOrange  = Palette.CatOrange;
+    protected static readonly Color ClrCatPurple  = Palette.CatPurple;
+    protected static readonly Color ClrCatRed     = Palette.CatRed;
+    protected static readonly Color ClrCatTeal    = Palette.CatTeal;
+    protected static readonly Color ClrCatPink    = Palette.CatPink;
+    protected static readonly Color ClrCatYellow  = Palette.CatYellow;
 
     #endregion
 
@@ -491,7 +491,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
     protected void DrawGradientBar(Color left, Color right, float height = 4f)
     {
-        HubDrawing.DrawGradientRect(new Rect(0, 0, position.width, height), left, right);
+        Drawing.DrawGradientRect(new Rect(0, 0, position.width, height), left, right);
     }
 
     protected void DrawDivider(float height = 1f)

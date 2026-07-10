@@ -5,8 +5,6 @@
         "GUID:3d7a04e7515d08c41b316af582ebeaa0",
         "GUID:70de3d35ece9b7b44ae69317d3221b51",
         "GUID:69448af7b92c7f342b298e06a37122aa",
-        "EditorCore.Editor",
-        "EditorCore.Runtime",
         "Nodin.Runtime",
         "Nodin.Editor"
     ],

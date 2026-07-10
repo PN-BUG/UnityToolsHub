@@ -263,36 +263,36 @@ namespace UnityFramework
 
         #region ── 深色调色板（引用 HubPalette 单一来源，仅保留工具特有颜色）───────────────
 
-        private static readonly Color ClrBg           = HubPalette.Bg;
-        private static readonly Color ClrToolbarBg    = HubPalette.ToolbarBg;
-        private static readonly Color ClrSearchBg     = HubPalette.SearchBg;
-        private static readonly Color ClrItemBg       = HubPalette.ItemBg;
-        private static readonly Color ClrItemHover    = HubPalette.ItemHover;
-        private static readonly Color ClrItemSelected = HubPalette.ItemSelected;
-        private static readonly Color ClrText         = HubPalette.Text;
-        private static readonly Color ClrTextDim      = HubPalette.TextDim;
-        private static readonly Color ClrTextBright   = HubPalette.TextBright;
-        private static readonly Color ClrAccent       = HubPalette.Accent;
-        private static readonly Color ClrAccentDim    = HubPalette.AccentDim;
-        private static readonly Color ClrCardBg       = HubPalette.CardBg;
-        private static readonly Color ClrTagBg        = HubPalette.TagBg;
-        private static readonly Color ClrDivider      = HubPalette.Divider;
-        private static readonly Color ClrDropOverlay  = HubPalette.DropOverlay;
-        private static readonly Color ClrDropBorder   = HubPalette.DropBorder;
-        private static readonly Color ClrBtnNormal    = HubPalette.BtnNormal;
-        private static readonly Color ClrBtnHover     = HubPalette.BtnHover;
-        private static readonly Color ClrBtnDanger    = HubPalette.BtnDanger;
-        private static readonly Color ClrBtnDangerHov = HubPalette.BtnDangerHov;
-        private static readonly Color ClrBtnSuccess   = HubPalette.BtnSuccess;
-        private static readonly Color ClrBtnSuccessHov= HubPalette.BtnSuccessHov;
-        private static readonly Color ClrIconBg       = HubPalette.IconBg;
-        private static readonly Color ClrStatusBar    = HubPalette.StatusBar;
+        private static readonly Color ClrBg           = Palette.Bg;
+        private static readonly Color ClrToolbarBg    = Palette.ToolbarBg;
+        private static readonly Color ClrSearchBg     = Palette.SearchBg;
+        private static readonly Color ClrItemBg       = Palette.ItemBg;
+        private static readonly Color ClrItemHover    = Palette.ItemHover;
+        private static readonly Color ClrItemSelected = Palette.ItemSelected;
+        private static readonly Color ClrText         = Palette.Text;
+        private static readonly Color ClrTextDim      = Palette.TextDim;
+        private static readonly Color ClrTextBright   = Palette.TextBright;
+        private static readonly Color ClrAccent       = Palette.Accent;
+        private static readonly Color ClrAccentDim    = Palette.AccentDim;
+        private static readonly Color ClrCardBg       = Palette.CardBg;
+        private static readonly Color ClrTagBg        = Palette.TagBg;
+        private static readonly Color ClrDivider      = Palette.Divider;
+        private static readonly Color ClrDropOverlay  = Palette.DropOverlay;
+        private static readonly Color ClrDropBorder   = Palette.DropBorder;
+        private static readonly Color ClrBtnNormal    = Palette.BtnNormal;
+        private static readonly Color ClrBtnHover     = Palette.BtnHover;
+        private static readonly Color ClrBtnDanger    = Palette.BtnDanger;
+        private static readonly Color ClrBtnDangerHov = Palette.BtnDangerHov;
+        private static readonly Color ClrBtnSuccess   = Palette.BtnSuccess;
+        private static readonly Color ClrBtnSuccessHov= Palette.BtnSuccessHov;
+        private static readonly Color ClrIconBg       = Palette.IconBg;
+        private static readonly Color ClrStatusBar    = Palette.StatusBar;
         // ── 工具特有颜色 ──
         private static readonly Color ClrMissTag      = new Color(0.90f, 0.45f, 0.25f, 1f);
         private static readonly Color ClrUnusedTag    = new Color(0.95f, 0.75f, 0.25f, 1f);
         private static readonly Color ClrOkTag        = new Color(0.35f, 0.75f, 0.45f, 1f);
         private static readonly Color ClrHeaderBg     = new Color(0.17f, 0.17f, 0.18f, 1f);
-        private static readonly Color ClrRightBg      = HubPalette.RightBg;
+        private static readonly Color ClrRightBg      = Palette.RightBg;
 
         #endregion
 
@@ -336,10 +336,10 @@ namespace UnityFramework
         {
             if (_stylesInitialized) return;
 
-            _texWhite       = HubPalette.MakeTex(1, 1, Color.white);
-            _texHover       = HubPalette.MakeTex(1, 1, ClrItemHover);
-            _texSelected    = HubPalette.MakeTex(1, 1, ClrItemSelected);
-            _texTransparent = HubPalette.MakeTex(1, 1, new Color(0, 0, 0, 0));
+            _texWhite       = Palette.MakeTex(1, 1, Color.white);
+            _texHover       = Palette.MakeTex(1, 1, ClrItemHover);
+            _texSelected    = Palette.MakeTex(1, 1, ClrItemSelected);
+            _texTransparent = Palette.MakeTex(1, 1, new Color(0, 0, 0, 0));
 
             // ── 文字标签 ──
             _styleLabel = new GUIStyle()
@@ -414,9 +414,9 @@ namespace UnityFramework
                 fontSize = 11,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white, background = HubPalette.MakeTex(1, 1, ClrBtnNormal) },
-                hover = { textColor = Color.white, background = HubPalette.MakeTex(1, 1, ClrBtnHover) },
-                active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = HubPalette.MakeTex(1, 1, ClrAccent) },
+                normal = { textColor = Color.white, background = Palette.MakeTex(1, 1, ClrBtnNormal) },
+                hover = { textColor = Color.white, background = Palette.MakeTex(1, 1, ClrBtnHover) },
+                active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = Palette.MakeTex(1, 1, ClrAccent) },
                 padding = new RectOffset(12, 12, 4, 4)
             };
 
@@ -434,9 +434,9 @@ namespace UnityFramework
                 fontSize = 11,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white, background = HubPalette.MakeTex(1, 1, ClrBtnDanger) },
-                hover = { textColor = Color.white, background = HubPalette.MakeTex(1, 1, ClrBtnDangerHov) },
-                active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = HubPalette.MakeTex(1, 1, new Color(0.65f, 0.22f, 0.22f)) },
+                normal = { textColor = Color.white, background = Palette.MakeTex(1, 1, ClrBtnDanger) },
+                hover = { textColor = Color.white, background = Palette.MakeTex(1, 1, ClrBtnDangerHov) },
+                active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = Palette.MakeTex(1, 1, new Color(0.65f, 0.22f, 0.22f)) },
                 padding = new RectOffset(12, 12, 4, 4)
             };
 
@@ -445,9 +445,9 @@ namespace UnityFramework
                 fontSize = 11,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white, background = HubPalette.MakeTex(1, 1, ClrBtnSuccess) },
-                hover = { textColor = Color.white, background = HubPalette.MakeTex(1, 1, ClrBtnSuccessHov) },
-                active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = HubPalette.MakeTex(1, 1, new Color(0.20f, 0.55f, 0.30f)) },
+                normal = { textColor = Color.white, background = Palette.MakeTex(1, 1, ClrBtnSuccess) },
+                hover = { textColor = Color.white, background = Palette.MakeTex(1, 1, ClrBtnSuccessHov) },
+                active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = Palette.MakeTex(1, 1, new Color(0.20f, 0.55f, 0.30f)) },
                 padding = new RectOffset(12, 12, 4, 4)
             };
 
