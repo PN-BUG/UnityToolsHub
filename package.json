@@ -17,8 +17,5 @@
         "email": "320653195@qq.com",
         "url": "https://github.com/PN-BUG"
     },
-    "type": "tool",
-    "dependencies": {
-        "com.zko.nodin": "https://github.com/PN-BUG/Nodin.git"
-    }
+    "type": "tool"
 }
