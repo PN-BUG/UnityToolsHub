@@ -34,8 +34,8 @@ namespace UnityToolsHub.Setup
 
             string content = File.ReadAllText(manifestPath);
 
-            // 已经包含 com.zko.nodin，无需修改
-            if (content.Contains(NodinPackageName))
+            // 精确匹配 JSON key："com.zko.nodin"（避免误匹配子字符串）
+            if (Regex.IsMatch(content, $"\"{Regex.Escape(NodinPackageName)}\"\\s*:"))
                 return true;
 
             // 在 dependencies 块的第一个条目前插入 com.zko.nodin
