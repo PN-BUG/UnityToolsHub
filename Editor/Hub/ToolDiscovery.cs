@@ -125,10 +125,6 @@ public partial class UnityToolsHub
             "从图片序列自动创建 Sprite 帧动画。\n\n支持按文件名数字排序、帧率/循环配置、批量子文件夹处理、角色分组、自动生成 AnimatorController 和预制体。",
             "FrameAnimationCreator", "▣", new[] { "帧动画", "Sprite", "动画创建" });
 
-        AddCrossAssemblyTool("贴图导入规则配置", "资产工具",
-            "配置贴图导入规则面板：UI 关键词匹配、忽略目录、自动导入开关。\n\n支持设置压缩格式、过滤模式、最大尺寸上限、Sprite 模式和 Mipmap 等参数。",
-            "TextureImportSettingsWindow", "▤", new[] { "贴图", "导入规则", "配置" });
-
         AddCrossAssemblyTool("资源分析与优化", "资产工具",
             "资源分析与优化工具：扫描项目资产，检测纹理尺寸、格式、Read/Write 等问题。\n\n支持按平台分析、过滤/排序、批量定位问题资源，帮助优化包体和运行时性能。",
             "ResourceAnalyzer.ResourceAnalyzerWindow", "◷", new[] { "资源分析", "优化", "纹理", "包体" });

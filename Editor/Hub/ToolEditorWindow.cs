@@ -360,12 +360,7 @@ public abstract class ToolEditorWindow : EditorWindow
 
     private bool DrawColoredButton(string text, Color normal, Color hover, params GUILayoutOption[] options)
     {
-        var style = _stBtnPrimary;
-        style.normal.background = TexWhite;
-        style.normal.textColor = Color.white;
-        style.hover.background = TexWhite;
-        style.hover.textColor = Color.white;
-
+        var style = new GUIStyle(_stBtnPrimary);
         var rect = GUILayoutUtility.GetRect(new GUIContent(text), style, options);
         bool isHover = rect.Contains(Event.current.mousePosition);
         EditorGUI.DrawRect(rect, isHover ? hover : normal);
@@ -749,9 +744,9 @@ public abstract class ToolEditorWindow : EditorWindow
 
         _stBtnPrimary = new GUIStyle(EditorStyles.miniButton) { fontSize = 12, fontStyle = FontStyle.Bold,
             fixedHeight = 28, alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = Color.white, background = TexWhite },
-            hover = { textColor = Color.white, background = TexWhite },
-            active = { textColor = Color.white, background = TexWhite } };
+            normal = { textColor = Color.white },
+            hover = { textColor = Color.white },
+            active = { textColor = Color.white } };
 
         _stBtnFlat = new GUIStyle { fontSize = 11, alignment = TextAnchor.MiddleCenter,
             padding = new RectOffset(8, 8, 4, 4),

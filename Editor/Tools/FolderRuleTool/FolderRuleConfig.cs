@@ -106,7 +106,7 @@ public class FolderRuleConfig : ScriptableObject
 
     // ══════════════════════════════════════════════════════════
     //  贴图导入规则（可选）
-    //  逻辑与 TextureImportAutoTool 保持一致
+
     // ══════════════════════════════════════════════════════════
 
     [FoldoutGroup("贴图导入规则")]
@@ -314,7 +314,7 @@ public class FolderRuleConfig : ScriptableObject
         return false;
     }
 
-    /// <summary>根据原图尺寸自动分档推荐 MaxSize（与 TextureImportAutoTool 一致）</summary>
+    /// <summary>根据原图尺寸自动分档推荐 MaxSize</summary>
     public int GetRecommendedMaxSize(TextureImporter importer)
     {
         importer.GetSourceTextureWidthAndHeight(out int width, out int height);
@@ -326,7 +326,7 @@ public class FolderRuleConfig : ScriptableObject
         return textureMaxCapSize;
     }
 
-    /// <summary>Odin ValueDropdown 回调 —— 最大尺寸上限选项（与 TextureImportAutoTool 一致）</summary>
+    /// <summary>Odin ValueDropdown 回调 —— 最大尺寸上限选项</summary>
     private IEnumerable<int> MaxCapSizeOptions()
     {
         return new int[] { 512, 1024, 2048, 4096, 8192 };

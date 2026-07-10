@@ -164,7 +164,7 @@ public class FolderRulePostprocessor : AssetPostprocessor
 #endif
     }
 
-    /// <summary>自动应用贴图导入设置（逻辑与 TextureImportAutoTool 一致）</summary>
+    /// <summary>自动应用贴图导入设置</summary>
     private static bool TryApplyTextureSettings(FolderRuleConfig config, string assetPath)
     {
         if (!config.IsTargetExtension(assetPath, config.textureTargetExtensions))
