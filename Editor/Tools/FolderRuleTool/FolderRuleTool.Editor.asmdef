@@ -16,12 +16,19 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "HAS_NODIN"
+    ],
     "versionDefines": [
         {
             "name": "com.unity.addressables",
             "expression": "",
             "define": "ADDRESSABLES"
+        },
+        {
+            "name": "com.zko.nodin",
+            "expression": "",
+            "define": "HAS_NODIN"
         }
     ],
     "noEngineReferences": false

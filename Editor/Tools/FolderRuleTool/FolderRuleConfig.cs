@@ -23,12 +23,12 @@ public class FolderRuleConfig : ScriptableObject
     // ══════════════════════════════════════════════════════════
     [FoldoutGroup("基础设置")]
     [LabelText("启用此规则")]
-    public bool enabled = true;
+    public bool enabled = false;
 
     [FoldoutGroup("基础设置")]
     [LabelText("递归子文件夹")]
     [Tooltip("开启后子文件夹中的资源也会被检查")]
-    public bool recursive = true;
+    public bool recursive = false;
 
     [FoldoutGroup("基础设置")]
     [LabelText("忽略的资源")]

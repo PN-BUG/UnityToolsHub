@@ -14,7 +14,15 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [],
-    "versionDefines": [],
+    "defineConstraints": [
+        "HAS_NODIN"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.zko.nodin",
+            "expression": "",
+            "define": "HAS_NODIN"
+        }
+    ],
     "noEngineReferences": false
 }
