@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 /// <summary>
@@ -1334,14 +1335,69 @@ public class AssetBookmarks : EditorWindow
     #endregion
 
     #region 资源操作
+    /// <summary>
+    /// 确保场景已加载，如果未加载则打开场景
+    /// </summary>
+    private bool EnsureSceneLoaded(string scenePath)
+    {
+        if (string.IsNullOrEmpty(scenePath)) return false;
+
+        // 检查场景是否已加载
+        for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
+        {
+            var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
+            if (scene.path == scenePath && scene.isLoaded)
+                return true;
+        }
+
+        // 场景未加载，尝试打开
+        if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+            return false;
+
+        try
+        {
+            EditorSceneManager.OpenScene(scenePath);
+            return true;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[收藏夹] 无法打开场景 {scenePath}: {e.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 同步收藏项名称（场景对象可能已改名）
+    /// </summary>
+    private void SyncBookmarkName(BookmarkItem item, GameObject go)
+    {
+        if (go != null && item.name != go.name)
+        {
+            Debug.Log($"[收藏夹] 同步名称: \"{item.name}\" → \"{go.name}\"");
+            item.name = go.name;
+            item.path = GetGameObjectPath(go);
+            Save();
+            Repaint();
+        }
+    }
+
     private void OpenBookmarkItem(BookmarkItem item)
     {
         if (item.isSceneObject)
         {
-            // 场景对象：通过 GlobalObjectId 查找并选中（持久化 ID，场景重载后仍有效）
+            // 场景对象：先确保场景已加载，再选中物体
+            if (!EnsureSceneLoaded(item.scenePath))
+            {
+                Debug.LogWarning($"[收藏夹] 无法加载场景: {item.scenePath}");
+                return;
+            }
+
             var obj = ResolveSceneObject(item);
             if (obj != null)
             {
+                // 同步名称（如果物体已改名）
+                SyncBookmarkName(item, obj);
+
                 item.useCount++;
                 item.lastUseTicks = DateTime.Now.Ticks;
                 Save();
@@ -1451,10 +1507,19 @@ public class AssetBookmarks : EditorWindow
     {
         if (item.isSceneObject)
         {
-            // 场景对象：定位到 Hierarchy
+            // 场景对象：先确保场景已加载，再定位
+            if (!EnsureSceneLoaded(item.scenePath))
+            {
+                Debug.LogWarning($"[收藏夹] 无法加载场景: {item.scenePath}");
+                return;
+            }
+
             var obj = ResolveSceneObject(item);
             if (obj != null)
             {
+                // 同步名称（如果物体已改名）
+                SyncBookmarkName(item, obj);
+
                 EditorGUIUtility.PingObject(obj);
                 Selection.activeObject = obj;
                 SceneView.lastActiveSceneView?.FrameSelected();
