@@ -7,9 +7,12 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 
 - **自动发现**：扫描所有程序集中带有 `[ToolInfo]` 特性的 `EditorWindow` 类，Priority 在发现时缓存避免排序时反射
 - **分类管理**：按功能分类展示工具，支持自定义分类图标和颜色
+- **文件夹式分类**：支持拖拽工具切换分类、拖拽分类排序、新建/重命名/删除自定义分类
 - **快速搜索**：支持关键字搜索和标签过滤
+- **排序方式**：支持按名称（默认）、最近使用、最常使用排序
 - **快捷键**：为常用工具绑定键盘快捷键，O(1) 字典查找导航
 - **使用统计**：记录工具使用频率，常用工具自动置顶，O(1) 字典查找
+- **隐藏管理**：支持隐藏不需要的工具和分类，一键恢复默认分类
 - **性能优化**：消除 OnGUI 每帧 GUIStyle/GUIContent 分配，反射元数据构造时缓存
 - **Odin Inspector 兼容**：自动检测 Odin，有则使用原生属性渲染，无则通过兼容层桩类型+反射绘制器回退
 
@@ -48,7 +51,20 @@ public class MyCustomTool : EditorWindow
 }
 ```
 
-### 3. ToolInfo 参数说明
+### 3. 分类管理
+
+左侧面板支持文件夹式分类管理：
+
+- **拖拽工具**：按住工具项拖动到目标分类，可跨分类移动
+- **拖拽分类**：按住分类色条拖动，可调整分类顺序
+- **新建分类**：点击底部「+ 分类」按钮，输入名称、选择图标和颜色
+- **重命名/删除**：右键分类头，选择对应操作
+- **恢复默认**：右键分类头 →「还原默认分类」，将工具移回自动发现的默认分类
+- **隐藏工具**：右键工具项 →「隐藏」，或点击底部「管理隐藏项」查看和恢复
+- **排序切换**：左上角排序按钮切换按名称 / 最近使用 / 最常使用
+- **折叠/展开**：点击分类头折叠，或使用顶部展开/折叠全部按钮
+
+### 4. ToolInfo 参数说明
 
 | 参数 | 说明 |
 |------|------|
@@ -97,11 +113,11 @@ UnityToolsHub/
 ├── README.md
 └── Editor/
     ├── Hub/                        # Hub 核心面板
-    │   ├── UnityToolsHub.cs        # 主窗口（状态管理、生命周期、使用频率/隐藏项管理）
-    │   ├── ToolDiscovery.cs        # 工具发现（反射缓存、快捷键索引、类型查找缓存）
-    │   ├── LeftPanel.cs            # 左侧分类面板（搜索、分类折叠、工具项列表）
-    │   ├── RightPanel.cs           # 右侧详情面板（欢迎/详情/创建表单/隐藏项管理）
-    │   ├── DataStructures.cs       # 数据结构（ToolEntry、CategoryNode、UsageStats、HiddenItems）
+    │   ├── UnityToolsHub.cs        # 主窗口（状态管理、生命周期、使用频率/隐藏项管理、分类管理）
+    │   ├── ToolDiscovery.cs        # 工具发现（反射缓存、快捷键索引、类型查找缓存、默认分类注册）
+    │   ├── LeftPanel.cs            # 左侧分类面板（文件夹管理、拖拽排序、搜索、右键菜单、对话框）
+    │   ├── RightPanel.cs           # 右侧详情面板（欢迎页/详情/创建表单/隐藏项管理/仓库链接）
+    │   ├── DataStructures.cs       # 数据结构（ToolEntry、FolderConfig、FolderItem、UsageStats、HiddenItems）
     │   ├── HubCompat.cs            # 兼容层，别名引用已迁移到 Nodin 的 Theme/Styles/Drawing
     │   ├── ShortcutBinding.cs      # 快捷键绑定结构体（解析/序列化/Event 转换）
     │   ├── ShortcutManager.cs      # 快捷键管理（录制、导航、冲突检测）
@@ -197,7 +213,7 @@ public static class MyPluginDetector
 | 属性 | 值 |
 |------|-----|
 | 包名 | `com.zko.unitytoolshub` |
-| 版本 | 1.1.0 |
+| 版本 | 1.2.0 |
 | Unity 版本 | 2021.3+ |
 | 仓库地址 | https://github.com/PN-BUG/UnityToolsHub.git |
 

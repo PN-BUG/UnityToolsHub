@@ -1,6 +1,6 @@
 {
     "name": "com.zko.unitytoolshub",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "displayName": "Unity Tools Hub",
     "description": "Unity编辑器工具集合管理器，提供工具自动发现、分类展示、快捷启动等功能。支持自定义工具扩展，通过[ToolInfo]特性即可快速集成新工具。",
     "unity": "2021.3",

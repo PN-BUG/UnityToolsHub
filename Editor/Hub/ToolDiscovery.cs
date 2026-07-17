@@ -20,6 +20,7 @@ public partial class UnityToolsHub
     private void DiscoverTools()
     {
         _categories.Clear();
+        _defaultCategoryNames.Clear();
 
         // ── 1. 扫描 [ToolInfo] 特性 ──────────────────────
         var discovered = new List<ToolEntry>();
@@ -42,6 +43,7 @@ public partial class UnityToolsHub
                     name       = attr.Name,
                     description = attr.Description ?? "",
                     category   = attr.Category,
+                    originalCategory = attr.Category,
                     typeName   = type.FullName,
                     icon       = string.IsNullOrEmpty(attr.Icon) ? GetCategoryIcon(attr.Category) : attr.Icon,
                     tags       = attr.Tags,
@@ -82,6 +84,7 @@ public partial class UnityToolsHub
             var node = new CategoryNode { name = catName, icon = catIcon, accent = accent };
             node.tools.AddRange(tools);
             _categories.Add(node);
+            _defaultCategoryNames.Add(catName);
         }
 
         // ── 3. 特殊工具（无 EditorWindow 类，仅菜单项）──
@@ -145,6 +148,7 @@ public partial class UnityToolsHub
             name        = "打开特殊目录",
             description = "快速打开项目常用目录：\n\n• Project Root  • Assets Folder\n• Project Settings  • Library Folder\n• Temp Folder  • Builds Folder\n• Editor Log  • Player Log\n• Persistent Data  • Streaming Assets\n• Temporary Cache",
             category    = "路径工具",
+            originalCategory = "路径工具",
             typeName    = null,
             icon        = "◈",
             tags        = new[] { "目录", "快速访问" }
@@ -161,6 +165,7 @@ public partial class UnityToolsHub
             name        = name,
             description = description,
             category    = category,
+            originalCategory = category,
             typeName    = typeName,
             icon        = icon,
             tags        = tags
@@ -176,6 +181,7 @@ public partial class UnityToolsHub
             _categoryColors.TryGetValue(categoryName, out var accent);
             cat = new CategoryNode { name = categoryName, icon = GetCategoryIcon(categoryName), accent = accent };
             _categories.Add(cat);
+            _defaultCategoryNames.Add(categoryName);
         }
         return cat;
     }
@@ -501,6 +507,334 @@ public partial class UnityToolsHub
             Debug.LogError($"[UnityToolsHub] 删除工具失败：{ex.Message}");
             EditorUtility.DisplayDialog("错误", $"删除失败：{ex.Message}", "确定");
         }
+    }
+    #endregion
+
+    #region 扫描非 HubTool 编辑器扩展
+    /// <summary>
+    /// 扫描指定目录下的 .cs 文件，找出继承 EditorWindow 但没有 [ToolInfo] 特性的类。
+    /// 使用正则解析源码，无需编译加载。
+    /// </summary>
+    private void ScanDirectoryForNonHubTools(string scanDir, bool recursive)
+    {
+        _addToolCandidates.Clear();
+        _addToolSelectedIndex = -1;
+        _addToolScanError = "";
+
+        // 解析为绝对路径
+        string absDir = scanDir;
+        if (scanDir.StartsWith("Assets/"))
+            absDir = Application.dataPath + "/" + scanDir.Substring("Assets/".Length);
+
+        if (!System.IO.Directory.Exists(absDir))
+        {
+            _addToolScanError = $"目录不存在：{scanDir}";
+            return;
+        }
+
+        var searchOption = recursive
+            ? System.IO.SearchOption.AllDirectories
+            : System.IO.SearchOption.TopDirectoryOnly;
+
+        string[] csFiles;
+        try
+        {
+            csFiles = System.IO.Directory.GetFiles(absDir, "*.cs", searchOption);
+        }
+        catch (System.Exception ex)
+        {
+            _addToolScanError = $"扫描失败：{ex.Message}";
+            return;
+        }
+
+        // 收集已注册的 ToolInfo 类型名（用于排除）
+        var registeredTypes = new HashSet<string>();
+        foreach (var cat in _categories)
+            foreach (var tool in cat.tools)
+                if (!string.IsNullOrEmpty(tool.typeName))
+                    registeredTypes.Add(tool.typeName);
+
+        // 正则模式
+        // 匹配 namespace（可选）
+        var rxNamespace = new System.Text.RegularExpressions.Regex(
+            @"namespace\s+([\w.]+)",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+        // 匹配 class/struct 声明继承 EditorWindow
+        var rxClass = new System.Text.RegularExpressions.Regex(
+            @"(?:public|internal|private|protected)?\s*(?:sealed\s+|abstract\s+)*class\s+(\w+)\s*:\s*([\w.,\s]+)",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+        // 匹配 [ToolInfo] 特性
+        var rxToolInfo = new System.Text.RegularExpressions.Regex(
+            @"\[ToolInfo\s*\(",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        foreach (var filePath in csFiles)
+        {
+            string content;
+            try
+            {
+                content = System.IO.File.ReadAllText(filePath, System.Text.Encoding.UTF8);
+            }
+            catch { continue; }
+
+            // 快速跳过：不包含 EditorWindow 的文件
+            if (!content.Contains("EditorWindow")) continue;
+            // 已有 [ToolInfo] 的跳过
+            if (rxToolInfo.IsMatch(content)) continue;
+
+            // 解析 namespace
+            string ns = "";
+            var nsMatch = rxNamespace.Match(content);
+            if (nsMatch.Success)
+                ns = nsMatch.Groups[1].Value;
+
+            // 查找继承 EditorWindow 的类
+            var classMatches = rxClass.Matches(content);
+            foreach (System.Text.RegularExpressions.Match cm in classMatches)
+            {
+                string className = cm.Groups[1].Value;
+                string bases = cm.Groups[2].Value;
+
+                // 检查是否继承 EditorWindow
+                var baseParts = bases.Split(',');
+                bool isEditorWindow = false;
+                string baseClassName = "";
+                foreach (var bp in baseParts)
+                {
+                    var trimmed = bp.Trim();
+                    if (trimmed == "EditorWindow")
+                    {
+                        isEditorWindow = true;
+                        baseClassName = "EditorWindow";
+                        break;
+                    }
+                    // 也支持继承自 ToolEditorWindow 等间接基类
+                    if (trimmed == "ToolEditorWindow")
+                    {
+                        isEditorWindow = true;
+                        baseClassName = "ToolEditorWindow";
+                        break;
+                    }
+                }
+
+                if (!isEditorWindow) continue;
+
+                // 构建完整类型名
+                string fullTypeName = string.IsNullOrEmpty(ns)
+                    ? className
+                    : $"{ns}.{className}";
+
+                // 排除已注册的
+                if (registeredTypes.Contains(fullTypeName)) continue;
+                // 排除 UnityToolsHub 自身
+                if (className == "UnityToolsHub") continue;
+
+                // 提取已有注释（文件头部连续 // 行）
+                string existingDesc = ExtractFileHeaderComment(content);
+
+                // 相对路径
+                string relPath = filePath;
+                if (filePath.StartsWith(Application.dataPath))
+                    relPath = "Assets" + filePath.Substring(Application.dataPath.Length);
+                relPath = relPath.Replace('\\', '/');
+
+                _addToolCandidates.Add(new AddToolCandidate
+                {
+                    filePath = relPath,
+                    absPath = filePath,
+                    className = className,
+                    baseClass = baseClassName,
+                    namespaceName = ns,
+                    fullTypeName = fullTypeName,
+                    existingDescription = existingDesc
+                });
+            }
+        }
+
+        // 按类名排序
+        _addToolCandidates.Sort((a, b) => string.Compare(a.className, b.className,
+            System.StringComparison.OrdinalIgnoreCase));
+
+        // 扫描完成但未找到候选时给出提示
+        if (_addToolCandidates.Count == 0)
+            _addToolScanError = $"扫描完成，在 {scanDir} 中未发现可添加的 EditorWindow 扩展（{(recursive ? "含" : "不含")}子目录）";
+    }
+
+    /// <summary>提取文件头部的连续注释行（// 开头）</summary>
+    private static string ExtractFileHeaderComment(string content)
+    {
+        var lines = content.Split('\n');
+        var commentLines = new List<string>();
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("//"))
+            {
+                var text = trimmed.TrimStart('/').Trim();
+                if (!string.IsNullOrEmpty(text))
+                    commentLines.Add(text);
+            }
+            else if (!string.IsNullOrEmpty(trimmed) && !trimmed.StartsWith("#"))
+            {
+                // 遇到非注释非预处理指令行停止
+                break;
+            }
+            // 跳过空行和 #if 等预处理指令继续收集
+        }
+        if (commentLines.Count == 0) return "";
+        // 最多取前3行
+        int count = Mathf.Min(commentLines.Count, 3);
+        return string.Join("\n", commentLines.Take(count));
+    }
+    #endregion
+
+    #region 自动添加 [ToolInfo] 特性
+    /// <summary>
+    /// 给指定的 .cs 文件自动插入 [ToolInfo] 特性。
+    /// 在 class 声明行的上方插入特性声明。
+    /// </summary>
+    private bool AddToolInfoToScript(AddToolCandidate candidate, string toolName,
+        string category, string description, string icon, string[] tags, string shortcut)
+    {
+        try
+        {
+            string content = System.IO.File.ReadAllText(candidate.absPath, System.Text.Encoding.UTF8);
+            var lines = content.Split('\n').ToList();
+
+            // 找到目标 class 声明行
+            int classLineIdx = -1;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                // 匹配 class ClassName : BaseClass
+                if (System.Text.RegularExpressions.Regex.IsMatch(lines[i],
+                    $@"(?:public|internal|private|protected)?\s*(?:sealed\s+|abstract\s+)*class\s+{System.Text.RegularExpressions.Regex.Escape(candidate.className)}\s*:"))
+                {
+                    classLineIdx = i;
+                    break;
+                }
+            }
+
+            if (classLineIdx < 0)
+            {
+                _addToolScanError = $"找不到类声明：{candidate.className}";
+                return false;
+            }
+
+            // 获取 class 行的缩进
+            string indent = "";
+            foreach (char c in lines[classLineIdx])
+            {
+                if (c == ' ' || c == '\t') indent += c;
+                else break;
+            }
+
+            // 构建 [ToolInfo] 特性字符串
+            var attrParts = new List<string>();
+            attrParts.Add($"Description = \"{EscapeCSharpString(description)}\"");
+
+            if (!string.IsNullOrEmpty(icon) && icon != "⚙")
+                attrParts.Add($"Icon = \"{icon}\"");
+
+            if (tags != null && tags.Length > 0)
+            {
+                var tagEntries = tags.Select(t => $"\"{t}\"");
+                attrParts.Add($"Tags = new[] {{ {string.Join(", ", tagEntries)} }}");
+            }
+
+            if (!string.IsNullOrEmpty(shortcut))
+                attrParts.Add($"Shortcut = \"{shortcut}\"");
+
+            string attrLine;
+            if (attrParts.Count <= 2)
+            {
+                // 短特性：单行
+                attrLine = $"{indent}[ToolInfo(\"{EscapeCSharpString(toolName)}\", \"{EscapeCSharpString(category)}\", {string.Join(", ", attrParts)})]";
+            }
+            else
+            {
+                // 长特性：多行
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"{indent}[ToolInfo(\"{EscapeCSharpString(toolName)}\", \"{EscapeCSharpString(category)}\",");
+                for (int i = 0; i < attrParts.Count; i++)
+                {
+                    string comma = i < attrParts.Count - 1 ? "," : "";
+                    sb.AppendLine($"{indent}    {attrParts[i]}{comma}");
+                }
+                sb.Append($"{indent})]");
+                attrLine = sb.ToString();
+            }
+
+            // 在 class 行上方插入
+            lines.Insert(classLineIdx, attrLine);
+
+            // 写回文件
+            string newContent = string.Join("\n", lines);
+            System.IO.File.WriteAllText(candidate.absPath, newContent, System.Text.Encoding.UTF8);
+            AssetDatabase.Refresh();
+
+            Debug.Log($"[UnityToolsHub] 已为 {candidate.className} 添加 [ToolInfo] 特性：{candidate.filePath}");
+            return true;
+        }
+        catch (System.Exception ex)
+        {
+            _addToolScanError = $"写入失败：{ex.Message}";
+            Debug.LogError($"[UnityToolsHub] 添加 ToolInfo 失败：{ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>转义 C# 字符串中的特殊字符</summary>
+    private static string EscapeCSharpString(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "";
+        return input
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t");
+    }
+    #endregion
+
+    #region 从候选条目填充导入表单
+    /// <summary>选中候选条目后，自动填充导入表单的默认值</summary>
+    private void FillAddToolFormFromCandidate(int index)
+    {
+        _addToolSelectedIndex = index;
+        if (index < 0 || index >= _addToolCandidates.Count)
+        {
+            _addToolName = "";
+            _addToolClassName = "";
+            _addToolDescription = "";
+            return;
+        }
+
+        var c = _addToolCandidates[index];
+        _addToolClassName = c.className;
+        _addToolName = DeriveToolNameFromClass(c.className);
+        _addToolDescription = c.existingDescription ?? "";
+        _addToolCategory = "编辑器工具";
+        _addToolIcon = "⚙";
+        _addToolTags = "";
+        _addToolShortcut = "";
+    }
+
+    /// <summary>从类名反推可读的工具名（驼峰 → 空格分隔）</summary>
+    private static string DeriveToolNameFromClass(string className)
+    {
+        if (string.IsNullOrEmpty(className)) return "未命名工具";
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < className.Length; i++)
+        {
+            char c = className[i];
+            if (i > 0 && c >= 'A' && c <= 'Z')
+                sb.Append(' ');
+            sb.Append(c);
+        }
+        // 去除常见后缀
+        string result = sb.ToString();
+        result = result.Replace("Window", "").Replace("Editor", "").Replace("Tool", "").Trim();
+        return string.IsNullOrEmpty(result) ? className : result;
     }
     #endregion
 }
