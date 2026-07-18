@@ -718,7 +718,7 @@ public abstract class ToolEditorWindow : EditorWindow
         _stToolbar = new GUIStyle { fontSize = 14, fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleLeft, normal = { textColor = ClrTextBright }, richText = true };
 
-        _stSearchField = new GUIStyle("ToolbarSeachTextField")
+        _stSearchField = new GUIStyle(EditorStyles.textField)
             { fontSize = 12, normal = { textColor = ClrText }, fixedHeight = 20 };
 
         _stSearchPlaceholder = new GUIStyle { fontSize = 12,

@@ -63,6 +63,34 @@ public partial class UnityToolsHub : EditorWindow
     private string _addToolScanError = "";
     private List<string> _pendingDropPaths = new List<string>();
 
+    // ── 添加工具表单：作者/链接/第三方 ───────────────────
+    private string _addToolAuthor = "";
+    private string _addToolAuthorLink = "";
+    private bool _addToolIsThirdParty = false;
+
+    // ── 创建工具表单：作者/链接 ──────────────────────────
+    private string _createAuthor = "";
+    private string _createAuthorLink = "";
+
+    // ── 第三方工具管理状态 ──────────────────────────────
+    private ThirdPartyToolRegistry _thirdPartyRegistry = new ThirdPartyToolRegistry();
+    private bool _showThirdPartyManager;
+    private Vector2 _thirdPartyMgrScroll;
+    private Vector2 _thirdPartyListScroll;
+    private int _thirdPartySelectedIndex = -1;
+    private const string ThirdPartyRegistryPrefsKey = "UnityToolsHub.ThirdPartyRegistry";
+
+    // ── 第三方工具导入表单状态 ──────────────────────────
+    private bool _showImportForm;
+    private int _importSourceIndex; // 0=本地, 1=Git
+    private string _importGitUrl = "";
+    private string _importLocalPath = "";
+    private string _importToolName = "";
+    private string _importAuthor = "";
+    private string _importAuthorLink = "";
+    private bool _isImporting;
+    private string _importStatus = "";
+
     // ── 快捷键隐藏/恢复状态 ────────────────────────────
     private static bool _isHidden;
     private static Rect _savedPosition;
@@ -287,6 +315,7 @@ public partial class UnityToolsHub : EditorWindow
         LoadUsageStats();
         LoadHiddenItems();
         LoadFolderConfig();
+        LoadThirdPartyRegistry();
         _sortMode = (SortMode)EditorPrefs.GetInt(SortModePrefsKey, 0);
         DiscoverTools();
         ApplyFolderConfig();
@@ -419,6 +448,41 @@ public partial class UnityToolsHub : EditorWindow
     {
         _hiddenItems = new HiddenItems();
         SaveHiddenItems();
+    }
+    #endregion
+
+    #region 第三方工具注册表持久化
+    private void LoadThirdPartyRegistry()
+    {
+        var json = EditorPrefs.GetString(ThirdPartyRegistryPrefsKey, "");
+        if (!string.IsNullOrEmpty(json))
+        {
+            try { _thirdPartyRegistry = JsonUtility.FromJson<ThirdPartyToolRegistry>(json) ?? new ThirdPartyToolRegistry(); }
+            catch { _thirdPartyRegistry = new ThirdPartyToolRegistry(); }
+        }
+    }
+
+    private void SaveThirdPartyRegistry()
+    {
+        EditorPrefs.SetString(ThirdPartyRegistryPrefsKey, JsonUtility.ToJson(_thirdPartyRegistry));
+    }
+
+    /// <summary>切换第三方工具的启用/禁用状态</summary>
+    private void ToggleThirdPartyToolEnabled(string typeName)
+    {
+        var state = _thirdPartyRegistry.Find(typeName);
+        if (state == null) return;
+        state.isEnabled = !state.isEnabled;
+        SaveThirdPartyRegistry();
+        DiscoverTools();
+    }
+
+    /// <summary>从注册表中移除第三方工具记录</summary>
+    private void RemoveThirdPartyTool(string typeName)
+    {
+        _thirdPartyRegistry.Remove(typeName);
+        SaveThirdPartyRegistry();
+        DiscoverTools();
     }
     #endregion
 

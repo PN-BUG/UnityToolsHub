@@ -483,7 +483,7 @@ namespace UnityFramework
             };
 
             // ── 搜索框 ──
-            _styleSearchField = new GUIStyle("ToolbarSeachTextField")
+            _styleSearchField = new GUIStyle(EditorStyles.textField)
             {
                 fontSize = 12,
                 padding = new RectOffset(28, 8, 4, 4),

@@ -13,6 +13,9 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **快捷键**：为常用工具绑定键盘快捷键，O(1) 字典查找导航
 - **使用统计**：记录工具使用频率，常用工具自动置顶，O(1) 字典查找
 - **隐藏管理**：支持隐藏不需要的工具和分类，一键恢复默认分类
+- **第三方工具管理**：类似 Unity Package Manager 的管理界面，支持从本地文件夹或 Git URL 导入第三方工具包，默认禁用确保安全
+- **脚本信息展示**：工具详情页显示脚本名称、路径，支持一键打开脚本
+- **作者信息**：支持在 `[ToolInfo]` 中标注作者和链接，详情页可点击跳转
 - **性能优化**：消除 OnGUI 每帧 GUIStyle/GUIContent 分配，反射元数据构造时缓存
 - **Odin Inspector 兼容**：自动检测 Odin，有则使用原生属性渲染，无则通过兼容层桩类型+反射绘制器回退
 
@@ -75,6 +78,56 @@ public class MyCustomTool : EditorWindow
 | `Tags` | 搜索标签数组 |
 | `Shortcut` | 快捷键提示文本 |
 | `Priority` | 排序优先级，数字越小越靠前 |
+| `Author` | 工具作者（可选），显示在详情页和第三方管理面板 |
+| `AuthorLink` | 作者主页/仓库 URL（可选），点击可跳转 |
+| `IsThirdParty` | 是否为第三方工具（可选，默认 false），标记后默认禁用 |
+
+### 5. 第三方工具管理
+
+第三方工具管理面板提供类似 Unity Package Manager 的统一管理界面：
+
+#### 打开方式
+- 顶部 toggle 栏切换到「📦 第三方工具」标签
+- 或在「添加工具」面板中导入脚本时勾选「标记为第三方工具」
+
+#### 导入第三方工具
+
+**从 Git URL 导入**：
+1. 点击「＋ 从 Git 导入」
+2. 输入 Git 仓库地址（如 `https://github.com/user/repo.git`）
+3. 填写工具名、作者、作者链接（可选）
+4. 点击「导入」，Hub 会通过 `PackageManager.Client.Add(gitUrl)` 异步安装
+
+**从本地路径导入**：
+1. 点击「＋ 从本地导入」
+2. 选择本地文件夹路径（含 `package.json` 的 UPM 包目录或含 `.cs` 文件的目录）
+3. 填写工具名、作者、作者链接（可选）
+4. 点击「导入」
+
+#### 管理第三方工具
+
+- **启用/禁用**：第三方工具默认禁用，需在管理面板中手动启用后才显示在分类列表中
+- **卸载**：Git/本地 UPM 包卸载会从 Unity Package Manager 中移除；手动添加的工具仅移除注册记录
+- **查看详情**：点击左侧列表中的工具，右侧显示作者、来源、安装路径、脚本路径等详细信息
+- **打开脚本**：详情页可一键打开对应的 `.cs` 脚本文件
+
+#### 第三方工具包目录结构（Git / 本地 UPM 包）
+
+```
+MyToolPackage/
+├── package.json          # UPM 包描述文件
+├── Editor/
+│   └── MyTool.cs          # 含 [ToolInfo(IsThirdParty=true)] 的工具脚本
+└── Runtime/               # 可选运行时代码
+```
+
+#### 安全模型
+
+- 第三方工具（`IsThirdParty = true`）默认在 Hub 中**禁用**
+- 禁用状态下工具不出现在分类列表中，无法通过 Hub 打开
+- 需在「第三方工具管理」面板中手动启用
+- 启用后工具正常显示并可使用
+- 已启用的工具可随时禁用
 
 ## 内置工具
 
@@ -116,8 +169,8 @@ UnityToolsHub/
     │   ├── UnityToolsHub.cs        # 主窗口（状态管理、生命周期、使用频率/隐藏项管理、分类管理）
     │   ├── ToolDiscovery.cs        # 工具发现（反射缓存、快捷键索引、类型查找缓存、默认分类注册）
     │   ├── LeftPanel.cs            # 左侧分类面板（文件夹管理、拖拽排序、搜索、右键菜单、对话框）
-    │   ├── RightPanel.cs           # 右侧详情面板（欢迎页/详情/创建表单/隐藏项管理/仓库链接）
-    │   ├── DataStructures.cs       # 数据结构（ToolEntry、FolderConfig、FolderItem、UsageStats、HiddenItems）
+    │   ├── RightPanel.cs           # 右侧详情面板（欢迎页/详情/创建表单/隐藏项管理/第三方工具管理）
+    │   ├── DataStructures.cs       # 数据结构（ToolEntry、FolderConfig、UsageStats、HiddenItems、ThirdPartyToolRegistry）
     │   ├── HubCompat.cs            # 兼容层，别名引用已迁移到 Nodin 的 Theme/Styles/Drawing
     │   ├── ShortcutBinding.cs      # 快捷键绑定结构体（解析/序列化/Event 转换）
     │   ├── ShortcutManager.cs      # 快捷键管理（录制、导航、冲突检测）

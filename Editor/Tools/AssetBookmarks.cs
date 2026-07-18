@@ -358,7 +358,7 @@ public class AssetBookmarks : EditorWindow
         _texTransparent  = Palette.MakeTex(1, 1, new Color(0, 0, 0, 0));
 
         // 搜索框
-        _styleSearchField = new GUIStyle("ToolbarSeachTextField")
+        _styleSearchField = new GUIStyle(EditorStyles.textField)
         {
             fontSize = 12,
             padding = new RectOffset(28, 8, 4, 4),

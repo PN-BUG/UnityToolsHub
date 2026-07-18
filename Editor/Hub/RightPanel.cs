@@ -63,8 +63,14 @@ public partial class UnityToolsHub
                 position.width - LeftPanelWidth - SplitterWidth, position.height),
             ClrRightBg);
 
+        // ── 第三方管理面板不使用 ScrollView（内部自带滚动）──
+        if (_showThirdPartyManager && !_showHiddenManager)
+        {
+            DrawAddToolToggleBar();
+            DrawThirdPartyManagerPanel();
+        }
         // ── 添加工具面板不使用 ScrollView，否则 Layout 阶段会吞掉拖放事件 ──
-        if (_showAddToolPanel && !_showHiddenManager)
+        else if (_showAddToolPanel && !_showHiddenManager)
         {
             // 无 ScrollView 路径：toggle 栏 + 添加工具面板，确保拖放事件不被拦截
             DrawAddToolToggleBar();
@@ -109,6 +115,7 @@ public partial class UnityToolsHub
                     _pendingDropPaths = new List<string>(csFiles);
                     _showAddToolPanel = true;
                     _showCreateForm = false;
+                    _showThirdPartyManager = false;
                     _showHiddenManager = false;
                     Debug.Log($"[ToolsHub] 拖入 {csFiles.Count} 个 .cs 文件");
                 }
@@ -203,21 +210,23 @@ public partial class UnityToolsHub
     }
 
     /// <summary>
-    /// 绘制创建/添加工具的顶部 toggle 栏（独立方法，供 ScrollView 和非 ScrollView 路径共用）
+    /// 绘制创建/添加/第三方工具的顶部 toggle 栏（独立方法，供 ScrollView 和非 ScrollView 路径共用）
     /// </summary>
     private void DrawAddToolToggleBar()
     {
         var toggleBarRect = GUILayoutUtility.GetRect(0, 32, GUILayout.ExpandWidth(true));
         EditorGUI.DrawRect(toggleBarRect, new Color(0.13f, 0.13f, 0.14f, 1f));
 
-        float toggleW = 120f;
+        float toggleW = 108f;
+        float gap = 4f;
         float toggleH = 26f;
         float toggleY = toggleBarRect.y + (toggleBarRect.height - toggleH) / 2f;
-        float centerX = toggleBarRect.x + (toggleBarRect.width - toggleW * 2 - 8) / 2f;
+        float totalW = toggleW * 3 + gap * 2;
+        float startX = toggleBarRect.x + (toggleBarRect.width - totalW) / 2f;
 
-        // 创建工具 toggle
-        var createRect = new Rect(centerX, toggleY, toggleW, toggleH);
-        bool createActive = _showCreateForm;
+        // ── 创建工具 toggle ──
+        var createRect = new Rect(startX, toggleY, toggleW, toggleH);
+        bool createActive = _showCreateForm && !_showThirdPartyManager;
         bool createHover = createRect.Contains(Event.current.mousePosition);
         Color createAccent = new Color(0.35f, 0.75f, 0.45f, 1f);
         if (createActive)
@@ -239,17 +248,17 @@ public partial class UnityToolsHub
         GUI.Label(createRect, "＋ 创建工具", toggleStyle);
         if (GUI.Button(createRect, "", GUIStyle.none))
         {
-            if (!_showCreateForm)
-            {
-                _showCreateForm = true;
-                _showAddToolPanel = false;
-                _rightScroll = Vector2.zero;
-            }
+            _showCreateForm = true;
+            _showAddToolPanel = false;
+            _showThirdPartyManager = false;
+            _showHiddenManager = false;
+            _selectedTool = null;
+            _rightScroll = Vector2.zero;
         }
 
-        // 添加工具 toggle
-        var addRect = new Rect(centerX + toggleW + 8, toggleY, toggleW, toggleH);
-        bool addActive = _showAddToolPanel;
+        // ── 添加工具 toggle ──
+        var addRect = new Rect(startX + toggleW + gap, toggleY, toggleW, toggleH);
+        bool addActive = _showAddToolPanel && !_showThirdPartyManager;
         bool addHover = addRect.Contains(Event.current.mousePosition);
         Color addAccent = new Color(0.40f, 0.65f, 0.90f, 1f);
         if (addActive)
@@ -271,12 +280,45 @@ public partial class UnityToolsHub
         GUI.Label(addRect, "⊕ 添加工具", addToggleStyle);
         if (GUI.Button(addRect, "", GUIStyle.none))
         {
-            if (!_showAddToolPanel)
-            {
-                _showAddToolPanel = true;
-                _showCreateForm = false;
-                _rightScroll = Vector2.zero;
-            }
+            _showAddToolPanel = true;
+            _showCreateForm = false;
+            _showThirdPartyManager = false;
+            _showHiddenManager = false;
+            _selectedTool = null;
+            _rightScroll = Vector2.zero;
+        }
+
+        // ── 第三方工具 toggle ──
+        var tpRect = new Rect(startX + (toggleW + gap) * 2, toggleY, toggleW, toggleH);
+        bool tpActive = _showThirdPartyManager;
+        bool tpHover = tpRect.Contains(Event.current.mousePosition);
+        Color tpAccent = new Color(0.80f, 0.55f, 0.90f, 1f);
+        if (tpActive)
+        {
+            EditorGUI.DrawRect(tpRect, ClrSelection);
+            EditorGUI.DrawRect(new Rect(tpRect.x, tpRect.yMax - 2, tpRect.width, 2), tpAccent);
+        }
+        else if (tpHover)
+        {
+            EditorGUI.DrawRect(tpRect, ClrHover);
+        }
+        var tpToggleStyle = new GUIStyle()
+        {
+            fontSize = 12,
+            fontStyle = tpActive ? FontStyle.Bold : FontStyle.Normal,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = tpActive ? ClrTextBright : ClrTextDim }
+        };
+        int tpCount = _thirdPartyRegistry.tools.Count;
+        GUI.Label(tpRect, tpCount > 0 ? $"📦 第三方 ({tpCount})" : "📦 第三方工具", tpToggleStyle);
+        if (GUI.Button(tpRect, "", GUIStyle.none))
+        {
+            _showThirdPartyManager = true;
+            _showCreateForm = false;
+            _showAddToolPanel = false;
+            _showHiddenManager = false;
+            _selectedTool = null;
+            _rightScroll = Vector2.zero;
         }
     }
     #endregion
@@ -286,24 +328,24 @@ public partial class UnityToolsHub
     {
         var area = new Rect(0, 0, position.width - LeftPanelWidth - SplitterWidth, position.height);
 
-        // ── 渐变装饰条 ──────────────────────────────────
-        var gradRect = new Rect(area.x, area.y, area.width, 4);
-        DrawGradientRect(gradRect, new Color(0.20f, 0.45f, 0.90f), new Color(0.40f, 0.70f, 0.95f));
+        // ── 渐变装饰条（更宽，带光泽过渡）──────────────────
+        var gradRect = new Rect(area.x, area.y, area.width, 5);
+        DrawGradientRect(gradRect, new Color(0.345f, 0.569f, 0.910f), new Color(0.400f, 0.529f, 0.729f));
 
         // ── 主内容 ──────────────────────────────────────
-        float centerY = area.height * 0.28f;
+        float centerY = area.height * 0.22f;
 
         // 标题
-        var titleRect = new Rect(area.x + RightPadding, centerY, area.width - RightPadding * 2, 40);
+        var titleRect = new Rect(area.x + RightPadding, centerY, area.width - RightPadding * 2, 42);
         GUI.Label(titleRect,
-            "<color=#6699FF>Unity</color><color=#EEEEEE>ToolsHub</color>",
+            "<color=#5891E8>Unity</color><color=#F2F2F9>ToolsHub</color>",
             _styleWelcomeTitle);
 
         // 副标题
-        var subRect = new Rect(area.x + RightPadding, centerY + 46, area.width - RightPadding * 2, 22);
-        GUI.Label(subRect, "游戏开发工具集", _styleWelcomeSub);
+        var subRect = new Rect(area.x + RightPadding, centerY + 48, area.width - RightPadding * 2, 22);
+        GUI.Label(subRect, "游戏开发工具集 · 一站式编辑器扩展管理", _styleWelcomeSub);
 
-        EditorGUILayout.Space(centerY + 80);
+        EditorGUILayout.Space(centerY + 82);
 
         // ── 统计卡片 ──────────────────────────────────────
         int totalTools = _totalToolCount;
@@ -313,13 +355,13 @@ public partial class UnityToolsHub
         GUILayout.FlexibleSpace();
 
         DrawStatCard("工具总数", totalTools.ToString(), ClrAccent,
-            GUILayout.Width(110), GUILayout.Height(60));
+            GUILayout.Width(110), GUILayout.Height(64));
         GUILayout.Space(20);
-        DrawStatCard("分类数", totalCategories.ToString(), new Color(0.35f, 0.75f, 0.45f, 1f),
-            GUILayout.Width(110), GUILayout.Height(60));
+        DrawStatCard("分类数", totalCategories.ToString(), ClrSuccess,
+            GUILayout.Width(110), GUILayout.Height(64));
         GUILayout.Space(20);
-        DrawStatCard("快捷键", "Ctrl+Shift+E", new Color(0.85f, 0.55f, 0.40f, 1f),
-            GUILayout.Width(130), GUILayout.Height(60));
+        DrawStatCard("快捷键", "Ctrl+Shift+E", ClrWarning,
+            GUILayout.Width(150), GUILayout.Height(64));
 
         GUILayout.FlexibleSpace();
         EditorGUILayout.EndHorizontal();
@@ -367,25 +409,31 @@ public partial class UnityToolsHub
 
     private void DrawStatCard(string label, string value, Color accent, params GUILayoutOption[] options)
     {
-        var rect = GUILayoutUtility.GetRect(0, 0, options);
-        // 背景
-        EditorGUI.DrawRect(rect, ClrCardBg);
+        var rect = GUILayoutUtility.GetRect(0, 64, options);
+        // 圆角背景
+        Drawing.DrawRoundedRect(rect, ClrCardBg, 8f);
         // 顶部色条
-        EditorGUI.DrawRect(new Rect(rect.x + 8, rect.y + 2, rect.width - 16, 2), accent);
+        var barRect = new Rect(rect.x + 10, rect.y + 3, rect.width - 20, 3);
+        EditorGUI.DrawRect(barRect, accent);
 
-        // 数值
-        var numRect = new Rect(rect.x, rect.y + 10, rect.width, 28);
+        // 数值 — 长文本用更小字号
+        bool isLongText = value.Length > 5;
+        _styleStatNum.fontSize = isLongText ? 15 : 22;
+        _styleStatNum.normal.textColor = accent;
+        var numRect = new Rect(rect.x + 4, rect.y + 12, rect.width - 8, 30);
         GUI.Label(numRect, value, _styleStatNum);
+        // 恢复字号
+        _styleStatNum.fontSize = 22;
         // 标签
-        var lblRect = new Rect(rect.x, rect.y + 38, rect.width, 16);
+        var lblRect = new Rect(rect.x, rect.y + 42, rect.width, 16);
         GUI.Label(lblRect, label, _styleStatLabel);
     }
 
     private void DrawCategoryOverview()
     {
         var areaWidth = position.width - LeftPanelWidth - SplitterWidth - RightPadding * 2;
-        float cardW = Mathf.Min(160, (areaWidth - 12 * 3) / 4);
-        float cardH = 48;
+        float cardW = Mathf.Min(170, (areaWidth - 12 * 3) / 4);
+        float cardH = 52;
         float spacing = 12;
 
         int cols = Mathf.Max(1, Mathf.FloorToInt((areaWidth + spacing) / (cardW + spacing)));
@@ -406,23 +454,39 @@ public partial class UnityToolsHub
             }
 
             var rect = GUILayoutUtility.GetRect(cardW, cardH, GUILayout.Width(cardW));
-            EditorGUI.DrawRect(rect, ClrCardBg);
+            bool hover = rect.Contains(Event.current.mousePosition);
 
-            // 色条
-            EditorGUI.DrawRect(new Rect(rect.x, rect.y + 6, 3, rect.height - 12), cat.accent);
+            // 圆角背景
+            Drawing.DrawRoundedRect(rect, hover ? ClrItemHover : ClrCardBg, 6f);
+
+            // 左侧色条
+            var barRect = new Rect(rect.x + 6, rect.y + 8, 3, rect.height - 16);
+            EditorGUI.DrawRect(barRect, cat.accent);
 
             // 图标
-            var iconRect = new Rect(rect.x + 12, rect.y + 6, 20, 22);
+            var iconRect = new Rect(rect.x + 14, rect.y + 7, 20, 22);
             _styleCatCardIcon.normal.textColor = cat.accent;
             GUI.Label(iconRect, cat.icon, _styleCatCardIcon);
 
             // 名称
-            var nameRect = new Rect(rect.x + 32, rect.y + 6, rect.width - 38, 18);
+            var nameRect = new Rect(rect.x + 34, rect.y + 7, rect.width - 40, 18);
             GUI.Label(nameRect, cat.name, _styleCatCardName);
 
             // 数量
-            var countRect = new Rect(rect.x + 32, rect.y + 26, rect.width - 38, 14);
+            var countRect = new Rect(rect.x + 34, rect.y + 27, rect.width - 40, 14);
             GUI.Label(countRect, $"{cat.tools.Count} 个工具", _styleCatCardCount);
+
+            // 点击选中分类
+            if (hover && Event.current.type == EventType.MouseDown && Event.current.button == 0)
+            {
+                _selectedCategory = cat;
+                _selectedTool = null;
+                _showCreateForm = false;
+                _showAddToolPanel = false;
+                _showThirdPartyManager = false;
+                _showHiddenManager = false;
+                Event.current.Use();
+            }
 
             GUILayout.Space(spacing);
             col++;
@@ -744,6 +808,28 @@ public partial class UnityToolsHub
             CachedTooltipStyle);
         GUILayout.Space(4);
 
+        GUILayout.Space(10);
+
+        // ── 作者信息 ──────────────────────────────────────
+        GUILayout.Label("作者信息", _styleSectionHeader);
+        GUILayout.Space(4);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label("作者", GUILayout.Width(60));
+        _createAuthor = EditorGUILayout.TextField(_createAuthor, GUILayout.ExpandWidth(true));
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(1);
+        GUILayout.Label("工具作者名称（可选）", CachedTooltipStyle);
+        GUILayout.Space(4);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label("作者链接", GUILayout.Width(60));
+        _createAuthorLink = EditorGUILayout.TextField(_createAuthorLink, GUILayout.ExpandWidth(true));
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(1);
+        GUILayout.Label("作者主页/仓库 URL（可选），点击可跳转", CachedTooltipStyle);
+        GUILayout.Space(4);
+
         EditorGUILayout.EndVertical();
         GUILayout.Space(4);
         EditorGUILayout.EndHorizontal();
@@ -767,7 +853,7 @@ public partial class UnityToolsHub
         var cancelW = Mathf.Max(cancelSize.x + 24, 100);
         var cancelRect = GUILayoutUtility.GetRect(cancelW, 36, GUILayout.Width(cancelW), GUILayout.Height(36));
         bool cancelHover = cancelRect.Contains(Event.current.mousePosition);
-        EditorGUI.DrawRect(cancelRect, cancelHover ? ClrTagBg : ClrCardBg);
+        Drawing.DrawRoundedRect(cancelRect, cancelHover ? ClrItemHover : ClrCardBg, 6f);
         if (GUI.Button(cancelRect, cancelContent, _styleBtnPrimary))
         {
             _showCreateForm = false;
@@ -782,7 +868,7 @@ public partial class UnityToolsHub
         var createBtnH = 36f;
         var createBtnRect2 = GUILayoutUtility.GetRect(createBtnW, createBtnH, GUILayout.Width(createBtnW), GUILayout.Height(createBtnH));
         bool createBtnHover = createBtnRect2.Contains(Event.current.mousePosition);
-        EditorGUI.DrawRect(createBtnRect2, createBtnHover ? ClrBtnHover : ClrBtnNormal);
+        Drawing.DrawRoundedRect(createBtnRect2, createBtnHover ? ClrBtnHover : ClrBtnNormal, 6f);
         if (GUI.Button(createBtnRect2, createContent, _styleBtnPrimary))
         {
             CreateToolFile();
@@ -933,10 +1019,10 @@ public partial class UnityToolsHub
         GUILayout.Space(RightPadding);
 
         var descRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
-        EditorGUI.DrawRect(descRect, ClrCardBg);
+        Drawing.DrawRoundedRect(descRect, ClrCardBg, 8f);
 
         // 卡片左侧色条
-        EditorGUI.DrawRect(new Rect(descRect.x, descRect.y + 8, 3, descRect.height - 16), accent);
+        EditorGUI.DrawRect(new Rect(descRect.x + 2, descRect.y + 8, 3, descRect.height - 16), accent);
 
         GUILayout.Space(8);
         EditorGUILayout.BeginHorizontal();
@@ -959,6 +1045,9 @@ public partial class UnityToolsHub
 
         EditorGUILayout.Space(20);
 
+        // ── 脚本信息 + 作者 ──────────────────────────────
+        DrawScriptInfoSection(tool, accent);
+
         // ── 主操作按钮 ────────────────────────────────────
         if (!string.IsNullOrEmpty(tool.typeName))
         {
@@ -973,7 +1062,7 @@ public partial class UnityToolsHub
             var btnRect = GUILayoutUtility.GetRect(btnW, btnH, GUILayout.Width(btnW), GUILayout.Height(btnH));
 
             bool isHover = btnRect.Contains(Event.current.mousePosition);
-            EditorGUI.DrawRect(btnRect, isHover ? ClrBtnHover : ClrBtnNormal);
+            Drawing.DrawRoundedRect(btnRect, isHover ? ClrBtnHover : ClrBtnNormal, 6f);
 
             if (GUI.Button(btnRect, btnContent, _styleBtnPrimary))
             {
@@ -1000,13 +1089,151 @@ public partial class UnityToolsHub
         DrawQuickActionsSection(tool, accent);
     }
 
+    /// <summary>脚本信息区：脚本名称 + 打开脚本按钮 + 作者/链接</summary>
+    private void DrawScriptInfoSection(ToolEntry tool, Color accent)
+    {
+        // 查找脚本路径（缓存到 tool.scriptPath）
+        if (string.IsNullOrEmpty(tool.scriptPath) && !string.IsNullOrEmpty(tool.typeName))
+            tool.scriptPath = FindScriptPathForType(tool.typeName);
+
+        bool hasScript = !string.IsNullOrEmpty(tool.scriptPath);
+        bool hasAuthor = !string.IsNullOrEmpty(tool.author);
+
+        if (!hasScript && !hasAuthor) return;
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+
+        var sectionRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        Drawing.DrawRoundedRect(sectionRect, new Color(0.14f, 0.14f, 0.17f, 0.6f), 8f);
+
+        GUILayout.Space(8);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(14);
+
+        EditorGUILayout.BeginVertical();
+        GUILayout.Label("📋 脚本信息", _styleSectionHeader);
+        GUILayout.Space(6);
+
+        // 脚本名称 + 打开按钮
+        if (hasScript)
+        {
+            EditorGUILayout.BeginHorizontal();
+
+            // 脚本文件名
+            string fileName = System.IO.Path.GetFileName(tool.scriptPath);
+            GUILayout.Label("📄", GUILayout.Width(20));
+            var scriptLabelStyle = new GUIStyle()
+            {
+                fontSize = 11,
+                normal = { textColor = ClrText },
+                richText = true,
+                wordWrap = false
+            };
+            GUILayout.Label(fileName, scriptLabelStyle, GUILayout.ExpandWidth(true));
+
+            // 打开脚本按钮
+            var openContent = new GUIContent("  打开脚本");
+            var openSize = _styleShortcut.CalcSize(openContent);
+            var openW = openSize.x + 16;
+            var openRect = GUILayoutUtility.GetRect(openW, 24, GUILayout.Width(openW));
+            bool openHover = openRect.Contains(Event.current.mousePosition);
+            EditorGUI.DrawRect(openRect, openHover ? ClrBtnHover : ClrCardBg);
+            CachedBtnFlatSmallCenter.normal.textColor = openHover ? Color.white : ClrText;
+            GUI.Label(openRect, openContent, CachedBtnFlatSmallCenter);
+            if (GUI.Button(openRect, "", GUIStyle.none))
+            {
+                OpenScriptFile(tool.scriptPath);
+            }
+
+            EditorGUILayout.EndHorizontal();
+
+            // 脚本完整路径（灰色小字）
+            GUILayout.Space(2);
+            GUILayout.Label(tool.scriptPath, new GUIStyle()
+            {
+                fontSize = 9,
+                normal = { textColor = ClrTextDim },
+                wordWrap = false
+            });
+        }
+
+        // 作者 + 链接
+        if (hasAuthor)
+        {
+            GUILayout.Space(8);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("✍ 作者:", new GUIStyle()
+            {
+                fontSize = 11,
+                normal = { textColor = ClrTextDim }
+            });
+
+            if (!string.IsNullOrEmpty(tool.authorLink))
+            {
+                // 可点击的作者名
+                var authorContent = new GUIContent(tool.author);
+                var authorStyle = new GUIStyle()
+                {
+                    fontSize = 11,
+                    normal = { textColor = ClrAccent },
+                    hover = { textColor = new Color(ClrAccent.r + 0.1f, ClrAccent.g + 0.1f, ClrAccent.b + 0.1f) }
+                };
+                var authorSize = authorStyle.CalcSize(authorContent);
+                var authorRect = GUILayoutUtility.GetRect(authorSize.x, 20, GUILayout.Width(authorSize.x));
+                bool authorHover = authorRect.Contains(Event.current.mousePosition);
+                if (authorHover)
+                    EditorGUI.DrawRect(new Rect(authorRect.x, authorRect.yMax - 1, authorRect.width, 1), ClrAccent);
+                GUI.Label(authorRect, tool.author, authorStyle);
+                if (GUI.Button(authorRect, "", GUIStyle.none))
+                {
+                    Application.OpenURL(tool.authorLink);
+                }
+
+                GUILayout.Space(8);
+                // 链接图标
+                var linkContent = new GUIContent("🔗");
+                var linkStyle = new GUIStyle()
+                {
+                    fontSize = 11,
+                    normal = { textColor = ClrAccentDim }
+                };
+                GUILayout.Label(linkContent, linkStyle);
+            }
+            else
+            {
+                GUILayout.Label(tool.author, new GUIStyle()
+                {
+                    fontSize = 11,
+                    normal = { textColor = ClrText }
+                });
+            }
+
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.EndVertical();
+
+        GUILayout.Space(4);
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(8);
+
+        EditorGUILayout.EndVertical();
+
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(20);
+    }
+
     private void DrawQuickActionsSection(ToolEntry tool, Color accent)
     {
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
 
         var sectionRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
-        EditorGUI.DrawRect(sectionRect, new Color(0.15f, 0.15f, 0.16f, 0.5f));
+        Drawing.DrawRoundedRect(sectionRect, new Color(0.14f, 0.14f, 0.17f, 0.6f), 8f);
 
         GUILayout.Space(8);
         EditorGUILayout.BeginHorizontal();
@@ -1049,14 +1276,14 @@ public partial class UnityToolsHub
 
     private void DrawFlatButton(string text, Action onClick)
     {
-        var rect = GUILayoutUtility.GetRect(0, 28, GUILayout.ExpandWidth(true));
+        var rect = GUILayoutUtility.GetRect(0, 30, GUILayout.ExpandWidth(true));
         bool hover = rect.Contains(Event.current.mousePosition);
 
         if (hover)
-            EditorGUI.DrawRect(rect, ClrHover);
+            Drawing.DrawRoundedRect(rect, ClrHover, 4f);
 
         // 左侧色点
-        var dotRect = new Rect(rect.x + 4, rect.y + rect.height / 2 - 3, 6, 6);
+        var dotRect = new Rect(rect.x + 6, rect.y + rect.height / 2 - 3, 6, 6);
         GUI.color = ClrAccent;
         GUI.DrawTexture(dotRect, _texWhite, ScaleMode.ScaleToFit);
         GUI.color = Color.white;
@@ -1081,7 +1308,7 @@ public partial class UnityToolsHub
         GUILayout.Space(RightPadding);
 
         var sectionRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
-        EditorGUI.DrawRect(sectionRect, new Color(0.15f, 0.15f, 0.16f, 0.5f));
+        Drawing.DrawRoundedRect(sectionRect, new Color(0.14f, 0.14f, 0.17f, 0.6f), 8f);
 
         GUILayout.Space(8);
         EditorGUILayout.BeginHorizontal();
@@ -1496,7 +1723,7 @@ public partial class UnityToolsHub
                     string name = DeriveToolNameFromClass(c.className);
                     if (AddToolInfoToScript(c, name, "编辑器工具",
                         c.existingDescription ?? $"{name} 编辑器扩展",
-                        "⚙", null, ""))
+                        "⚙", null, "", "", "", false))
                         success++;
                 }
                 Debug.Log($"[UnityToolsHub] 批量添加完成：成功 {success}/{_addToolCandidates.Count}");
@@ -1655,6 +1882,47 @@ public partial class UnityToolsHub
         GUILayout.Label("可选，如 Ctrl+Shift+T，留空则不设", CachedTooltipStyle);
         GUILayout.Space(4);
 
+        GUILayout.Space(10);
+
+        // ── 作者信息 ────────────────────────────────────
+        GUILayout.Label("作者信息", _styleSectionHeader);
+        GUILayout.Space(4);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label("作者", GUILayout.Width(70));
+        _addToolAuthor = EditorGUILayout.TextField(_addToolAuthor, GUILayout.ExpandWidth(true));
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(1);
+        GUILayout.Label("工具作者名称（可选）", CachedTooltipStyle);
+        GUILayout.Space(4);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label("作者链接", GUILayout.Width(70));
+        _addToolAuthorLink = EditorGUILayout.TextField(_addToolAuthorLink, GUILayout.ExpandWidth(true));
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(1);
+        GUILayout.Label("作者主页/仓库 URL（可选），点击可跳转", CachedTooltipStyle);
+        GUILayout.Space(4);
+
+        GUILayout.Space(10);
+
+        // ── 第三方工具 ──────────────────────────────────
+        GUILayout.Label("安全设置", _styleSectionHeader);
+        GUILayout.Space(4);
+
+        EditorGUILayout.BeginHorizontal();
+        _addToolIsThirdParty = EditorGUILayout.Toggle(_addToolIsThirdParty, GUILayout.Width(20));
+        GUILayout.Label("标记为第三方工具", new GUIStyle()
+        {
+            fontSize = 12,
+            normal = { textColor = ClrText }
+        });
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(1);
+        GUILayout.Label("第三方工具默认禁用（不显示在分类列表中），需在管理面板手动启用", CachedTooltipStyle);
+        GUILayout.Space(4);
+
         EditorGUILayout.EndVertical();
         GUILayout.Space(4);
         EditorGUILayout.EndHorizontal();
@@ -1677,7 +1945,7 @@ public partial class UnityToolsHub
         var cancelW = Mathf.Max(cancelSize.x + 24, 100);
         var cancelRect = GUILayoutUtility.GetRect(cancelW, 36, GUILayout.Width(cancelW), GUILayout.Height(36));
         bool cancelHover = cancelRect.Contains(Event.current.mousePosition);
-        EditorGUI.DrawRect(cancelRect, cancelHover ? ClrTagBg : ClrCardBg);
+        Drawing.DrawRoundedRect(cancelRect, cancelHover ? ClrItemHover : ClrCardBg, 6f);
         if (GUI.Button(cancelRect, cancelContent, _styleBtnPrimary))
         {
             _addToolSelectedIndex = -1;
@@ -1691,7 +1959,7 @@ public partial class UnityToolsHub
         var addBtnW = Mathf.Max(addBtnSize.x + 32, 140);
         var addBtnRect = GUILayoutUtility.GetRect(addBtnW, 36, GUILayout.Width(addBtnW), GUILayout.Height(36));
         bool addBtnHover = addBtnRect.Contains(Event.current.mousePosition);
-        EditorGUI.DrawRect(addBtnRect, addBtnHover ? ClrBtnHover : ClrBtnNormal);
+        Drawing.DrawRoundedRect(addBtnRect, addBtnHover ? ClrBtnHover : ClrBtnNormal, 6f);
         if (GUI.Button(addBtnRect, addContent, _styleBtnPrimary))
         {
             // 验证
@@ -1718,7 +1986,10 @@ public partial class UnityToolsHub
                     _addToolDescription.Trim(),
                     _addToolIcon.Trim(),
                     tags,
-                    _addToolShortcut.Trim());
+                    _addToolShortcut.Trim(),
+                    _addToolAuthor.Trim(),
+                    _addToolAuthorLink.Trim(),
+                    _addToolIsThirdParty);
 
                 if (success)
                 {
@@ -1728,6 +1999,9 @@ public partial class UnityToolsHub
                     _addToolName = "";
                     _addToolClassName = "";
                     _addToolDescription = "";
+                    _addToolAuthor = "";
+                    _addToolAuthorLink = "";
+                    _addToolIsThirdParty = false;
 
                     // 刷新工具发现
                     DiscoverTools();
@@ -1758,6 +2032,664 @@ public partial class UnityToolsHub
         EditorGUILayout.EndHorizontal();
         GUILayout.Space(6);
         EditorGUILayout.EndVertical();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(16);
+    }
+    #endregion
+
+    #region 第三方工具管理面板
+    /// <summary>第三方工具管理面板（类似 Unity Package Manager 的左右分栏布局）</summary>
+    private void DrawThirdPartyManagerPanel()
+    {
+        Color accent = new Color(0.80f, 0.55f, 0.90f, 1f);
+
+        EditorGUILayout.Space(6);
+
+        // ── 顶部工具栏：导入按钮 + 导入表单 ──────────────────
+        DrawThirdPartyToolbar(accent);
+
+        // 导入中状态
+        if (_isImporting)
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(RightPadding);
+            EditorGUILayout.HelpBox(_importStatus, MessageType.Info);
+            GUILayout.Space(RightPadding);
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(4);
+        }
+        else if (!string.IsNullOrEmpty(_importStatus))
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(RightPadding);
+            EditorGUILayout.HelpBox(_importStatus, MessageType.Info);
+            GUILayout.Space(RightPadding);
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space(4);
+        }
+
+        if (_thirdPartyRegistry.tools.Count == 0)
+        {
+            // ── 空状态 ──
+            EditorGUILayout.Space(30);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            GUILayout.Label("📦", new GUIStyle() { fontSize = 48, alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = ClrTextDim } }, GUILayout.Width(80), GUILayout.Height(60));
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(8);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            GUILayout.Label("暂无第三方工具", new GUIStyle()
+            {
+                fontSize = 14,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = ClrTextDim }
+            });
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(4);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            GUILayout.Label("通过上方按钮从本地文件夹或 Git URL 导入第三方工具", new GUIStyle()
+            {
+                fontSize = 11,
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = true,
+                normal = { textColor = ClrTextDim }
+            });
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+            return;
+        }
+
+        // ── 左右分栏布局 ──
+        float statsBarHeight = 28f;
+        float toolbarHeight = _showImportForm ? 160f : 44f;
+        float contentHeight = (position.height - toolbarHeight - 60) - statsBarHeight;
+        contentHeight = Mathf.Max(contentHeight, 200f);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+
+        // ── 左侧：工具列表 ──
+        float listWidth = 220f;
+        EditorGUILayout.BeginVertical(GUILayout.Width(listWidth), GUILayout.Height(contentHeight));
+
+        var listHeaderRect = GUILayoutUtility.GetRect(listWidth, 24);
+        EditorGUI.DrawRect(listHeaderRect, new Color(0.13f, 0.13f, 0.14f, 1f));
+        GUI.Label(new Rect(listHeaderRect.x + 10, listHeaderRect.y, listHeaderRect.width - 20, listHeaderRect.height),
+            "工具列表", new GUIStyle()
+            {
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = ClrTextBright }
+            });
+
+        _thirdPartyListScroll = EditorGUILayout.BeginScrollView(_thirdPartyListScroll);
+
+        for (int i = 0; i < _thirdPartyRegistry.tools.Count; i++)
+        {
+            var state = _thirdPartyRegistry.tools[i];
+            bool isSelected = i == _thirdPartySelectedIndex;
+
+            var rowRect = GUILayoutUtility.GetRect(0, 44, GUILayout.ExpandWidth(true));
+            bool rowHover = rowRect.Contains(Event.current.mousePosition);
+
+            if (isSelected)
+            {
+                EditorGUI.DrawRect(rowRect, ClrSelection);
+                EditorGUI.DrawRect(new Rect(rowRect.x, rowRect.y + 4, 3, rowRect.height - 8), accent);
+            }
+            else if (rowHover)
+            {
+                EditorGUI.DrawRect(rowRect, ClrHover);
+            }
+
+            // 状态指示灯
+            var dotRect = new Rect(rowRect.x + 8, rowRect.y + 8, 8, 8);
+            Color dotColor = state.isEnabled ? new Color(0.35f, 0.85f, 0.45f, 1f) : new Color(0.85f, 0.35f, 0.35f, 1f);
+            EditorGUI.DrawRect(dotRect, dotColor);
+
+            // 工具名
+            var nameRect = new Rect(rowRect.x + 22, rowRect.y + 4, rowRect.width - 30, 18);
+            GUI.Label(nameRect, state.toolName, isSelected ? _styleToolItemSelected : _styleToolItem);
+
+            // 来源标签
+            string sourceLabel = "";
+            Color sourceColor = ClrTextDim;
+            if (state.importSource == "git") { sourceLabel = "Git"; sourceColor = new Color(0.40f, 0.65f, 0.90f, 1f); }
+            else if (state.importSource == "local") { sourceLabel = "本地"; sourceColor = new Color(0.35f, 0.75f, 0.45f, 1f); }
+            else if (state.importSource == "manual") { sourceLabel = "手动"; sourceColor = ClrTextDim; }
+
+            if (!string.IsNullOrEmpty(sourceLabel))
+            {
+                var srcContent = new GUIContent(sourceLabel);
+                var srcSize = _styleTag.CalcSize(srcContent);
+                var srcRect = new Rect(rowRect.xMax - srcSize.x - 20, rowRect.y + 5, srcSize.x + 12, 16);
+                EditorGUI.DrawRect(srcRect, new Color(sourceColor.r, sourceColor.g, sourceColor.b, 0.15f));
+                var srcStyle = new GUIStyle(_styleTag) { normal = { textColor = sourceColor }, fontSize = 9 };
+                GUI.Label(srcRect, sourceLabel, srcStyle);
+            }
+
+            // 作者
+            var authorRect = new Rect(rowRect.x + 22, rowRect.y + 22, rowRect.width - 30, 12);
+            GUI.Label(authorRect, string.IsNullOrEmpty(state.author) ? "(未知作者)" : state.author, new GUIStyle()
+            {
+                fontSize = 9,
+                normal = { textColor = ClrTextDim }
+            });
+
+            if (GUI.Button(rowRect, "", GUIStyle.none))
+            {
+                _thirdPartySelectedIndex = i;
+            }
+        }
+
+        EditorGUILayout.EndScrollView();
+        EditorGUILayout.EndVertical();
+
+        // ── 分隔线 ──
+        var splitterRect = GUILayoutUtility.GetRect(1, contentHeight, GUILayout.Width(1));
+        EditorGUI.DrawRect(splitterRect, ClrDivider);
+
+        // ── 右侧：详情 ──
+        EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true), GUILayout.Height(contentHeight));
+
+        _thirdPartyMgrScroll = EditorGUILayout.BeginScrollView(_thirdPartyMgrScroll);
+
+        if (_thirdPartySelectedIndex >= 0 && _thirdPartySelectedIndex < _thirdPartyRegistry.tools.Count)
+        {
+            DrawThirdPartyToolDetails(_thirdPartyRegistry.tools[_thirdPartySelectedIndex], accent);
+        }
+        else
+        {
+            GUILayout.Space(60);
+            GUILayout.Label("← 从左侧选择一个工具查看详情", new GUIStyle()
+            {
+                fontSize = 12,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = ClrTextDim }
+            });
+        }
+
+        EditorGUILayout.EndScrollView();
+        EditorGUILayout.EndVertical();
+
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        // ── 底部统计栏 ──
+        EditorGUILayout.Space(4);
+        var statsRect = GUILayoutUtility.GetRect(0, statsBarHeight, GUILayout.ExpandWidth(true));
+        EditorGUI.DrawRect(statsRect, new Color(0.13f, 0.13f, 0.14f, 1f));
+        EditorGUI.DrawRect(new Rect(statsRect.x, statsRect.y, statsRect.width, 1), ClrDivider);
+
+        int total = _thirdPartyRegistry.tools.Count;
+        int enabled = _thirdPartyRegistry.EnabledCount;
+        int disabled = total - enabled;
+
+        var statsStyle = new GUIStyle()
+        {
+            fontSize = 11,
+            alignment = TextAnchor.MiddleLeft,
+            normal = { textColor = ClrTextDim },
+            richText = true
+        };
+        GUI.Label(new Rect(statsRect.x + RightPadding, statsRect.y, statsRect.width - RightPadding * 2, statsBarHeight),
+            $"共 {total} 个第三方工具  ·  <color=#5BB56B>已启用 {enabled}</color>  ·  <color=#D9534F>已禁用 {disabled}</color>",
+            statsStyle);
+    }
+
+    /// <summary>顶部工具栏：导入按钮 + 展开式导入表单</summary>
+    private void DrawThirdPartyToolbar(Color accent)
+    {
+        // 按钮栏
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+
+        // ＋ 从本地导入
+        var localBtnContent = new GUIContent("  ＋ 从本地导入");
+        var localBtnSize = _styleBtnPrimary.CalcSize(localBtnContent);
+        var localBtnW = Mathf.Max(localBtnSize.x + 20, 120);
+        var localBtnRect = GUILayoutUtility.GetRect(localBtnW, 28, GUILayout.Width(localBtnW), GUILayout.Height(28));
+        bool localHover = localBtnRect.Contains(Event.current.mousePosition);
+        EditorGUI.DrawRect(localBtnRect, localHover ? ClrBtnHover : ClrBtnNormal);
+        if (GUI.Button(localBtnRect, localBtnContent, _styleBtnPrimary))
+        {
+            _showImportForm = !_showImportForm || _importSourceIndex != 0;
+            _importSourceIndex = 0;
+            _importStatus = "";
+        }
+
+        GUILayout.Space(8);
+
+        // ＋ 从 Git 导入
+        var gitBtnContent = new GUIContent("  ＋ 从 Git 导入");
+        var gitBtnSize = _styleBtnPrimary.CalcSize(gitBtnContent);
+        var gitBtnW = Mathf.Max(gitBtnSize.x + 20, 120);
+        var gitBtnRect = GUILayoutUtility.GetRect(gitBtnW, 28, GUILayout.Width(gitBtnW), GUILayout.Height(28));
+        bool gitHover = gitBtnRect.Contains(Event.current.mousePosition);
+        EditorGUI.DrawRect(gitBtnRect, gitHover ? ClrBtnHover : ClrBtnNormal);
+        if (GUI.Button(gitBtnRect, gitBtnContent, _styleBtnPrimary))
+        {
+            _showImportForm = !_showImportForm || _importSourceIndex != 1;
+            _importSourceIndex = 1;
+            _importStatus = "";
+        }
+
+        GUILayout.FlexibleSpace();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        // ── 导入表单 ──
+        if (_showImportForm)
+        {
+            EditorGUILayout.Space(4);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(RightPadding);
+
+            var formRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+            Drawing.DrawRoundedRect(formRect, ClrCardBg, 8f);
+            EditorGUI.DrawRect(new Rect(formRect.x + 2, formRect.y + 8, 3, formRect.height - 16), accent);
+
+            GUILayout.Space(8);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(14);
+            EditorGUILayout.BeginVertical();
+
+            if (_importSourceIndex == 0)
+            {
+                // 本地导入表单
+                GUILayout.Label("从本地导入", _styleSectionHeader);
+                GUILayout.Space(4);
+
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label("路径", GUILayout.Width(50));
+                _importLocalPath = EditorGUILayout.TextField(_importLocalPath, GUILayout.ExpandWidth(true));
+                if (GUILayout.Button("浏览...", GUILayout.Width(60)))
+                {
+                    var selected = EditorUtility.OpenFolderPanel("选择工具包目录", "", "");
+                    if (!string.IsNullOrEmpty(selected))
+                        _importLocalPath = selected;
+                }
+                EditorGUILayout.EndHorizontal();
+                GUILayout.Space(1);
+                GUILayout.Label("选择含 package.json 的 UPM 包目录或含 .cs 文件的目录", CachedTooltipStyle);
+                GUILayout.Space(4);
+            }
+            else
+            {
+                // Git 导入表单
+                GUILayout.Label("从 Git 导入", _styleSectionHeader);
+                GUILayout.Space(4);
+
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label("Git URL", GUILayout.Width(60));
+                _importGitUrl = EditorGUILayout.TextField(_importGitUrl, GUILayout.ExpandWidth(true));
+                EditorGUILayout.EndHorizontal();
+                GUILayout.Space(1);
+                GUILayout.Label("如 https://github.com/user/repo.git 或 git@github.com:user/repo.git", CachedTooltipStyle);
+                GUILayout.Space(4);
+            }
+
+            // 通用字段
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("工具名", GUILayout.Width(60));
+            _importToolName = EditorGUILayout.TextField(_importToolName, GUILayout.ExpandWidth(true));
+            EditorGUILayout.EndHorizontal();
+            GUILayout.Space(1);
+            GUILayout.Label("可选，留空则自动从路径/URL 推导", CachedTooltipStyle);
+            GUILayout.Space(4);
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("作者", GUILayout.Width(60));
+            _importAuthor = EditorGUILayout.TextField(_importAuthor, GUILayout.ExpandWidth(true));
+            EditorGUILayout.EndHorizontal();
+            GUILayout.Space(4);
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("作者链接", GUILayout.Width(60));
+            _importAuthorLink = EditorGUILayout.TextField(_importAuthorLink, GUILayout.ExpandWidth(true));
+            EditorGUILayout.EndHorizontal();
+            GUILayout.Space(8);
+
+            // 操作按钮
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+
+            // 取消
+            var cancelContent = new GUIContent("  取消");
+            var cancelSize = _styleBtnPrimary.CalcSize(cancelContent);
+            var cancelW = Mathf.Max(cancelSize.x + 20, 80);
+            var cancelRect = GUILayoutUtility.GetRect(cancelW, 28, GUILayout.Width(cancelW), GUILayout.Height(28));
+            bool cancelHover = cancelRect.Contains(Event.current.mousePosition);
+            Drawing.DrawRoundedRect(cancelRect, cancelHover ? ClrItemHover : ClrCardBg, 4f);
+            if (GUI.Button(cancelRect, cancelContent, _styleBtnPrimary))
+            {
+                _showImportForm = false;
+                _importStatus = "";
+            }
+
+            GUILayout.Space(8);
+
+            // 导入
+            string importLabel = _isImporting ? "  导入中..." : "  导入";
+            var importContent = new GUIContent(importLabel);
+            var importSize = _styleBtnPrimary.CalcSize(importContent);
+            var importW = Mathf.Max(importSize.x + 20, 100);
+            var importRect = GUILayoutUtility.GetRect(importW, 28, GUILayout.Width(importW), GUILayout.Height(28));
+            bool importHover = importRect.Contains(Event.current.mousePosition);
+            Drawing.DrawRoundedRect(importRect, importHover ? ClrBtnHover : ClrBtnNormal, 4f);
+            GUI.enabled = !_isImporting;
+            if (GUI.Button(importRect, importContent, _styleBtnPrimary))
+            {
+                _importStatus = "";
+                if (_importSourceIndex == 0)
+                    ImportThirdPartyFromLocal(_importLocalPath, _importToolName, _importAuthor, _importAuthorLink);
+                else
+                    ImportThirdPartyFromGit(_importGitUrl, _importToolName, _importAuthor, _importAuthorLink);
+            }
+            GUI.enabled = true;
+
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.EndVertical();
+            GUILayout.Space(4);
+            EditorGUILayout.EndHorizontal();
+            GUILayout.Space(8);
+
+            EditorGUILayout.EndVertical();
+            GUILayout.Space(RightPadding);
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.Space(4);
+    }
+
+    /// <summary>绘制第三方工具详情面板</summary>
+    private void DrawThirdPartyToolDetails(ThirdPartyToolState state, Color accent)
+    {
+        EditorGUILayout.Space(12);
+
+        // ── 工具名称 + 状态标签 ──
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        GUILayout.Label(state.toolName, _styleRightTitle);
+
+        // 来源标签
+        string sourceLabel = "";
+        Color sourceColor = ClrTextDim;
+        if (state.importSource == "git") { sourceLabel = "Git"; sourceColor = new Color(0.40f, 0.65f, 0.90f, 1f); }
+        else if (state.importSource == "local") { sourceLabel = "本地"; sourceColor = new Color(0.35f, 0.75f, 0.45f, 1f); }
+        else if (state.importSource == "manual") { sourceLabel = "手动"; sourceColor = ClrTextDim; }
+
+        if (!string.IsNullOrEmpty(sourceLabel))
+        {
+            var srcContent = new GUIContent(sourceLabel);
+            var srcSize = _styleTag.CalcSize(srcContent);
+            var srcRect = GUILayoutUtility.GetRect(srcSize.x + 16, srcSize.y + 6, GUILayout.Width(srcSize.x + 16));
+            EditorGUI.DrawRect(srcRect, new Color(sourceColor.r, sourceColor.g, sourceColor.b, 0.2f));
+            var srcStyle = new GUIStyle(_styleTag) { normal = { textColor = sourceColor } };
+            GUI.Label(srcRect, sourceLabel, srcStyle);
+            GUILayout.Space(4);
+        }
+
+        // 状态标签
+        var statusContent = new GUIContent(state.isEnabled ? "已启用" : "已禁用");
+        var statusSize = _styleTag.CalcSize(statusContent);
+        var statusRect = GUILayoutUtility.GetRect(statusSize.x + 16, statusSize.y + 6,
+            GUILayout.Width(statusSize.x + 16));
+        Color statusColor = state.isEnabled ? new Color(0.2f, 0.5f, 0.3f, 0.6f) : new Color(0.5f, 0.2f, 0.2f, 0.6f);
+        EditorGUI.DrawRect(statusRect, statusColor);
+        GUI.Label(statusRect, state.isEnabled ? "已启用" : "已禁用", _styleTag);
+
+        GUILayout.FlexibleSpace();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(12);
+
+        // ── 信息卡片 ──
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+
+        var cardRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        Drawing.DrawRoundedRect(cardRect, ClrCardBg, 8f);
+        EditorGUI.DrawRect(new Rect(cardRect.x + 2, cardRect.y + 8, 3, cardRect.height - 16), accent);
+
+        GUILayout.Space(8);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(14);
+        EditorGUILayout.BeginVertical();
+
+        // 作者
+        GUILayout.Label("作者", _styleSectionHeader);
+        GUILayout.Space(2);
+        if (!string.IsNullOrEmpty(state.authorLink))
+        {
+            EditorGUILayout.BeginHorizontal();
+            var authorStyle = new GUIStyle()
+            {
+                fontSize = 12,
+                normal = { textColor = ClrAccent },
+                hover = { textColor = new Color(ClrAccent.r + 0.1f, ClrAccent.g + 0.1f, ClrAccent.b + 0.1f) }
+            };
+            var authorContent = new GUIContent(state.author);
+            var authorSize = authorStyle.CalcSize(authorContent);
+            var authorRect = GUILayoutUtility.GetRect(authorSize.x, 20, GUILayout.Width(authorSize.x));
+            bool authorHover = authorRect.Contains(Event.current.mousePosition);
+            if (authorHover)
+                EditorGUI.DrawRect(new Rect(authorRect.x, authorRect.yMax - 1, authorRect.width, 1), ClrAccent);
+            GUI.Label(authorRect, state.author, authorStyle);
+            if (GUI.Button(authorRect, "", GUIStyle.none))
+                Application.OpenURL(state.authorLink);
+
+            GUILayout.Space(8);
+            GUILayout.Label("🔗", new GUIStyle() { fontSize = 11, normal = { textColor = ClrAccentDim } });
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
+        else
+        {
+            GUILayout.Label(string.IsNullOrEmpty(state.author) ? "(未设置)" : state.author, _styleDescription);
+        }
+
+        GUILayout.Space(8);
+
+        // 来源信息
+        if (!string.IsNullOrEmpty(state.importSource))
+        {
+            GUILayout.Label("导入来源", _styleSectionHeader);
+            GUILayout.Space(2);
+            if (state.importSource == "git" && !string.IsNullOrEmpty(state.gitUrl))
+            {
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label(state.gitUrl, new GUIStyle()
+                {
+                    fontSize = 11,
+                    normal = { textColor = ClrText },
+                    wordWrap = false
+                }, GUILayout.ExpandWidth(true));
+
+                // 打开链接按钮
+                var openContent = new GUIContent("  打开");
+                var openSize = _styleShortcut.CalcSize(openContent);
+                var openW = openSize.x + 16;
+                var openRect = GUILayoutUtility.GetRect(openW, 22, GUILayout.Width(openW));
+                bool openHover = openRect.Contains(Event.current.mousePosition);
+                EditorGUI.DrawRect(openRect, openHover ? ClrBtnHover : ClrCardBg);
+                CachedBtnFlatSmallCenter.normal.textColor = openHover ? Color.white : ClrText;
+                GUI.Label(openRect, openContent, CachedBtnFlatSmallCenter);
+                if (GUI.Button(openRect, "", GUIStyle.none))
+                    Application.OpenURL(state.gitUrl);
+                EditorGUILayout.EndHorizontal();
+            }
+            else if (state.importSource == "local" && !string.IsNullOrEmpty(state.packagePath))
+            {
+                GUILayout.Label(state.packagePath, new GUIStyle()
+                {
+                    fontSize = 11,
+                    normal = { textColor = ClrText },
+                    wordWrap = false
+                });
+            }
+            else
+            {
+                GUILayout.Label("手动添加", _styleDescription);
+            }
+            GUILayout.Space(8);
+        }
+
+        // 安装路径
+        if (!string.IsNullOrEmpty(state.installPath))
+        {
+            GUILayout.Label("安装路径", _styleSectionHeader);
+            GUILayout.Space(2);
+            GUILayout.Label(state.installPath, new GUIStyle()
+            {
+                fontSize = 10,
+                normal = { textColor = ClrTextDim },
+                wordWrap = false
+            });
+            GUILayout.Space(8);
+        }
+
+        // 分类
+        GUILayout.Label("分类", _styleSectionHeader);
+        GUILayout.Space(2);
+        GUILayout.Label(string.IsNullOrEmpty(state.category) ? "(未设置)" : state.category, _styleDescription);
+
+        GUILayout.Space(8);
+
+        // 描述
+        GUILayout.Label("功能描述", _styleSectionHeader);
+        GUILayout.Space(2);
+        GUILayout.Label(string.IsNullOrEmpty(state.description) ? "(无描述)" : state.description, _styleDescription);
+
+        GUILayout.Space(8);
+
+        // 脚本路径
+        if (!string.IsNullOrEmpty(state.scriptPath))
+        {
+            GUILayout.Label("脚本路径", _styleSectionHeader);
+            GUILayout.Space(2);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(state.scriptPath, new GUIStyle()
+            {
+                fontSize = 10,
+                normal = { textColor = ClrTextDim },
+                wordWrap = false
+            }, GUILayout.ExpandWidth(true));
+
+            var openContent = new GUIContent("  打开");
+            var openSize = _styleShortcut.CalcSize(openContent);
+            var openW = openSize.x + 16;
+            var openRect = GUILayoutUtility.GetRect(openW, 22, GUILayout.Width(openW));
+            bool openHover = openRect.Contains(Event.current.mousePosition);
+            EditorGUI.DrawRect(openRect, openHover ? ClrBtnHover : ClrCardBg);
+            CachedBtnFlatSmallCenter.normal.textColor = openHover ? Color.white : ClrText;
+            GUI.Label(openRect, openContent, CachedBtnFlatSmallCenter);
+            if (GUI.Button(openRect, "", GUIStyle.none))
+                OpenScriptFile(state.scriptPath);
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(4);
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(8);
+        EditorGUILayout.EndVertical();
+
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(20);
+
+        // ── 操作按钮 ──
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        GUILayout.FlexibleSpace();
+
+        // 启用/禁用按钮
+        string toggleLabel = state.isEnabled ? "  禁用工具" : "  启用工具";
+        var toggleContent = new GUIContent(toggleLabel);
+        var toggleSize = _styleBtnPrimary.CalcSize(toggleContent);
+        var toggleW = Mathf.Max(toggleSize.x + 32, 140);
+        var toggleRect = GUILayoutUtility.GetRect(toggleW, 36, GUILayout.Width(toggleW), GUILayout.Height(36));
+        bool toggleHover = toggleRect.Contains(Event.current.mousePosition);
+        Color toggleBg = state.isEnabled
+            ? (toggleHover ? new Color(0.6f, 0.2f, 0.2f, 0.8f) : new Color(0.4f, 0.15f, 0.15f, 0.6f))
+            : (toggleHover ? ClrBtnHover : ClrBtnNormal);
+        Drawing.DrawRoundedRect(toggleRect, toggleBg, 6f);
+        if (GUI.Button(toggleRect, toggleContent, _styleBtnPrimary))
+        {
+            ToggleThirdPartyToolEnabled(state.typeName);
+            Repaint();
+        }
+
+        GUILayout.Space(12);
+
+        // 卸载按钮
+        string uninstallLabel = state.importSource == "git" || state.importSource == "local" ? "  卸载" : "  移除记录";
+        var uninstallContent = new GUIContent(uninstallLabel);
+        var uninstallSize = _styleBtnPrimary.CalcSize(uninstallContent);
+        var uninstallW = Mathf.Max(uninstallSize.x + 24, 120);
+        var uninstallRect = GUILayoutUtility.GetRect(uninstallW, 36, GUILayout.Width(uninstallW), GUILayout.Height(36));
+        bool uninstallHover = uninstallRect.Contains(Event.current.mousePosition);
+        Drawing.DrawRoundedRect(uninstallRect, uninstallHover ? ClrItemHover : ClrCardBg, 6f);
+        if (GUI.Button(uninstallRect, uninstallContent, new GUIStyle(_styleBtnPrimary)
+        {
+            normal = { textColor = ClrTextBright }
+        }))
+        {
+            string action = state.importSource == "git" || state.importSource == "local" ? "卸载" : "移除";
+            string extraHint = state.importSource == "git" || state.importSource == "local"
+                ? "\n\n卸载将从 Unity Package Manager 中移除此包。"
+                : "\n\n此操作仅移除 Hub 的管理记录，不会删除脚本文件。";
+
+            if (EditorUtility.DisplayDialog($"确认{action}",
+                $"确定要{action}「{state.toolName}」吗？{extraHint}",
+                "确定", "取消"))
+            {
+                UninstallThirdPartyTool(state);
+                _thirdPartySelectedIndex = -1;
+            }
+        }
+
+        GUILayout.FlexibleSpace();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(8);
+
+        // ── 安全提示 ──
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        if (!state.isEnabled)
+        {
+            EditorGUILayout.HelpBox(
+                "此工具当前已禁用。\n" +
+                "• 禁用状态下不会显示在 Hub 分类列表中\n" +
+                "• 无法通过 Hub 打开\n" +
+                "• 点击「启用工具」可启用",
+                MessageType.Warning);
+        }
+        else
+        {
+            EditorGUILayout.HelpBox(
+                "此工具已启用，正常显示在分类列表中。\n" +
+                "如需暂时停用，点击「禁用工具」。",
+                MessageType.Info);
+        }
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
 

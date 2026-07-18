@@ -48,12 +48,56 @@ public partial class UnityToolsHub
                     icon       = string.IsNullOrEmpty(attr.Icon) ? GetCategoryIcon(attr.Category) : attr.Icon,
                     tags       = attr.Tags,
                     shortcut   = attr.Shortcut,
-                    priority   = attr.Priority
+                    priority   = attr.Priority,
+                    author     = attr.Author ?? "",
+                    authorLink = attr.AuthorLink ?? "",
+                    isThirdParty = attr.IsThirdParty
                 });
             }
         }
 
-        // ── 2. 按分类分组 ────────────────────────────────
+        // ── 2. 同步第三方工具注册表 + 过滤禁用的 ────────────
+        bool registryDirty = false;
+        for (int i = discovered.Count - 1; i >= 0; i--)
+        {
+            var t = discovered[i];
+            if (!t.isThirdParty) continue;
+
+            // 同步到注册表
+            var existing = _thirdPartyRegistry.Find(t.typeName);
+            if (existing == null)
+            {
+                _thirdPartyRegistry.AddOrUpdate(new ThirdPartyToolState
+                {
+                    typeName = t.typeName,
+                    toolName = t.name,
+                    author = t.author,
+                    authorLink = t.authorLink,
+                    description = t.description,
+                    category = t.category,
+                    scriptPath = "",
+                    isEnabled = false // 默认禁用
+                });
+                registryDirty = true;
+            }
+            else
+            {
+                // 更新元数据但保留 isEnabled
+                existing.toolName = t.name;
+                existing.author = t.author;
+                existing.authorLink = t.authorLink;
+                existing.description = t.description;
+                existing.category = t.category;
+                registryDirty = true;
+            }
+
+            // 未启用的第三方工具不加入分类列表
+            if (!_thirdPartyRegistry.IsEnabled(t.typeName))
+                discovered.RemoveAt(i);
+        }
+        if (registryDirty) SaveThirdPartyRegistry();
+
+        // ── 3. 按分类分组 ────────────────────────────────
         // 排序规则：使用频率高的分类在前（频率相同则按 Priority）
         var groups = discovered.GroupBy(t => t.category)
             .OrderByDescending(g => _usageStats.GetCategoryCount(g.Key))
@@ -87,10 +131,10 @@ public partial class UnityToolsHub
             _defaultCategoryNames.Add(catName);
         }
 
-        // ── 3. 特殊工具（无 EditorWindow 类，仅菜单项）──
+        // ── 4. 特殊工具（无 EditorWindow 类，仅菜单项）──
         AddSpecialTools();
 
-        // ── 4. 构建工具索引 + 缓存总数 + 快捷键索引（避免每帧遍历）──
+        // ── 5. 构建工具索引 + 缓存总数 + 快捷键索引（避免每帧遍历）──
         _toolIndex.Clear();
         _shortcutIndex.Clear();
         _totalToolCount = 0;
@@ -217,6 +261,41 @@ public partial class UnityToolsHub
 
         _typeCache[typeName] = type;
         return type;
+    }
+
+    /// <summary>通过 MonoScript 查找类型对应的脚本资产路径</summary>
+    private static string FindScriptPathForType(string typeName)
+    {
+        if (string.IsNullOrEmpty(typeName)) return null;
+        var type = FindType(typeName);
+        if (type == null) return null;
+
+        var monoScripts = Resources.FindObjectsOfTypeAll<MonoScript>();
+        foreach (var ms in monoScripts)
+        {
+            if (ms.GetClass() == type)
+            {
+                string path = AssetDatabase.GetAssetPath(ms);
+                if (!string.IsNullOrEmpty(path) && path.EndsWith(".cs"))
+                    return path;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>在代码编辑器中打开脚本文件</summary>
+    private static void OpenScriptFile(string scriptPath)
+    {
+        if (string.IsNullOrEmpty(scriptPath) || !scriptPath.EndsWith(".cs"))
+        {
+            Debug.LogWarning("[UnityToolsHub] 无法打开脚本：路径无效");
+            return;
+        }
+        var asset = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
+        if (asset != null)
+            AssetDatabase.OpenAsset(asset);
+        else
+            Debug.LogWarning($"[UnityToolsHub] 无法加载脚本资产：{scriptPath}");
     }
     #endregion
 
@@ -388,6 +467,16 @@ public partial class UnityToolsHub
             content = content.Replace("\n        Shortcut = \"Ctrl+Shift+T\",\n", "\n");
         content = content.Replace("Priority = 99)", "Priority = 0)");
 
+        // 作者/链接
+        if (!string.IsNullOrWhiteSpace(_createAuthor))
+            content = content.Replace(
+                "// Author = \"你的名字\",           // 可选: 工具作者",
+                $"Author = \"{EscapeCSharpString(_createAuthor.Trim())}\",");
+        if (!string.IsNullOrWhiteSpace(_createAuthorLink))
+            content = content.Replace(
+                "// AuthorLink = \"https://...\",     // 可选: 作者主页/仓库链接",
+                $"AuthorLink = \"{EscapeCSharpString(_createAuthorLink.Trim())}\",");
+
         // 移除模板注释块（前25行左右）
         var lines = content.Split('\n').ToList();
         int start = lines.FindIndex(l => l.Contains("═══════════"));
@@ -426,6 +515,8 @@ public partial class UnityToolsHub
         _createIcon = "⚙";
         _createTags = "";
         _createShortcut = "";
+        _createAuthor = "";
+        _createAuthorLink = "";
     }
 
     /// <summary>
@@ -694,7 +785,8 @@ public partial class UnityToolsHub
     /// 在 class 声明行的上方插入特性声明。
     /// </summary>
     private bool AddToolInfoToScript(AddToolCandidate candidate, string toolName,
-        string category, string description, string icon, string[] tags, string shortcut)
+        string category, string description, string icon, string[] tags, string shortcut,
+        string author = "", string authorLink = "", bool isThirdParty = false)
     {
         try
         {
@@ -744,6 +836,15 @@ public partial class UnityToolsHub
             if (!string.IsNullOrEmpty(shortcut))
                 attrParts.Add($"Shortcut = \"{shortcut}\"");
 
+            if (!string.IsNullOrEmpty(author))
+                attrParts.Add($"Author = \"{EscapeCSharpString(author)}\"");
+
+            if (!string.IsNullOrEmpty(authorLink))
+                attrParts.Add($"AuthorLink = \"{EscapeCSharpString(authorLink)}\"");
+
+            if (isThirdParty)
+                attrParts.Add("IsThirdParty = true");
+
             string attrLine;
             if (attrParts.Count <= 2)
             {
@@ -773,6 +874,25 @@ public partial class UnityToolsHub
             AssetDatabase.Refresh();
 
             Debug.Log($"[UnityToolsHub] 已为 {candidate.className} 添加 [ToolInfo] 特性：{candidate.filePath}");
+
+            // 第三方工具注册到注册表（默认禁用）
+            if (isThirdParty)
+            {
+                _thirdPartyRegistry.AddOrUpdate(new ThirdPartyToolState
+                {
+                    typeName = candidate.fullTypeName,
+                    toolName = toolName,
+                    author = author ?? "",
+                    authorLink = authorLink ?? "",
+                    description = description,
+                    category = category,
+                    scriptPath = candidate.filePath,
+                    isEnabled = false
+                });
+                SaveThirdPartyRegistry();
+                Debug.Log($"[UnityToolsHub] 第三方工具已注册（默认禁用）：{candidate.className}");
+            }
+
             return true;
         }
         catch (System.Exception ex)
@@ -817,6 +937,9 @@ public partial class UnityToolsHub
         _addToolIcon = "⚙";
         _addToolTags = "";
         _addToolShortcut = "";
+        _addToolAuthor = "";
+        _addToolAuthorLink = "";
+        _addToolIsThirdParty = false;
     }
 
     /// <summary>从类名反推可读的工具名（驼峰 → 空格分隔）</summary>
@@ -835,6 +958,335 @@ public partial class UnityToolsHub
         string result = sb.ToString();
         result = result.Replace("Window", "").Replace("Editor", "").Replace("Tool", "").Trim();
         return string.IsNullOrEmpty(result) ? className : result;
+    }
+    #endregion
+
+    #region 第三方工具导入与卸载
+    /// <summary>判断字符串是否为 Git URL</summary>
+    private static bool IsGitUrl(string value)
+    {
+        return value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("git@", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>从 Git URL 导入第三方工具包</summary>
+    private void ImportThirdPartyFromGit(string gitUrl, string toolName, string author, string authorLink)
+    {
+        if (string.IsNullOrWhiteSpace(gitUrl))
+        {
+            _importStatus = "Git URL 不能为空";
+            return;
+        }
+
+        // 去重检查
+        var existing = _thirdPartyRegistry.FindByGitUrl(gitUrl);
+        if (existing != null)
+        {
+            _importStatus = $"该 Git URL 已导入：{existing.toolName}";
+            return;
+        }
+
+        _isImporting = true;
+        _importStatus = "正在从 Git 导入，请稍候...";
+
+        // 使用 Unity PackageManager Client.Add(gitUrl)
+        var request = UnityEditor.PackageManager.Client.Add(gitUrl);
+        WaitForPackageRequest(request, gitUrl, (success) =>
+        {
+            _isImporting = false;
+            if (success)
+            {
+                // 注册到 ThirdPartyToolRegistry
+                var state = new ThirdPartyToolState
+                {
+                    typeName = gitUrl,  // Git 导入在编译前用 URL 作为临时标识
+                    toolName = string.IsNullOrWhiteSpace(toolName) ? System.IO.Path.GetFileNameWithoutExtension(gitUrl) : toolName,
+                    author = author ?? "",
+                    authorLink = authorLink ?? "",
+                    description = "从 Git 导入的第三方工具",
+                    category = "第三方工具",
+                    scriptPath = "",
+                    isEnabled = false,
+                    importSource = "git",
+                    gitUrl = gitUrl,
+                    packagePath = gitUrl,
+                    installPath = "",
+                    isInstalled = true
+                };
+                _thirdPartyRegistry.AddOrUpdate(state);
+                SaveThirdPartyRegistry();
+
+                _importStatus = $"✅ 已从 Git 导入：{state.toolName}";
+                _showImportForm = false;
+                _importGitUrl = "";
+                _importToolName = "";
+
+                // 等待编译完成后重新发现工具
+                DiscoverTools();
+                Repaint();
+            }
+            else
+            {
+                _importStatus = "❌ Git 导入失败，请检查 URL 或网络连接";
+            }
+        });
+    }
+
+    /// <summary>从本地路径导入第三方工具包</summary>
+    private void ImportThirdPartyFromLocal(string localPath, string toolName, string author, string authorLink)
+    {
+        if (string.IsNullOrWhiteSpace(localPath))
+        {
+            _importStatus = "本地路径不能为空";
+            return;
+        }
+
+        // 规范化路径
+        localPath = localPath.Replace('\\', '/');
+
+        // 判断是 UPM 包（含 package.json）还是纯 .cs 文件
+        bool isDirectory = System.IO.Directory.Exists(localPath);
+        bool isFile = System.IO.File.Exists(localPath) && localPath.EndsWith(".cs");
+        bool hasPackageJson = isDirectory && System.IO.File.Exists(System.IO.Path.Combine(localPath, "package.json"));
+
+        if (!isDirectory && !isFile)
+        {
+            _importStatus = "路径无效：不是有效的目录或 .cs 文件";
+            return;
+        }
+
+        // 去重
+        var existing = _thirdPartyRegistry.FindByName(toolName);
+        if (existing != null && existing.importSource == "local" && existing.packagePath == localPath)
+        {
+            _importStatus = $"该路径已导入：{existing.toolName}";
+            return;
+        }
+
+        if (hasPackageJson)
+        {
+            // UPM 包：使用 Client.Add("file:" + path)
+            _isImporting = true;
+            _importStatus = "正在导入本地 UPM 包...";
+
+            string identifier = "file:" + localPath;
+            var request = UnityEditor.PackageManager.Client.Add(identifier);
+            WaitForPackageRequest(request, localPath, (success) =>
+            {
+                _isImporting = false;
+                if (success)
+                {
+                    var state = new ThirdPartyToolState
+                    {
+                        typeName = localPath,
+                        toolName = string.IsNullOrWhiteSpace(toolName) ? System.IO.Path.GetFileName(localPath) : toolName,
+                        author = author ?? "",
+                        authorLink = authorLink ?? "",
+                        description = "从本地导入的第三方工具包",
+                        category = "第三方工具",
+                        scriptPath = "",
+                        isEnabled = false,
+                        importSource = "local",
+                        gitUrl = "",
+                        packagePath = localPath,
+                        installPath = localPath,
+                        isInstalled = true
+                    };
+                    _thirdPartyRegistry.AddOrUpdate(state);
+                    SaveThirdPartyRegistry();
+
+                    _importStatus = $"✅ 已导入本地包：{state.toolName}";
+                    _showImportForm = false;
+                    _importLocalPath = "";
+                    _importToolName = "";
+
+                    DiscoverTools();
+                    Repaint();
+                }
+                else
+                {
+                    _importStatus = "❌ 本地包导入失败，请检查 package.json";
+                }
+            });
+        }
+        else if (isFile)
+        {
+            // 纯 .cs 文件：注册记录，等待用户手动添加 [ToolInfo]
+            var state = new ThirdPartyToolState
+            {
+                typeName = localPath,
+                toolName = string.IsNullOrWhiteSpace(toolName) ? System.IO.Path.GetFileNameWithoutExtension(localPath) : toolName,
+                author = author ?? "",
+                authorLink = authorLink ?? "",
+                description = "从本地导入的脚本文件",
+                category = "第三方工具",
+                scriptPath = localPath,
+                isEnabled = false,
+                importSource = "local",
+                gitUrl = "",
+                packagePath = localPath,
+                installPath = localPath,
+                isInstalled = true
+            };
+            _thirdPartyRegistry.AddOrUpdate(state);
+            SaveThirdPartyRegistry();
+
+            _importStatus = $"✅ 已导入脚本：{state.toolName}";
+            _showImportForm = false;
+            _importLocalPath = "";
+            _importToolName = "";
+            DiscoverTools();
+            Repaint();
+        }
+        else if (isDirectory)
+        {
+            // 目录但无 package.json：扫描 .cs 文件
+            _importStatus = "目录中未找到 package.json，将作为脚本目录导入";
+
+            var state = new ThirdPartyToolState
+            {
+                typeName = localPath,
+                toolName = string.IsNullOrWhiteSpace(toolName) ? System.IO.Path.GetFileName(localPath) : toolName,
+                author = author ?? "",
+                authorLink = authorLink ?? "",
+                description = "从本地目录导入",
+                category = "第三方工具",
+                scriptPath = "",
+                isEnabled = false,
+                importSource = "local",
+                gitUrl = "",
+                packagePath = localPath,
+                installPath = localPath,
+                isInstalled = true
+            };
+            _thirdPartyRegistry.AddOrUpdate(state);
+            SaveThirdPartyRegistry();
+
+            _importStatus = $"✅ 已导入目录：{state.toolName}";
+            _showImportForm = false;
+            _importLocalPath = "";
+            _importToolName = "";
+            DiscoverTools();
+            Repaint();
+        }
+    }
+
+    /// <summary>异步等待 PackageManager 请求完成</summary>
+    private void WaitForPackageRequest(UnityEditor.PackageManager.Requests.Request request, string identifier, Action<bool> onComplete)
+    {
+        EditorApplication.CallbackFunction onUpdate = null;
+        onUpdate = () =>
+        {
+            if (request.IsCompleted)
+            {
+                bool success = request.Status == UnityEditor.PackageManager.StatusCode.Success;
+                if (!success)
+                {
+                    var error = (request as UnityEditor.PackageManager.Requests.AddRequest)?.Error
+                             ?? (request as UnityEditor.PackageManager.Requests.RemoveRequest)?.Error;
+                    Debug.LogError($"[UnityToolsHub] 包操作失败: {identifier}\n{error?.message}");
+                }
+                EditorApplication.update -= onUpdate;
+                onComplete?.Invoke(success);
+            }
+        };
+        EditorApplication.update += onUpdate;
+    }
+
+    /// <summary>卸载第三方工具包</summary>
+    private void UninstallThirdPartyTool(ThirdPartyToolState state)
+    {
+        if (state == null) return;
+
+        // Git / UPM 本地包：使用 Client.Remove
+        if (state.importSource == "git" || (state.importSource == "local" && !string.IsNullOrEmpty(state.packagePath) && state.packagePath != state.scriptPath))
+        {
+            // 从 packagePath 提取 UPM 包名
+            string packageName = state.packagePath;
+            if (IsGitUrl(packageName))
+            {
+                // Git URL 包：需要从已安装的包列表中查找包名
+                var listRequest = UnityEditor.PackageManager.Client.List(true);
+                EditorApplication.CallbackFunction onUpdate = null;
+                onUpdate = () =>
+                {
+                    if (listRequest.IsCompleted)
+                    {
+                        EditorApplication.update -= onUpdate;
+                        if (listRequest.Status == UnityEditor.PackageManager.StatusCode.Success)
+                        {
+                            // 找到匹配的包
+                            string foundName = null;
+                            foreach (var pkg in listRequest.Result)
+                            {
+                                if (pkg.source == UnityEditor.PackageManager.PackageSource.Git
+                                    && !string.IsNullOrEmpty(pkg.resolvedPath)
+                                    && state.gitUrl != null
+                                    && pkg.packageId != null
+                                    && pkg.packageId.Contains(state.gitUrl))
+                                {
+                                    foundName = pkg.name;
+                                    break;
+                                }
+                            }
+                            if (!string.IsNullOrEmpty(foundName))
+                            {
+                                var removeReq = UnityEditor.PackageManager.Client.Remove(foundName);
+                                WaitForPackageRequest(removeReq, foundName, (success) =>
+                                {
+                                    if (success)
+                                    {
+                                        _thirdPartyRegistry.Remove(state.typeName);
+                                        SaveThirdPartyRegistry();
+                                        DiscoverTools();
+                                        Repaint();
+                                    }
+                                });
+                            }
+                            else
+                            {
+                                // 找不到包名，仅从注册表移除
+                                _thirdPartyRegistry.Remove(state.typeName);
+                                SaveThirdPartyRegistry();
+                                DiscoverTools();
+                                Repaint();
+                            }
+                        }
+                    }
+                };
+                EditorApplication.update += onUpdate;
+            }
+            else if (packageName.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            {
+                // 本地 file: 包
+                var removeReq = UnityEditor.PackageManager.Client.Remove(packageName);
+                WaitForPackageRequest(removeReq, packageName, (success) =>
+                {
+                    _thirdPartyRegistry.Remove(state.typeName);
+                    SaveThirdPartyRegistry();
+                    DiscoverTools();
+                    Repaint();
+                });
+            }
+            else
+            {
+                // 无法确定包名，仅从注册表移除
+                _thirdPartyRegistry.Remove(state.typeName);
+                SaveThirdPartyRegistry();
+                DiscoverTools();
+                Repaint();
+            }
+        }
+        else
+        {
+            // 纯 .cs 文件或手动导入：仅从注册表移除（不删除文件）
+            _thirdPartyRegistry.Remove(state.typeName);
+            SaveThirdPartyRegistry();
+            DiscoverTools();
+            Repaint();
+        }
     }
     #endregion
 }

@@ -29,6 +29,13 @@ public partial class UnityToolsHub
     private static Color ClrBtnNormal    => Theme.ClrBtnNormal;
     private static Color ClrBtnHover     => Theme.ClrBtnHover;
 
+    // ── Palette 直引（Theme 未别名但 Hub 面板需要的颜色）──
+    private static Color ClrSearchBg     => Palette.SearchBg;
+    private static Color ClrItemHover    => Palette.ItemHover;
+    private static Color ClrItemBg      => Palette.ItemBg;
+    private static Color ClrSuccess      => Palette.Success;
+    private static Color ClrWarning      => Palette.Warning;
+
     // ── 样式别名（原 Styles.cs，统一引用 HubStyles）──
 
     private GUIStyle _styleCategoryHeader   => Styles.CategoryHeader;

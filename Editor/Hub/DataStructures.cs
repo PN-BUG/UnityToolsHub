@@ -22,6 +22,10 @@ public partial class UnityToolsHub
         public string[] tags;         // 功能标签
         public string shortcut;       // 快捷键提示
         public int priority;          // 排序优先级（发现时缓存）
+        public string author;         // 工具作者
+        public string authorLink;      // 作者链接/主页 URL
+        public bool isThirdParty;      // 是否第三方工具
+        public string scriptPath;      // 脚本资产路径 (Assets/.../*.cs)
     }
     #endregion
 
@@ -272,6 +276,123 @@ public partial class UnityToolsHub
             if (hiddenCategories.Contains(categoryName)) hiddenCategories.Remove(categoryName);
             else hiddenCategories.Add(categoryName);
             _indexDirty = true;
+        }
+    }
+    #endregion
+
+    #region 第三方工具状态注册表
+    /// <summary>单个第三方工具的持久化状态</summary>
+    [Serializable]
+    private class ThirdPartyToolState
+    {
+        public string typeName;       // 完整类型名
+        public string toolName;       // 显示名
+        public string author;
+        public string authorLink;
+        public string description;
+        public string category;
+        public string scriptPath;     // 脚本资产路径
+        public bool isEnabled;        // false=禁用(默认), true=已启用
+
+        // ── 导入来源信息 ──
+        public string importSource;    // "local" | "git" | "manual"
+        public string gitUrl;          // Git 仓库 URL
+        public string packagePath;     // 本地包路径 或 UPM 包名
+        public string installPath;    // 安装后的实际路径
+        public bool isInstalled;       // 是否已安装
+    }
+
+    /// <summary>第三方工具注册表（可序列化存储到 EditorPrefs）</summary>
+    [Serializable]
+    private class ThirdPartyToolRegistry
+    {
+        public List<ThirdPartyToolState> tools = new List<ThirdPartyToolState>();
+
+        [NonSerialized] private Dictionary<string, ThirdPartyToolState> _index;
+        [NonSerialized] private bool _indexDirty = true;
+
+        private void RebuildIndexIfNeeded()
+        {
+            if (!_indexDirty) return;
+            _index = new Dictionary<string, ThirdPartyToolState>(tools.Count);
+            foreach (var t in tools)
+                if (!string.IsNullOrEmpty(t.typeName))
+                    _index[t.typeName] = t;
+            _indexDirty = false;
+        }
+
+        public ThirdPartyToolState Find(string typeName)
+        {
+            if (string.IsNullOrEmpty(typeName)) return null;
+            RebuildIndexIfNeeded();
+            return _index.TryGetValue(typeName, out var s) ? s : null;
+        }
+
+        public ThirdPartyToolState FindByName(string toolName)
+        {
+            if (string.IsNullOrEmpty(toolName)) return null;
+            foreach (var t in tools)
+                if (t.toolName == toolName) return t;
+            return null;
+        }
+
+        public ThirdPartyToolState FindByGitUrl(string gitUrl)
+        {
+            if (string.IsNullOrEmpty(gitUrl)) return null;
+            foreach (var t in tools)
+                if (t.gitUrl == gitUrl) return t;
+            return null;
+        }
+
+        public bool IsEnabled(string typeName)
+        {
+            var s = Find(typeName);
+            return s?.isEnabled ?? false;
+        }
+
+        public void SetEnabled(string typeName, bool enabled)
+        {
+            var s = Find(typeName);
+            if (s != null) { s.isEnabled = enabled; _indexDirty = true; }
+        }
+
+        public void AddOrUpdate(ThirdPartyToolState state)
+        {
+            if (state == null || string.IsNullOrEmpty(state.typeName)) return;
+            var existing = Find(state.typeName);
+            if (existing != null)
+            {
+                existing.toolName = state.toolName;
+                existing.author = state.author;
+                existing.authorLink = state.authorLink;
+                existing.description = state.description;
+                existing.category = state.category;
+                existing.scriptPath = state.scriptPath;
+                // 保留已有 isEnabled 状态
+            }
+            else
+            {
+                tools.Add(state);
+                _indexDirty = true;
+            }
+        }
+
+        public bool Remove(string typeName)
+        {
+            var s = Find(typeName);
+            if (s != null) { tools.Remove(s); _indexDirty = true; return true; }
+            return false;
+        }
+
+        public int EnabledCount
+        {
+            get
+            {
+                int c = 0;
+                foreach (var t in tools)
+                    if (t.isEnabled) c++;
+                return c;
+            }
         }
     }
     #endregion

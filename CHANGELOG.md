@@ -1,6 +1,30 @@
 # Changelog
 All notable changes to this package will be documented in this file.
 
+## [1.3.0] - 2026-07-18
+### Added
+- 第三方工具管理系统：类似 Unity Package Manager 的左右分栏管理界面
+- 从 Git URL 导入第三方工具包：通过 `PackageManager.Client.Add(gitUrl)` 异步安装
+- 从本地路径导入第三方工具包：支持 UPM 包（含 package.json）和纯 .cs 文件
+- 第三方工具卸载：Git/本地 UPM 包通过 `Client.Remove` 卸载，手动添加仅移除记录
+- 第三方工具安全模型：`IsThirdParty=true` 的工具默认禁用，需手动启用后显示
+- 工具详情页脚本信息区：显示脚本名称、路径，支持一键打开脚本
+- `[ToolInfo]` 新增 `Author`、`AuthorLink`、`IsThirdParty` 属性
+- 创建工具表单支持填写作者和作者链接
+- 添加工具表单支持填写作者、作者链接和第三方工具标记
+- 顶部 toggle 栏新增第三个标签「📦 第三方工具」
+- 导入表单：Git URL / 本地路径输入、工具名、作者、作者链接
+- 来源标签：左侧列表每项显示来源类型（Git/本地/手动）
+- 第三方工具包目录结构规范文档
+
+### Changed
+- ThirdPartyToolState 扩展：新增 importSource、gitUrl、packagePath、installPath、isInstalled 字段
+- ThirdPartyToolRegistry 新增 FindByName、FindByGitUrl 去重方法
+- DrawThirdPartyManagerPanel 重写为 UPM 风格管理界面
+- DrawThirdPartyToolDetails 新增来源信息、安装路径、卸载按钮
+- _NewToolTemplate.cs.txt 模板新增 Author/AuthorLink/IsThirdParty 注释
+- ToolInfoAttribute 注释新增第三方工具包规范
+
 ## [1.2.0] - 2026-07-18
 ### Added
 - 文件夹式分类管理：支持拖拽工具切换分类、拖拽分类排序

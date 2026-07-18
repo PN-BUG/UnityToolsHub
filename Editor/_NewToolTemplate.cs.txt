@@ -23,6 +23,10 @@ using UnityEngine;
 ///    - Tags               : 搜索标签，用于搜索过滤
 ///    - Shortcut           : 快捷键提示（仅显示用）
 ///    - Priority           : 排序优先级，数字越小越靠前
+///    - Author             : 工具作者（可选）
+///    - AuthorLink         : 作者主页/仓库 URL（可选）
+///    - IsThirdParty       : 是否第三方工具，默认 false
+///                           第三方工具默认禁用，需在管理面板手动启用
 ///
 ///  ── 已有分类 ─────────────────────────────────────────────
 ///  框架初始化 | 数据管理 | 面板管理 | 资产工具 | 编辑器工具
@@ -51,7 +55,11 @@ using UnityEngine;
     Icon = "🔧",
     Tags = new[] { "示例", "模板" },
     Shortcut = "Ctrl+Shift+T",
-    Priority = 99)]
+    Priority = 99,
+    // Author = "你的名字",           // 可选: 工具作者
+    // AuthorLink = "https://...",     // 可选: 作者主页/仓库链接
+    // IsThirdParty = false            // 可选: 是否第三方工具(默认禁用)
+)]
 public class MyToolTemplate : ToolEditorWindow
 {
     // ── 配置属性（重写基类）─────────────────────────────────
