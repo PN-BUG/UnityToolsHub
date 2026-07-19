@@ -596,10 +596,10 @@ public class EncodingConverterSafe : NodinEditorWindow
         return enc.EncodingName;
     }
 
-    /// <summary>供 Odin ValueDropdown 使用的目标编码列表</summary>
-    private static ValueDropdownList<string> GetTargetEncodings()
+    /// <summary>供 ValueDropdown 使用的目标编码列表</summary>
+    private static Nodin.ValueDropdownList<string> GetTargetEncodings()
     {
-        return new ValueDropdownList<string>
+        return new Nodin.ValueDropdownList<string>
         {
             { "UTF-8 (无 BOM) — 推荐", "UTF-8 (无 BOM)" },
             { "UTF-8 (有 BOM)", "UTF-8 (有 BOM)" },
@@ -614,10 +614,10 @@ public class EncodingConverterSafe : NodinEditorWindow
         };
     }
 
-    /// <summary>供 Odin ValueDropdown 使用的源编码列表</summary>
-    private static ValueDropdownList<string> GetSourceEncodings()
+    /// <summary>供 ValueDropdown 使用的源编码列表</summary>
+    private static Nodin.ValueDropdownList<string> GetSourceEncodings()
     {
-        return new ValueDropdownList<string>
+        return new Nodin.ValueDropdownList<string>
         {
             { "GB18030 (简体中文) — 默认", "GB18030 (简体中文)" },
             { "UTF-8 (无 BOM)", "UTF-8 (无 BOM)" },
