@@ -845,6 +845,18 @@ public class GitPackageSwitcher : ToolEditorWindow
                     info.isLocal = true;
                     info.localFolder = ParseLocalFolder(value);
                     info.gitUrl = TryFindGitUrlFromLock(pkgName);
+
+                    // Fallback: 从 .git/config 读取远程 URL
+                    if (string.IsNullOrEmpty(info.gitUrl))
+                    {
+                        string localDir = Path.Combine(_projectRoot, "Packages", info.localFolder);
+                        info.gitUrl = TryReadGitConfig(localDir);
+                    }
+
+                    // Fallback: 从元数据文件读取
+                    if (string.IsNullOrEmpty(info.gitUrl))
+                        info.gitUrl = TryReadGitMeta(info.localFolder);
+
                     if (!string.IsNullOrEmpty(info.gitUrl))
                         ParseGitUrl(info.gitUrl, info);
                 }
@@ -897,21 +909,17 @@ public class GitPackageSwitcher : ToolEditorWindow
                     // 如果 lock 文件没有，尝试从 .git/config 读取远程 URL
                     if (string.IsNullOrEmpty(info.gitUrl))
                     {
-                        string gitConfig = Path.Combine(dir, ".git", "config");
-                        if (File.Exists(gitConfig))
-                        {
-                            try
-                            {
-                                string cfg = File.ReadAllText(gitConfig);
-                                var urlMatch = Regex.Match(cfg, "url\\s*=\\s*(.+)");
-                                if (urlMatch.Success)
-                                {
-                                    info.gitUrl = urlMatch.Groups[1].Value.Trim();
-                                    ParseGitUrl(info.gitUrl, info);
-                                }
-                            }
-                            catch { }
-                        }
+                        info.gitUrl = TryReadGitConfig(dir);
+                        if (!string.IsNullOrEmpty(info.gitUrl))
+                            ParseGitUrl(info.gitUrl, info);
+                    }
+
+                    // Fallback: 从元数据文件读取
+                    if (string.IsNullOrEmpty(info.gitUrl))
+                    {
+                        info.gitUrl = TryReadGitMeta(folderName);
+                        if (!string.IsNullOrEmpty(info.gitUrl))
+                            ParseGitUrl(info.gitUrl, info);
                     }
 
                     _packages.Add(info);
@@ -979,6 +987,9 @@ public class GitPackageSwitcher : ToolEditorWindow
             string manifest = File.ReadAllText(_manifestPath);
             string oldValue = $"\"{pkg.packageName}\": \"{pkg.gitUrl}\"";
             string newValue = $"\"{pkg.packageName}\": \"file:{pkg.localFolder}\"";
+
+            // 保存 Git 元数据，便于后续恢复 Git URL
+            SaveGitMeta(pkg.localFolder, pkg.gitUrl, pkg.branch);
 
             if (manifest.Contains(oldValue))
             {
@@ -1255,6 +1266,54 @@ public class GitPackageSwitcher : ToolEditorWindow
         if (folder.Contains("\\"))
             folder = folder.Substring(folder.LastIndexOf('\\') + 1);
         return folder;
+    }
+
+    /// <summary>从 .git/config 读取远程 URL</summary>
+    private static string TryReadGitConfig(string localDir)
+    {
+        string gitConfig = Path.Combine(localDir, ".git", "config");
+        if (!File.Exists(gitConfig)) return null;
+
+        try
+        {
+            string cfg = File.ReadAllText(gitConfig);
+            var urlMatch = Regex.Match(cfg, "url\\s*=\\s*(.+)");
+            if (urlMatch.Success)
+                return urlMatch.Groups[1].Value.Trim();
+        }
+        catch { }
+
+        return null;
+    }
+
+    /// <summary>保存 Git 元数据到本地包目录</summary>
+    private void SaveGitMeta(string localFolder, string gitUrl, string branch)
+    {
+        try
+        {
+            string metaPath = Path.Combine(_projectRoot, "Packages", localFolder, ".gitswitcher.json");
+            string json = $"{{\"gitUrl\":\"{gitUrl}\",\"branch\":\"{branch ?? "main"}\"}}";
+            File.WriteAllText(metaPath, json);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"保存 Git 元数据失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>从本地包目录读取 Git 元数据</summary>
+    private string TryReadGitMeta(string localFolder)
+    {
+        try
+        {
+            string metaPath = Path.Combine(_projectRoot, "Packages", localFolder, ".gitswitcher.json");
+            if (!File.Exists(metaPath)) return null;
+
+            string json = File.ReadAllText(metaPath);
+            var urlMatch = Regex.Match(json, "\"gitUrl\"\\s*:\\s*\"([^\"]+)\"");
+            return urlMatch.Success ? urlMatch.Groups[1].Value : null;
+        }
+        catch { return null; }
     }
 
     /// <summary>从 packages-lock.json 尝试查找原始 Git URL</summary>
