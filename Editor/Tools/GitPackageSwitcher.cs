@@ -74,9 +74,14 @@ public class GitPackageSwitcher : ToolEditorWindow
     private List<ScannedPackage> _cachePackages = new List<ScannedPackage>();
     private bool _showCacheResults;
 
+    // 过滤模式
+    private enum PackageFilter { All, Git, Local }
+    private PackageFilter _filter = PackageFilter.All;
+
     // 样式缓存
     private GUIStyle _cardStyle;
     private GUIStyle _tagStyle;
+    private GUIStyle _coloredBtnStyle;
 
     private class ScannedPackage
     {
@@ -155,30 +160,68 @@ public class GitPackageSwitcher : ToolEditorWindow
                 alignment = TextAnchor.MiddleCenter,
             };
         }
+        if (_coloredBtnStyle == null)
+        {
+            // 透明背景样式，让 DrawRect 的颜色能正常显示
+            _coloredBtnStyle = new GUIStyle
+            {
+                fontSize = 12,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white, background = null },
+                hover = { textColor = Color.white, background = null },
+                active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = null },
+                padding = new RectOffset(6, 6, 4, 4),
+            };
+        }
     }
+
+    /// <summary>绘制带颜色的按钮（透明背景，颜色由 DrawRect 提供）</summary>
+    private bool DrawColoredBtn(string text, Color normal, Color hover, params GUILayoutOption[] options)
+    {
+        var rect = GUILayoutUtility.GetRect(GUIContent.none, _coloredBtnStyle, options);
+        bool isHover = rect.Contains(Event.current.mousePosition);
+        EditorGUI.DrawRect(rect, isHover ? hover : normal);
+        return GUI.Button(rect, text, _coloredBtnStyle);
+    }
+
+    private bool BtnSuccess(string text, params GUILayoutOption[] opts) => DrawColoredBtn(text, ClrBtnSuccess, ClrBtnSuccessHov, opts);
+    private bool BtnPrimary(string text, params GUILayoutOption[] opts) => DrawColoredBtn(text, ClrBtnNormal, ClrBtnHover, opts);
+    private bool BtnWarn(string text, params GUILayoutOption[] opts)    => DrawColoredBtn(text, ClrBtnWarn, ClrBtnWarnHov, opts);
+    private bool BtnDanger(string text, params GUILayoutOption[] opts)  => DrawColoredBtn(text, ClrBtnDanger, ClrBtnDangerHov, opts);
 
     // ─── 顶部工具栏 ───────────────────────────────────────────
 
     private void DrawToolbarArea()
     {
+        // 第一行：主要操作按钮
         EditorGUILayout.BeginHorizontal();
         {
-            if (DrawPrimaryButton("🔄 刷新列表", GUILayout.Width(100)))
+            if (BtnSuccess("🔄 刷新列表", GUILayout.Width(100)))
                 RefreshPackageList();
 
-            if (DrawSuccessButton("➕ 添加 Git 包", GUILayout.Width(110)))
+            GUILayout.Space(6);
+
+            if (BtnSuccess("➕ 添加 Git 包", GUILayout.Width(110)))
                 _showAddForm = !_showAddForm;
 
-            if (DrawWarnButton("📂 扫描目录", GUILayout.Width(100)))
+            GUILayout.Space(6);
+
+            if (BtnWarn("📂 扫描目录", GUILayout.Width(100)))
                 PickAndScanDirectory();
 
-            if (DrawDangerButton("🔍 检测缓存", GUILayout.Width(100)))
+            GUILayout.Space(6);
+
+            if (BtnDanger("🔍 检测缓存", GUILayout.Width(100)))
                 ScanPackageCache();
 
             GUILayout.FlexibleSpace();
 
             if (DrawFlatButton("全选", GUILayout.Width(50)))
                 _packages.ForEach(p => p.isSelected = true);
+
+            GUILayout.Space(4);
+
             if (DrawFlatButton("全不选", GUILayout.Width(60)))
                 _packages.ForEach(p => p.isSelected = false);
         }
@@ -324,7 +367,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                     }
                     else
                     {
-                        if (DrawSuccessButton("➕ 添加为本地包", GUILayout.Width(120)))
+                        if (BtnSuccess("➕ 添加为本地包", GUILayout.Width(120)))
                             AddLocalPackage(pkg);
                     }
                 }
@@ -338,7 +381,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                 var selected = _scannedPackages.Where(s => s.isSelected && !_packages.Any(ep => ep.packageName == s.name)).ToList();
                 if (selected.Count > 0)
                 {
-                    if (DrawSuccessButton($"批量添加 {selected.Count} 个", GUILayout.Width(140)))
+                    if (BtnSuccess($"批量添加 {selected.Count} 个", GUILayout.Width(140)))
                     {
                         foreach (var pkg in selected)
                             AddLocalPackage(pkg);
@@ -540,7 +583,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                     }
                     else
                     {
-                        if (DrawSuccessButton("➕ 添加到 manifest", GUILayout.Width(130)))
+                        if (BtnSuccess("➕ 添加到 manifest", GUILayout.Width(130)))
                             AddCachePackageToManifest(pkg);
                     }
                 }
@@ -555,7 +598,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                 EditorGUILayout.Space(4);
                 EditorGUILayout.BeginHorizontal();
                 {
-                    if (DrawSuccessButton($"批量添加 {selected.Count} 个到 manifest", GUILayout.Width(200)))
+                    if (BtnSuccess($"批量添加 {selected.Count} 个到 manifest", GUILayout.Width(200)))
                     {
                         foreach (var pkg in selected)
                             AddCachePackageToManifest(pkg);
@@ -606,11 +649,57 @@ public class GitPackageSwitcher : ToolEditorWindow
 
     private void DrawPackageList()
     {
+        // ── 过滤标签栏 ──
+        EditorGUILayout.BeginHorizontal();
+        {
+            GUILayout.Label("分类:", StLabel, GUILayout.Width(36));
+
+            int gitCount = _packages.Count(p => p.isGit);
+            int localCount = _packages.Count(p => p.isLocal);
+
+            if (_filter == PackageFilter.All)
+                DrawTag($"📦 全部 ({_packages.Count})", ClrAccent);
+            else if (DrawFlatButton($"📦 全部 ({_packages.Count})", GUILayout.Width(90)))
+                _filter = PackageFilter.All;
+
+            GUILayout.Space(4);
+
+            if (_filter == PackageFilter.Git)
+                DrawTag($"🔀 Git ({gitCount})", ClrCatOrange);
+            else if (DrawFlatButton($"🔀 Git ({gitCount})", GUILayout.Width(80)))
+                _filter = PackageFilter.Git;
+
+            GUILayout.Space(4);
+
+            if (_filter == PackageFilter.Local)
+                DrawTag($"📂 本地 ({localCount})", ClrCatGreen);
+            else if (DrawFlatButton($"📂 本地 ({localCount})", GUILayout.Width(90)))
+                _filter = PackageFilter.Local;
+
+            GUILayout.FlexibleSpace();
+        }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(6);
+
+        // ── 按过滤分组显示 ──
         _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
 
-        for (int i = 0; i < _packages.Count; i++)
+        var gitPackages = _packages.Where(p => p.isGit).ToList();
+        var localPackages = _packages.Where(p => p.isLocal).ToList();
+
+        if (gitPackages.Count > 0 && _filter != PackageFilter.Local)
         {
-            DrawPackageRow(_packages[i]);
+            DrawSection($"Git 模式 ({gitPackages.Count})", ClrCatOrange);
+            foreach (var pkg in gitPackages)
+                DrawPackageRow(pkg);
+        }
+
+        if (localPackages.Count > 0 && _filter != PackageFilter.Git)
+        {
+            EditorGUILayout.Space(4);
+            DrawSection($"本地模式 ({localPackages.Count})", ClrCatGreen);
+            foreach (var pkg in localPackages)
+                DrawPackageRow(pkg);
         }
 
         EditorGUILayout.EndScrollView();
@@ -657,8 +746,6 @@ public class GitPackageSwitcher : ToolEditorWindow
                 }
                 EditorGUILayout.EndVertical();
 
-                GUILayout.FlexibleSpace();
-
                 // 操作按钮
                 DrawPackageActions(pkg);
             }
@@ -674,29 +761,47 @@ public class GitPackageSwitcher : ToolEditorWindow
         {
             if (pkg.isGit)
             {
-                if (DrawSuccessButton("📥 切换到本地", GUILayout.Width(130), GUILayout.Height(24)))
+                if (BtnSuccess("📥 切换到本地", GUILayout.Width(200), GUILayout.Height(24)))
                     SwitchToLocal(pkg);
+
+                GUILayout.Space(4);
+
+                if (BtnDanger("🗑 从 manifest 移除", GUILayout.Width(200), GUILayout.Height(22)))
+                    RemoveFromManifest(pkg);
             }
             else if (pkg.isLocal)
             {
                 EditorGUILayout.BeginHorizontal();
                 {
-                    if (DrawPrimaryButton("📤 切回 Git", GUILayout.Width(100), GUILayout.Height(24)))
+                    if (BtnPrimary("📤 切回 Git", GUILayout.Width(96), GUILayout.Height(24)))
                         SwitchToGit(pkg);
 
-                    if (DrawWarnButton("🔄 Git 更新", GUILayout.Width(100), GUILayout.Height(24)))
+                    GUILayout.Space(4);
+
+                    if (BtnWarn("🔄 Git 更新", GUILayout.Width(96), GUILayout.Height(24)))
                         PullFromGit(pkg);
                 }
                 EditorGUILayout.EndHorizontal();
 
-                if (DrawFlatButton("📂 打开目录", GUILayout.Width(100), GUILayout.Height(22)))
+                GUILayout.Space(4);
+
+                EditorGUILayout.BeginHorizontal();
                 {
-                    string localPath = Path.Combine(_projectRoot, "Packages", pkg.localFolder);
-                    if (Directory.Exists(localPath))
-                        EditorUtility.RevealInFinder(localPath);
-                    else
-                        ShowStatus($"目录不存在: {localPath}", MessageType.Warning);
+                    if (BtnPrimary("📂 打开目录", GUILayout.Width(96), GUILayout.Height(22)))
+                    {
+                        string localPath = Path.Combine(_projectRoot, "Packages", pkg.localFolder);
+                        if (Directory.Exists(localPath))
+                            EditorUtility.RevealInFinder(localPath);
+                        else
+                            ShowStatus($"目录不存在: {localPath}", MessageType.Warning);
+                    }
+
+                    GUILayout.Space(4);
+
+                    if (BtnDanger("🗑 删除本地", GUILayout.Width(96), GUILayout.Height(22)))
+                        DeleteLocalPackage(pkg);
                 }
+                EditorGUILayout.EndHorizontal();
             }
         }
         EditorGUILayout.EndVertical();
@@ -725,13 +830,19 @@ public class GitPackageSwitcher : ToolEditorWindow
         {
             GUILayout.Label($"已选 {selected.Count} 个包", StLabel, GUILayout.Width(100));
 
-            if (DrawSuccessButton("📥 批量切换到本地", GUILayout.Width(140)))
+            GUILayout.Space(8);
+
+            if (BtnSuccess("📥 批量切换到本地", GUILayout.Width(140)))
                 SwitchBatchToLocal(selected);
 
-            if (DrawPrimaryButton("📤 批量切回 Git", GUILayout.Width(130)))
+            GUILayout.Space(6);
+
+            if (BtnPrimary("📤 批量切回 Git", GUILayout.Width(130)))
                 SwitchBatchToGit(selected);
 
-            if (DrawWarnButton("🔄 批量 Git 更新", GUILayout.Width(130)))
+            GUILayout.Space(6);
+
+            if (BtnWarn("🔄 批量 Git 更新", GUILayout.Width(130)))
                 PullBatchFromGit(selected);
         }
         EditorGUILayout.EndHorizontal();
@@ -754,7 +865,7 @@ public class GitPackageSwitcher : ToolEditorWindow
             EditorGUILayout.Space(4);
             EditorGUILayout.BeginHorizontal();
             {
-                if (DrawSuccessButton("确认添加", GUILayout.Width(100)))
+                if (BtnSuccess("确认添加", GUILayout.Width(100)))
                     AddGitPackage(_newGitUrl, _newPackageName, _newLocalFolder);
                 if (DrawFlatButton("取消", GUILayout.Width(60)))
                     ClearAddForm();
@@ -1117,6 +1228,102 @@ public class GitPackageSwitcher : ToolEditorWindow
     }
 
     // ─── 批量操作 ─────────────────────────────────────────────
+
+    /// <summary>从 manifest.json 中移除包条目（不删除本地文件）</summary>
+    private void RemoveFromManifest(PackageInfo pkg)
+    {
+        if (!EditorUtility.DisplayDialog("确认移除",
+            $"确定要从 manifest.json 中移除 {pkg.packageName} 吗？\n\n这只会移除 manifest 中的引用，不会删除本地文件。",
+            "移除", "取消"))
+            return;
+
+        try
+        {
+            string manifest = File.ReadAllText(_manifestPath);
+            string entryPattern = $"\"{Regex.Escape(pkg.packageName)}\"\\s*:\\s*\"[^\"]*\"\\s*,?";
+            manifest = Regex.Replace(manifest, entryPattern, "");
+            manifest = Regex.Replace(manifest, @",\s*,", ",");
+            File.WriteAllText(_manifestPath, manifest);
+
+            ShowStatus($"✅ 已从 manifest 移除: {pkg.packageName}", MessageType.Info);
+            RefreshPackageList();
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"移除失败: {ex.Message}", MessageType.Error);
+            Debug.LogException(ex);
+        }
+    }
+
+    /// <summary>删除本地包目录（清除只读属性后删除）</summary>
+    private void DeleteLocalPackage(PackageInfo pkg)
+    {
+        string localPath = Path.Combine(_projectRoot, "Packages", pkg.localFolder);
+
+        if (!Directory.Exists(localPath))
+        {
+            ShowStatus($"目录不存在: {localPath}", MessageType.Warning);
+            return;
+        }
+
+        if (!EditorUtility.DisplayDialog("确认删除",
+            $"确定要删除本地包目录吗？\n\n{pkg.localFolder}\n{localPath}\n\n此操作不可撤销。",
+            "删除", "取消"))
+            return;
+
+        _isProcessing = true;
+        try
+        {
+            // git clone 会在 .git 下创建只读文件，先清除只读属性再删除
+            ClearReadOnlyAttributes(localPath);
+
+            Directory.Delete(localPath, true);
+            ShowStatus($"✅ 已删除本地包目录: {pkg.localFolder}", MessageType.Info);
+
+            // 如果 manifest 中有 file: 引用，同时移除
+            if (!string.IsNullOrEmpty(pkg.packageName))
+            {
+                string manifest = File.ReadAllText(_manifestPath);
+                string entryPattern = $"\"{Regex.Escape(pkg.packageName)}\"\\s*:\\s*\"[^\"]*\"\\s*,?";
+                manifest = Regex.Replace(manifest, entryPattern, "");
+                // 清理可能残留的连续逗号
+                manifest = Regex.Replace(manifest, @",\s*,", ",");
+                File.WriteAllText(_manifestPath, manifest);
+            }
+
+            RefreshPackageList();
+        }
+        catch (Exception ex)
+        {
+            ShowStatus($"删除失败: {ex.Message}", MessageType.Error);
+            Debug.LogException(ex);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    /// <summary>递归清除目录下所有文件和子目录的只读属性</summary>
+    private static void ClearReadOnlyAttributes(string dirPath)
+    {
+        // 先递归处理子目录
+        foreach (var subDir in Directory.GetDirectories(dirPath))
+            ClearReadOnlyAttributes(subDir);
+
+        // 清除文件只读属性
+        foreach (var file in Directory.GetFiles(dirPath))
+        {
+            var attrs = File.GetAttributes(file);
+            if ((attrs & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(file, attrs & ~FileAttributes.ReadOnly);
+        }
+
+        // 清除目录自身的只读属性
+        var dirAttrs = File.GetAttributes(dirPath);
+        if ((dirAttrs & FileAttributes.ReadOnly) != 0)
+            File.SetAttributes(dirPath, dirAttrs & ~FileAttributes.ReadOnly);
+    }
 
     private void SwitchBatchToLocal(List<PackageInfo> packages)
     {
