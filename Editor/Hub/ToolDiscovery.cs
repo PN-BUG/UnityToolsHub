@@ -45,7 +45,7 @@ public partial class UnityToolsHub
                     category   = attr.Category,
                     originalCategory = attr.Category,
                     typeName   = type.FullName,
-                    icon       = string.IsNullOrEmpty(attr.Icon) ? GetCategoryIcon(attr.Category) : attr.Icon,
+                    icon       = string.IsNullOrEmpty(attr.Icon) ? Theme.GetCategoryIcon(attr.Category) : attr.Icon,
                     tags       = attr.Tags,
                     shortcut   = attr.Shortcut,
                     priority   = attr.Priority,
@@ -110,15 +110,15 @@ public partial class UnityToolsHub
             var catName = group.Key;
 
             // 获取分类颜色：已知 → 固定色，未知 → 调色板循环
-            if (!_categoryColors.TryGetValue(catName, out var accent))
+            if (!Theme.CategoryColors.TryGetValue(catName, out var accent))
             {
-                accent = _defaultPalette[paletteIdx % _defaultPalette.Length];
-                _categoryColors[catName] = accent;
+                accent = Theme.DefaultPalette[paletteIdx % Theme.DefaultPalette.Length];
+                Theme.CategoryColors[catName] = accent;
                 paletteIdx++;
             }
 
             // 获取分类图标（版本自适应，已知分类用字典，未知用工具自带）
-            var catIcon = GetCategoryIcon(catName);
+            var catIcon = Theme.GetCategoryIcon(catName);
 
             // 工具排序：使用频率高的在前（频率相同则按缓存的 Priority）
             var tools = group
@@ -134,7 +134,10 @@ public partial class UnityToolsHub
         // ── 4. 特殊工具（无 EditorWindow 类，仅菜单项）──
         AddSpecialTools();
 
-        // ── 5. 构建工具索引 + 缓存总数 + 快捷键索引（避免每帧遍历）──
+        // ── 5. 预缓存所有工具的脚本路径（批量加载 MonoScript，避免每帧 FindObjectsOfTypeAll）──
+        PrecacheScriptPaths(discovered);
+
+        // ── 6. 构建工具索引 + 缓存总数 + 快捷键索引（避免每帧遍历）──
         _toolIndex.Clear();
         _shortcutIndex.Clear();
         _totalToolCount = 0;
@@ -163,6 +166,31 @@ public partial class UnityToolsHub
         if (type == null) return 999;
         var attr = (ToolInfoAttribute)Attribute.GetCustomAttribute(type, typeof(ToolInfoAttribute));
         return attr?.Priority ?? 0;
+    }
+
+    /// <summary>批量预缓存工具脚本路径，避免每帧调用 Resources.FindObjectsOfTypeAll</summary>
+    private static void PrecacheScriptPaths(List<ToolEntry> tools)
+    {
+        // 一次性加载所有 MonoScript，构建 Type → 资产路径 映射
+        var typeToPath = new Dictionary<Type, string>();
+        var monoScripts = Resources.FindObjectsOfTypeAll<MonoScript>();
+        foreach (var ms in monoScripts)
+        {
+            var type = ms.GetClass();
+            if (type == null || typeToPath.ContainsKey(type)) continue;
+            string path = AssetDatabase.GetAssetPath(ms);
+            if (!string.IsNullOrEmpty(path) && path.EndsWith(".cs"))
+                typeToPath[type] = path;
+        }
+
+        // 为每个工具分配 scriptPath
+        foreach (var tool in tools)
+        {
+            if (string.IsNullOrEmpty(tool.typeName) || !string.IsNullOrEmpty(tool.scriptPath)) continue;
+            var type = FindType(tool.typeName);
+            if (type != null && typeToPath.TryGetValue(type, out var path))
+                tool.scriptPath = path;
+        }
     }
 
     /// <summary>添加无 EditorWindow 类的特殊工具（仅菜单项）</summary>
@@ -222,8 +250,8 @@ public partial class UnityToolsHub
         var cat = _categories.FirstOrDefault(c => c.name == categoryName);
         if (cat == null)
         {
-            _categoryColors.TryGetValue(categoryName, out var accent);
-            cat = new CategoryNode { name = categoryName, icon = GetCategoryIcon(categoryName), accent = accent };
+            Theme.CategoryColors.TryGetValue(categoryName, out var accent);
+            cat = new CategoryNode { name = categoryName, icon = Theme.GetCategoryIcon(categoryName), accent = accent };
             _categories.Add(cat);
             _defaultCategoryNames.Add(categoryName);
         }

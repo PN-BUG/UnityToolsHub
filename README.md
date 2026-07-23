@@ -10,15 +10,16 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **分类管理**：按功能分类展示工具，支持自定义分类图标和颜色
 - **文件夹式分类**：支持拖拽工具切换分类、拖拽分类排序、新建/重命名/删除自定义分类
 - **快速搜索**：支持关键字搜索和标签过滤
-- **排序方式**：支持按名称（默认）、最近使用、最常使用排序
-- **快捷键**：为常用工具绑定键盘快捷键，O(1) 字典查找导航
+- **排序方式**：支持按名称（默认）、最近使用（按时间戳）、最常使用（按次数）排序
+- **快捷键**：为常用工具绑定键盘快捷键，O(1) 字典查找导航，冲突检测 O(1)
 - **使用统计**：记录工具使用频率，常用工具自动置顶，O(1) 字典查找
 - **隐藏管理**：支持隐藏不需要的工具和分类，一键恢复默认分类
 - **第三方工具管理**：类似 Unity Package Manager 的管理界面，支持从本地文件夹或 Git URL 导入第三方工具包，默认禁用确保安全
 - **脚本信息展示**：工具详情页显示脚本名称、路径，支持一键打开脚本
 - **作者信息**：支持在 `[ToolInfo]` 中标注作者和链接，详情页可点击跳转
-- **性能优化**：消除 OnGUI 每帧 GUIStyle/GUIContent 分配，反射元数据构造时缓存
+- **性能优化**：消除 OnGUI 每帧 GUIStyle/GUIContent 分配，反射元数据构造时缓存，快捷键冲突检测 O(1) 查找
 - **Odin Inspector 兼容**：自动检测 Odin，有则使用原生属性渲染，无则通过兼容层桩类型+反射绘制器回退
+- **圆角渲染**：`Drawing.DrawRoundedRect` 在 IMGUI 下退化为方形（角纹理合成有渲染伪影），纹理缓存加入上限保护
 
 ## 快速开始
 
@@ -172,10 +173,9 @@ UnityToolsHub/
     │   ├── LeftPanel.cs            # 左侧分类面板（文件夹管理、拖拽排序、搜索、右键菜单、对话框）
     │   ├── RightPanel.cs           # 右侧详情面板（欢迎页/详情/创建表单/隐藏项管理/第三方工具管理）
     │   ├── DataStructures.cs       # 数据结构（ToolEntry、FolderConfig、UsageStats、HiddenItems、ThirdPartyToolRegistry）
-    │   ├── HubCompat.cs            # 兼容层，别名引用已迁移到 Nodin 的 Theme/Styles/Drawing
     │   ├── ShortcutBinding.cs      # 快捷键绑定结构体（解析/序列化/Event 转换）
     │   ├── ShortcutManager.cs      # 快捷键管理（录制、导航、冲突检测）
-    │   └── ToolEditorWindow.cs     # 工具编辑器基类（统一深色主题、绘图工具方法）
+    │   └── ToolEditorWindow.cs     # 工具编辑器基类（统一深色主题、绘图工具方法，委托 Nodin Styles/Palette）
     ├── InsidersTest/               # 内部测试工具
     │   ├── CryptoUtility.cs        # 加密工具
     │   ├── JsonViewer.cs           # JSON 查看器
@@ -209,7 +209,7 @@ UnityToolsHub/
     └── _NewToolTemplate.cs.txt     # 新建工具模板
 ```
 
-> **注**：原 `Hub/Styles.cs`、`Hub/Theme.cs`、`Hub/DrawingUtils.cs` 已迁移至 Nodin 包的 `Editor/EditorCore/` 目录，通过 `HubCompat.cs` 透明代理。原 `Editor/Nodin/` 空目录已删除。
+> **注**：原 `Hub/Styles.cs`、`Hub/Theme.cs`、`Hub/DrawingUtils.cs` 已迁移至 Nodin 包的 `Editor/EditorCore/` 目录。Hub 各文件直接引用 `Theme.*`、`Styles.*`、`Drawing.*`、`Palette.*`，不再通过中间兼容层。
 
 ## Nodin 属性系统
 
@@ -267,7 +267,7 @@ public static class MyPluginDetector
 | 属性 | 值 |
 |------|-----|
 | 包名 | `com.zko.unitytoolshub` |
-| 版本 | 1.2.0 |
+| 版本 | 1.4.0 |
 | Unity 版本 | 2021.3+ |
 | 仓库地址 | https://github.com/PN-BUG/UnityToolsHub.git |
 
@@ -283,7 +283,7 @@ Nodin 依赖通过 `Editor/Setup/NodinSetup.cs` 自动处理：
 - Unity 自动解析并下载 Nodin 包
 - 独立 asmdef（`UnityToolsHub.Setup`），不引用 Nodin，确保即使 Nodin 未安装也能编译
 
-Nodin 包同时提供 `Editor/EditorCore/` 模块（`Palette`、`Theme`、`Styles`、`Drawing`），为 Hub 和各工具窗口提供统一的深色主题配色、GUIStyle 缓存、纹理与绘图工具。
+Nodin 包同时提供 `Editor/EditorCore/` 模块（`Palette`、`Theme`、`Styles`、`Drawing`），为 Hub 和各工具窗口提供统一的深色主题配色、GUIStyle 缓存、纹理与绘图工具。`ToolEditorWindow` 基类委托 `Styles.EnsureInit()` 和 `Palette.MakeTex()`，避免重复的样式与纹理管理。
 
 ## 许可证
 

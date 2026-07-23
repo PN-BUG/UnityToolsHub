@@ -1,6 +1,27 @@
 # Changelog
 All notable changes to this package will be documented in this file.
 
+## [1.4.0] - 2026-07-23
+### Changed
+- 移除 `HubCompat.cs` 兼容层：Hub 各文件直接引用 `Theme.*`、`Styles.*`、`Drawing.*`、`Palette.*`，消除间接别名层
+- `ToolEditorWindow` 统一到 Nodin 基础设施：`CreateTex` 委托 `Palette.MakeTex`，`EnsureInit()` 先调用 `Styles.EnsureInit()`，消除重复的纹理创建与样式管理
+- `UsageEntry` 新增 `lastUsed` 时间戳字段，`UsageStats` 新增 `GetToolLastUsed()` / `GetCategoryLastUsed()` 方法
+- 排序模式区分：`ByRecent` 按 `lastUsed` 时间戳降序排序，`ByMostUsed` 按使用次数降序排序（此前两者逻辑完全相同）
+- `Styles` 新增 5 个缓存样式（`SearchPlaceholder`、`SortButton`、`FoldButton`、`MiniLabelBoldCenter`、`CategoryTagSearch`），消除 LeftPanel / RightPanel 中每帧 `new GUIStyle()` 分配
+- `Drawing.DrawRoundedRect` 在 IMGUI 下角纹理合成存在渲染伪影（角部白色噪点），回退为方形渲染
+
+### Fixed
+- 快捷键冲突检测 `FindShortcutConflict` 从 O(n) 线性遍历改为 O(1) `_shortcutIndex` 字典查找
+- `DiscoverTools()` 批量预缓存所有工具的 `scriptPath`，消除 RightPanel 中每帧 `Resources.FindObjectsOfTypeAll<MonoScript>()` 调用
+
+### Performance
+- Nodin `Drawing` 纹理缓存加入上限保护：`_cornerTexCache` 上限 64 条目，`_gradientCache` 上限 32 条目，超限时清空重建，防止长时间编辑器会话中缓存无限增长
+- LeftPanel 消除 8 处每帧 GUIStyle 分配（搜索占位符、排序按钮、折叠按钮、分类头、搜索标签、底部按钮 ×3）
+- RightPanel 消除 4 处每帧 GUIStyle 分配（创建/添加/第三方 toggle 样式 ×3、拖放区域标签）
+
+### Removed
+- 删除 `Hub/HubCompat.cs` 及其 `.meta` 文件（兼容层别名已全部内联为直接引用）
+
 ## [1.3.0] - 2026-07-18
 ### Added
 - 第三方工具管理系统：类似 Unity Package Manager 的左右分栏管理界面

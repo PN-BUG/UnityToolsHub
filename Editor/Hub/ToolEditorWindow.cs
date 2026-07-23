@@ -693,15 +693,7 @@ public abstract class ToolEditorWindow : EditorWindow
     #region ── 纹理创建 ──
 
     protected static Texture2D CreateTex(int w, int h, Color color)
-    {
-        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-        var px = new Color[w * h];
-        for (int i = 0; i < px.Length; i++) px[i] = color;
-        tex.SetPixels(px);
-        tex.Apply();
-        tex.hideFlags = HideFlags.HideAndDontSave;
-        return tex;
-    }
+        => Palette.MakeTex(w, h, color);
 
     #endregion
 
@@ -714,6 +706,9 @@ public abstract class ToolEditorWindow : EditorWindow
     private static bool EnsureInit()
     {
         if (_stylesReady) return true;
+
+        // Ensure shared Nodin infrastructure is ready (textures, palette-dependent styles)
+        Styles.EnsureInit();
 
         _stToolbar = new GUIStyle { fontSize = 14, fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleLeft, normal = { textColor = ClrTextBright }, richText = true };

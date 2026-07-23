@@ -53,17 +53,27 @@ public partial class UnityToolsHub
         // 运行时查找索引（序列化时不写入，OnEnable 后首次访问时重建）
         [NonSerialized] private Dictionary<string, int> _toolIndex;
         [NonSerialized] private Dictionary<string, int> _categoryIndex;
+        [NonSerialized] private Dictionary<string, double> _toolLastUsed;
+        [NonSerialized] private Dictionary<string, double> _categoryLastUsed;
         [NonSerialized] private bool _indexDirty = true;
 
         private void RebuildIndexIfNeeded()
         {
             if (!_indexDirty) return;
             _toolIndex = new Dictionary<string, int>(tools.Count);
+            _toolLastUsed = new Dictionary<string, double>(tools.Count);
             for (int i = 0; i < tools.Count; i++)
+            {
                 _toolIndex[tools[i].key] = tools[i].count;
+                _toolLastUsed[tools[i].key] = tools[i].lastUsed;
+            }
             _categoryIndex = new Dictionary<string, int>(categories.Count);
+            _categoryLastUsed = new Dictionary<string, double>(categories.Count);
             for (int i = 0; i < categories.Count; i++)
+            {
                 _categoryIndex[categories[i].key] = categories[i].count;
+                _categoryLastUsed[categories[i].key] = categories[i].lastUsed;
+            }
             _indexDirty = false;
         }
 
@@ -79,21 +89,35 @@ public partial class UnityToolsHub
             return _categoryIndex.TryGetValue(categoryName, out var c) ? c : 0;
         }
 
+        public double GetToolLastUsed(string typeName)
+        {
+            RebuildIndexIfNeeded();
+            return _toolLastUsed.TryGetValue(typeName, out var t) ? t : 0;
+        }
+
+        public double GetCategoryLastUsed(string categoryName)
+        {
+            RebuildIndexIfNeeded();
+            return _categoryLastUsed.TryGetValue(categoryName, out var t) ? t : 0;
+        }
+
         public void IncrementTool(string typeName)
         {
             if (string.IsNullOrEmpty(typeName)) return;
+            var now = UnityEditor.EditorApplication.timeSinceStartup;
             var e = tools.Find(x => x.key == typeName);
-            if (e == null) tools.Add(new UsageEntry { key = typeName, count = 1 });
-            else e.count++;
+            if (e == null) tools.Add(new UsageEntry { key = typeName, count = 1, lastUsed = now });
+            else { e.count++; e.lastUsed = now; }
             _indexDirty = true;
         }
 
         public void IncrementCategory(string categoryName)
         {
             if (string.IsNullOrEmpty(categoryName)) return;
+            var now = UnityEditor.EditorApplication.timeSinceStartup;
             var e = categories.Find(x => x.key == categoryName);
-            if (e == null) categories.Add(new UsageEntry { key = categoryName, count = 1 });
-            else e.count++;
+            if (e == null) categories.Add(new UsageEntry { key = categoryName, count = 1, lastUsed = now });
+            else { e.count++; e.lastUsed = now; }
             _indexDirty = true;
         }
 
@@ -109,6 +133,7 @@ public partial class UnityToolsHub
     {
         public string key;
         public int count;
+        public double lastUsed; // EditorApplication.timeSinceStartup timestamp of last use
     }
     #endregion
 

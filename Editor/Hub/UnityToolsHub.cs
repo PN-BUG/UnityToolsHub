@@ -338,10 +338,10 @@ public partial class UnityToolsHub : EditorWindow
     #region 主 GUI
     private void OnGUI()
     {
-        EnsureStyles();
+        Styles.EnsureInit();
 
         // 绘制整体背景
-        EditorGUI.DrawRect(new Rect(0, 0, position.width, position.height), ClrBg);
+        EditorGUI.DrawRect(new Rect(0, 0, position.width, position.height), Theme.ClrBg);
 
         // ── 拖放处理（最简原生方案，无条件执行）────────
         HandleDragAndDrop();
@@ -518,7 +518,7 @@ public partial class UnityToolsHub : EditorWindow
         {
             if (!existingCatNames.Contains(fi.name))
             {
-                _categoryColors.TryGetValue(fi.name, out var accent);
+                Theme.CategoryColors.TryGetValue(fi.name, out var accent);
                 if (accent == default) accent = Theme.DefaultPalette[_categories.Count % Theme.DefaultPalette.Length];
                 _categories.Add(new CategoryNode { name = fi.name, icon = fi.icon ?? "📁", accent = accent });
             }
@@ -579,19 +579,20 @@ public partial class UnityToolsHub : EditorWindow
         switch (_sortMode)
         {
             case SortMode.ByRecent:
-                // 分类按最近使用排序，工具按最近使用排序
+                // 分类按最近使用时间排序，工具按最近使用时间排序
                 _categories.Sort((a, b) =>
                 {
-                    int ca = _usageStats.GetCategoryCount(a.name);
-                    int cb = _usageStats.GetCategoryCount(b.name);
-                    return cb.CompareTo(ca); // 使用次数多 = 最近用过
+                    double ta = _usageStats.GetCategoryLastUsed(a.name);
+                    double tb = _usageStats.GetCategoryLastUsed(b.name);
+                    return tb.CompareTo(ta);
                 });
                 foreach (var cat in _categories)
-                    cat.tools.Sort((a, b) => _usageStats.GetToolCount(b.typeName).CompareTo(_usageStats.GetToolCount(a.typeName)));
+                    cat.tools.Sort((a, b) =>
+                        _usageStats.GetToolLastUsed(b.typeName).CompareTo(_usageStats.GetToolLastUsed(a.typeName)));
                 break;
 
             case SortMode.ByMostUsed:
-                // 与 ByRecent 相同的排序逻辑（使用次数即频率）
+                // 分类按使用次数排序，工具按使用次数排序
                 _categories.Sort((a, b) =>
                 {
                     int ca = _usageStats.GetCategoryCount(a.name);
@@ -720,9 +721,9 @@ public partial class UnityToolsHub : EditorWindow
         var targetCat = _categories.Find(c => c.name == defaultCat);
         if (targetCat == null)
         {
-            _categoryColors.TryGetValue(defaultCat, out var accent);
+            Theme.CategoryColors.TryGetValue(defaultCat, out var accent);
             if (accent == default) accent = Theme.DefaultPalette[_categories.Count % Theme.DefaultPalette.Length];
-            var catIcon = GetCategoryIcon(defaultCat);
+            var catIcon = Theme.GetCategoryIcon(defaultCat);
             targetCat = new CategoryNode { name = defaultCat, icon = catIcon, accent = accent };
             _categories.Add(targetCat);
         }
@@ -759,7 +760,7 @@ public partial class UnityToolsHub : EditorWindow
         if (string.IsNullOrEmpty(name)) return;
         if (_categories.Any(c => c.name == name)) return;
 
-        _categoryColors.TryGetValue(name, out var accent);
+        Theme.CategoryColors.TryGetValue(name, out var accent);
         if (accent == default) accent = Theme.DefaultPalette[_categories.Count % Theme.DefaultPalette.Length];
 
         var cat = new CategoryNode { name = name, icon = icon ?? "📁", accent = accent };
@@ -781,10 +782,10 @@ public partial class UnityToolsHub : EditorWindow
         if (cat == null) return;
 
         // 更新颜色字典
-        if (_categoryColors.TryGetValue(oldName, out var clr))
+        if (Theme.CategoryColors.TryGetValue(oldName, out var clr))
         {
-            _categoryColors[newName] = clr;
-            _categoryColors.Remove(oldName);
+            Theme.CategoryColors[newName] = clr;
+            Theme.CategoryColors.Remove(oldName);
         }
 
         cat.name = newName;

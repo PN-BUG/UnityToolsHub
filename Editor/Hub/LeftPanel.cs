@@ -138,7 +138,7 @@ public partial class UnityToolsHub
     private void DrawLeftPanel()
     {
         // 左侧背景
-        EditorGUI.DrawRect(new Rect(0, 0, LeftPanelWidth, position.height), ClrLeftBg);
+        EditorGUI.DrawRect(new Rect(0, 0, LeftPanelWidth, position.height), Theme.ClrLeftBg);
 
         // ── 处理拖放事件 ──
         HandleToolDragEvents();
@@ -159,7 +159,7 @@ public partial class UnityToolsHub
         var logoRect = EditorGUILayout.BeginHorizontal();
         logoRect.xMin += 12;
         GUI.Label(logoRect, "<color=#5891E8><b>Unity</b></color><color=#D9D9E1>Framework</color>",
-            _styleLogo);
+            Styles.Logo);
         EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.Space(4);
@@ -171,11 +171,11 @@ public partial class UnityToolsHub
         GUI.SetNextControlName("SearchField");
         var searchRect = GUILayoutUtility.GetRect(LeftPanelWidth - 20, 26);
         // 搜索框背景
-        Drawing.DrawRoundedRect(searchRect, ClrSearchBg, 6f);
+        Drawing.DrawRoundedRect(searchRect, Palette.SearchBg, 6f);
         // 搜索图标（手动绘制，TextField 用 plain style 避免重复图标）
         var searchIconRect = new Rect(searchRect.x + 6, searchRect.y + 2, 16, searchRect.height - 4);
         var oldColor = GUI.color;
-        GUI.color = ClrTextDim;
+        GUI.color = Theme.ClrTextDim;
         GUI.Label(searchIconRect, "🔍", EditorStyles.miniLabel);
         GUI.color = oldColor;
         // 输入区域（用 plain TextField 避免自带搜索图标重复）
@@ -185,19 +185,14 @@ public partial class UnityToolsHub
         // 占位符
         if (string.IsNullOrEmpty(_searchText) && GUI.GetNameOfFocusedControl() != "SearchField")
         {
-            var placeholderStyle = new GUIStyle(EditorStyles.miniLabel)
-            {
-                normal = { textColor = ClrTextDim },
-                alignment = TextAnchor.MiddleLeft
-            };
-            GUI.Label(inputRect, "搜索工具...", placeholderStyle);
+            GUI.Label(inputRect, "搜索工具...", Styles.SearchPlaceholder);
         }
 
         if (!string.IsNullOrEmpty(_searchText))
         {
             var cancelRect = new Rect(searchRect.xMax - 18, searchRect.y + 5, 14, 14);
             var cancelHover = cancelRect.Contains(Event.current.mousePosition);
-            if (cancelHover) GUI.color = ClrTextBright;
+            if (cancelHover) GUI.color = Theme.ClrTextBright;
             if (GUI.Button(cancelRect, "✕", EditorStyles.miniLabel))
             {
                 _searchText = "";
@@ -227,16 +222,11 @@ public partial class UnityToolsHub
                 bool isActive = _sortMode == modes[i];
                 if (isActive)
                 {
-                    EditorGUI.DrawRect(new Rect(btnRect.x + 2, btnRect.y + toolBarH - 2, btnRect.width - 4, 2), ClrAccent);
+                    EditorGUI.DrawRect(new Rect(btnRect.x + 2, btnRect.y + toolBarH - 2, btnRect.width - 4, 2), Theme.ClrAccent);
                 }
-                var s = new GUIStyle(EditorStyles.miniLabel)
-                {
-                    alignment = TextAnchor.MiddleCenter,
-                    normal = { textColor = isActive ? ClrTextBright : ClrTextDim },
-                    fontStyle = isActive ? FontStyle.Bold : FontStyle.Normal,
-                    fontSize = 10
-                };
-                GUI.Label(btnRect, labels[i], s);
+                Styles.SortButton.normal.textColor = isActive ? Theme.ClrTextBright : Theme.ClrTextDim;
+                Styles.SortButton.fontStyle = isActive ? FontStyle.Bold : FontStyle.Normal;
+                GUI.Label(btnRect, labels[i], Styles.SortButton);
                 if (GUI.Button(btnRect, "", GUIStyle.none))
                 {
                     SetSortMode(modes[i]);
@@ -250,20 +240,14 @@ public partial class UnityToolsHub
             var collapseRect = new Rect(toolBarRect.xMax - foldBtnSize * 2 - 2, foldBtnY, foldBtnSize, foldBtnSize);
             var expandRect = new Rect(toolBarRect.xMax - foldBtnSize, foldBtnY, foldBtnSize, foldBtnSize);
 
-            var foldStyle = new GUIStyle(EditorStyles.miniLabel)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = ClrTextDim },
-                hover = { textColor = ClrText },
-                fontSize = 12,
-                fontStyle = FontStyle.Bold
-            };
+            Styles.FoldButton.normal.textColor = Theme.ClrTextDim;
+            Styles.FoldButton.hover.textColor = Theme.ClrText;
             var collapseHover = collapseRect.Contains(Event.current.mousePosition);
             var expandHover = expandRect.Contains(Event.current.mousePosition);
-            if (collapseHover) EditorGUI.DrawRect(collapseRect, ClrHover);
-            if (expandHover) EditorGUI.DrawRect(expandRect, ClrHover);
-            GUI.Label(collapseRect, "⊟", foldStyle);
-            GUI.Label(expandRect, "⊞", foldStyle);
+            if (collapseHover) EditorGUI.DrawRect(collapseRect, Theme.ClrHover);
+            if (expandHover) EditorGUI.DrawRect(expandRect, Theme.ClrHover);
+            GUI.Label(collapseRect, "⊟", Styles.FoldButton);
+            GUI.Label(expandRect, "⊞", Styles.FoldButton);
             if (GUI.Button(collapseRect, "", GUIStyle.none))
             {
                 CollapseAllCategories();
@@ -280,7 +264,7 @@ public partial class UnityToolsHub
         EditorGUILayout.Space(2);
         {
             var sepRect = GUILayoutUtility.GetRect(LeftPanelWidth - 16, 1, GUILayout.ExpandWidth(true));
-            EditorGUI.DrawRect(sepRect, ClrDivider);
+            EditorGUI.DrawRect(sepRect, Theme.ClrDivider);
         }
         EditorGUILayout.Space(4);
 
@@ -323,7 +307,7 @@ public partial class UnityToolsHub
             if (!isFirstCategory)
             {
                 var lineRect = GUILayoutUtility.GetRect(LeftPanelWidth - ScrollbarReserve, 1, GUILayout.ExpandWidth(true));
-                EditorGUI.DrawRect(new Rect(lineRect.x, lineRect.y, lineRect.width, 1), ClrDivider);
+                EditorGUI.DrawRect(new Rect(lineRect.x, lineRect.y, lineRect.width, 1), Theme.ClrDivider);
             }
             isFirstCategory = false;
 
@@ -339,7 +323,7 @@ public partial class UnityToolsHub
                 _categoryHeaderRects[catHeaderRect.y] = catHeaderRect;
 
                 // ── 分类头背景（始终有底色，区分内容区）──
-                EditorGUI.DrawRect(catHeaderRect, ClrItemBg);
+                EditorGUI.DrawRect(catHeaderRect, Palette.ItemBg);
 
                 bool isCatHover = catHeaderRect.Contains(Event.current.mousePosition);
                 bool isDropTarget = _isDragActive && _dragType == DragType.Tool
@@ -354,7 +338,7 @@ public partial class UnityToolsHub
                 }
 
                 // 分类头底部分隔线
-                EditorGUI.DrawRect(new Rect(catHeaderRect.x, catHeaderRect.yMax - 1, catHeaderRect.width, 1), ClrDivider);
+                EditorGUI.DrawRect(new Rect(catHeaderRect.x, catHeaderRect.yMax - 1, catHeaderRect.width, 1), Theme.ClrDivider);
 
                 // ── 拖放：分类拖动中显示插入指示线 ──
                 if (_isDragActive && _dragType == DragType.Category && _dragCategoryName != category.name)
@@ -365,11 +349,11 @@ public partial class UnityToolsHub
                         && Event.current.mousePosition.y >= catHeaderRect.y + catHeaderRect.height * 0.5f;
                     if (isAbove)
                     {
-                        EditorGUI.DrawRect(new Rect(catHeaderRect.x, catHeaderRect.y - 1, catHeaderRect.width, 2), ClrAccent);
+                        EditorGUI.DrawRect(new Rect(catHeaderRect.x, catHeaderRect.y - 1, catHeaderRect.width, 2), Theme.ClrAccent);
                     }
                     else if (isBelow)
                     {
-                        EditorGUI.DrawRect(new Rect(catHeaderRect.x, catHeaderRect.yMax - 1, catHeaderRect.width, 2), ClrAccent);
+                        EditorGUI.DrawRect(new Rect(catHeaderRect.x, catHeaderRect.yMax - 1, catHeaderRect.width, 2), Theme.ClrAccent);
                     }
                 }
 
@@ -411,19 +395,15 @@ public partial class UnityToolsHub
                 EditorGUI.DrawRect(colorBar, category.accent);
 
                 // 折叠箭头
-                var arrowColor = category.expanded ? ClrText : ClrTextDim;
-                DrawFoldoutArrow(new Rect(catHeaderRect.x + 7, catHeaderRect.y, 12, catHeaderRect.height), category.expanded);
+                var arrowColor = category.expanded ? Theme.ClrText : Theme.ClrTextDim;
+                Drawing.DrawFoldoutArrow(new Rect(catHeaderRect.x + 7, catHeaderRect.y, 12, catHeaderRect.height), category.expanded);
 
                 // 分类名
                 var labelRect = new Rect(catHeaderRect.x + 20, catHeaderRect.y, catHeaderRect.width - 20, catHeaderRect.height);
                 string customTag = !IsDefaultCategory(category.name) ? " <color=#5C5C63>[自定义]</color>" : "";
                 string countTag = filtered.Count > 0 ? $"  <color=#5C5C63>{filtered.Count}</color>" : "";
-                var headerLabelStyle = new GUIStyle(_styleCategoryHeader);
-                if (isCatHover || isDropTarget)
-                {
-                    headerLabelStyle.normal.textColor = ClrTextBright;
-                }
-                GUI.Label(labelRect, $"{category.icon}  {category.name}{customTag}{countTag}", headerLabelStyle);
+                Styles.CategoryHeader.normal.textColor = (isCatHover || isDropTarget) ? Theme.ClrTextBright : Theme.ClrTextDim;
+                GUI.Label(labelRect, $"{category.icon}  {category.name}{customTag}{countTag}", Styles.CategoryHeader);
 
                 EditorGUILayout.Space(1);
 
@@ -434,7 +414,7 @@ public partial class UnityToolsHub
             foreach (var tool in filtered)
             {
                 bool isSelected = _selectedTool == tool;
-                var style = isSelected ? _styleToolItemSelected : _styleToolItem;
+                var style = isSelected ? Styles.ToolItemSelected : Styles.ToolItem;
 
                 var rawRect = GUILayoutUtility.GetRect(
                     LeftPanelWidth - ScrollbarReserve, ToolItemHeight,
@@ -454,13 +434,13 @@ public partial class UnityToolsHub
                     && Event.current.type != EventType.MouseDown;
                 if (isHover)
                 {
-                    EditorGUI.DrawRect(itemRect, ClrHover);
+                    EditorGUI.DrawRect(itemRect, Theme.ClrHover);
                 }
 
                 // 选中态背景 + 左侧色条
                 if (isSelected)
                 {
-                    EditorGUI.DrawRect(itemRect, ClrSelection);
+                    EditorGUI.DrawRect(itemRect, Theme.ClrSelection);
                     var selBar = new Rect(itemRect.x, itemRect.y + 4, 3, itemRect.height - 8);
                     EditorGUI.DrawRect(selBar, category.accent);
                 }
@@ -530,19 +510,12 @@ public partial class UnityToolsHub
                 // 搜索模式下显示分类标签
                 if (hasSearch && !isDraggingThisTool)
                 {
-                    var catTagStyle = new GUIStyle(EditorStyles.miniLabel)
-                    {
-                        normal = { textColor = category.accent },
-                        fontStyle = FontStyle.Italic,
-                        fontSize = 9,
-                        alignment = TextAnchor.MiddleLeft,
-                        padding = new RectOffset(4, 4, 0, 0)
-                    };
+                    Styles.CategoryTagSearch.normal.textColor = category.accent;
                     var catTagContent = new GUIContent(category.name);
-                    var catTagSize = catTagStyle.CalcSize(catTagContent);
+                    var catTagSize = Styles.CategoryTagSearch.CalcSize(catTagContent);
                     var catTagRect = new Rect(itemRect.x + 8, itemRect.yMax - 14, catTagSize.x + 8, 12);
                     EditorGUI.DrawRect(catTagRect, new Color(category.accent.r, category.accent.g, category.accent.b, 0.1f));
-                    GUI.Label(catTagRect, catTagContent, catTagStyle);
+                    GUI.Label(catTagRect, catTagContent, Styles.CategoryTagSearch);
                 }
 
                 // 右侧显示快捷键
@@ -550,13 +523,13 @@ public partial class UnityToolsHub
                 if (effectiveShortcut.IsValid)
                 {
                     var kbContent = new GUIContent(effectiveShortcut.ToString());
-                    var kbSize = _styleShortcut.CalcSize(kbContent);
+                    var kbSize = Styles.Shortcut.CalcSize(kbContent);
                     var kbWidth = kbSize.x + 10;
                     var kbRect = new Rect(itemRect.xMax - kbWidth - 4, itemRect.y + 6, kbWidth, 16);
                     if (kbRect.xMax > itemRect.xMax - 2)
                         kbRect.x = itemRect.xMax - kbWidth - 2;
-                    EditorGUI.DrawRect(kbRect, ClrTagBg);
-                    GUI.Label(kbRect, effectiveShortcut.ToString(), _styleShortcut);
+                    EditorGUI.DrawRect(kbRect, Theme.ClrTagBg);
+                    GUI.Label(kbRect, effectiveShortcut.ToString(), Styles.Shortcut);
                 }
             }
 
@@ -600,7 +573,7 @@ public partial class UnityToolsHub
         if (_isDragActive && _dragType == DragType.Category)
         {
             var tipRect = GUILayoutUtility.GetRect(LeftPanelWidth - ScrollbarReserve, 20);
-            GUI.Label(tipRect, "<color=#5C5C63><size=9>  ↕ 拖动分类到目标位置</size></color>", _styleVersion);
+            GUI.Label(tipRect, "<color=#5C5C63><size=9>  ↕ 拖动分类到目标位置</size></color>", Styles.Version);
         }
 
         EditorGUILayout.EndVertical(); // 结束中间内容区
@@ -610,7 +583,7 @@ public partial class UnityToolsHub
         GUI.BeginGroup(bottomRect);
 
         // 顶部分隔线
-        EditorGUI.DrawRect(new Rect(0, 0, LeftPanelWidth, 1), ClrDivider);
+        EditorGUI.DrawRect(new Rect(0, 0, LeftPanelWidth, 1), Theme.ClrDivider);
 
         // ── +工具 / +分类 并排按钮 ──
         int btnPadding = 8;
@@ -622,15 +595,10 @@ public partial class UnityToolsHub
         // +工具
         bool toolActive = _showCreateForm || _showAddToolPanel;
         bool toolHover = toolBtnRect.Contains(Event.current.mousePosition);
-        var toolBtnBg = toolActive ? new Color(ClrAccent.r, ClrAccent.g, ClrAccent.b, 0.25f) : (toolHover ? ClrHover : ClrBtnNormal);
+        var toolBtnBg = toolActive ? new Color(Theme.ClrAccent.r, Theme.ClrAccent.g, Theme.ClrAccent.b, 0.25f) : (toolHover ? Theme.ClrHover : Theme.ClrBtnNormal);
         Drawing.DrawRoundedRect(toolBtnRect, toolBtnBg, 5f);
-        var toolLabelStyle = new GUIStyle(EditorStyles.miniLabel)
-        {
-            alignment = TextAnchor.MiddleCenter,
-            fontStyle = FontStyle.Bold,
-            normal = { textColor = toolActive ? ClrTextBright : ClrText }
-        };
-        GUI.Label(toolBtnRect, "＋ 工具", toolLabelStyle);
+        Styles.MiniLabelBoldCenter.normal.textColor = toolActive ? Theme.ClrTextBright : Theme.ClrText;
+        GUI.Label(toolBtnRect, "＋ 工具", Styles.MiniLabelBoldCenter);
         if (GUI.Button(toolBtnRect, "", GUIStyle.none))
         {
             if (toolActive) { _showCreateForm = false; _showAddToolPanel = false; _showThirdPartyManager = false; }
@@ -641,15 +609,10 @@ public partial class UnityToolsHub
         // +分类
         bool catActive = _showNewCategoryDialog;
         bool catHover = catBtnRect.Contains(Event.current.mousePosition);
-        var catBtnBg = catActive ? new Color(ClrAccent.r, ClrAccent.g, ClrAccent.b, 0.25f) : (catHover ? ClrHover : ClrBtnNormal);
+        var catBtnBg = catActive ? new Color(Theme.ClrAccent.r, Theme.ClrAccent.g, Theme.ClrAccent.b, 0.25f) : (catHover ? Theme.ClrHover : Theme.ClrBtnNormal);
         Drawing.DrawRoundedRect(catBtnRect, catBtnBg, 5f);
-        var catLabelStyle = new GUIStyle(EditorStyles.miniLabel)
-        {
-            alignment = TextAnchor.MiddleCenter,
-            fontStyle = FontStyle.Bold,
-            normal = { textColor = catActive ? ClrTextBright : ClrText }
-        };
-        GUI.Label(catBtnRect, "＋ 分类", catLabelStyle);
+        Styles.MiniLabelBoldCenter.normal.textColor = catActive ? Theme.ClrTextBright : Theme.ClrText;
+        GUI.Label(catBtnRect, "＋ 分类", Styles.MiniLabelBoldCenter);
         if (GUI.Button(catBtnRect, "", GUIStyle.none))
         {
             _showNewCategoryDialog = !_showNewCategoryDialog;
@@ -660,17 +623,13 @@ public partial class UnityToolsHub
         // 管理隐藏项按钮
         var hiddenBtnRect = new Rect(btnPadding, 42, LeftPanelWidth - btnPadding * 2, 24);
         bool hiddenHover = hiddenBtnRect.Contains(Event.current.mousePosition);
-        var hiddenBg = _showHiddenManager ? new Color(ClrAccent.r, ClrAccent.g, ClrAccent.b, 0.15f) : (hiddenHover ? ClrHover : new Color(0, 0, 0, 0));
+        var hiddenBg = _showHiddenManager ? new Color(Theme.ClrAccent.r, Theme.ClrAccent.g, Theme.ClrAccent.b, 0.15f) : (hiddenHover ? Theme.ClrHover : new Color(0, 0, 0, 0));
         if (hiddenBg.a > 0f)
             Drawing.DrawRoundedRect(hiddenBtnRect, hiddenBg, 5f);
         string hiddenLabel = hiddenCount > 0 ? $"⚙  管理隐藏项 ({hiddenCount})" : "⚙  管理隐藏项";
-        var hiddenLabelStyle = new GUIStyle(EditorStyles.miniLabel)
-        {
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = _showHiddenManager ? ClrTextBright : ClrTextDim },
-            fontStyle = _showHiddenManager ? FontStyle.Bold : FontStyle.Normal
-        };
-        GUI.Label(hiddenBtnRect, hiddenLabel, hiddenLabelStyle);
+        Styles.MiniLabelBoldCenter.normal.textColor = _showHiddenManager ? Theme.ClrTextBright : Theme.ClrTextDim;
+        Styles.MiniLabelBoldCenter.fontStyle = _showHiddenManager ? FontStyle.Bold : FontStyle.Normal;
+        GUI.Label(hiddenBtnRect, hiddenLabel, Styles.MiniLabelBoldCenter);
         if (GUI.Button(hiddenBtnRect, "", GUIStyle.none))
         {
             _showHiddenManager = !_showHiddenManager;
@@ -682,7 +641,7 @@ public partial class UnityToolsHub
         var verRect = new Rect(12, 68, LeftPanelWidth - 16, 16);
         string hiddenHint = hiddenCount > 0 ? $" · 隐藏 {hiddenCount} 项" : "";
         GUI.Label(verRect, $"<size=10><color=#5C5C63>UnityToolsHub v1.1 · {_totalToolCount} 个工具{hiddenHint}</color></size>",
-            _styleVersion);
+            Styles.Version);
 
         GUI.EndGroup();
 
@@ -738,18 +697,18 @@ public partial class UnityToolsHub
         DrawBorderRect(dialogRect, new Color(0.35f, 0.35f, 0.35f, 1f));
 
         // 顶部彩色条
-        EditorGUI.DrawRect(new Rect(x, y, w, 3), ClrAccent);
+        EditorGUI.DrawRect(new Rect(x, y, w, 3), Theme.ClrAccent);
 
         // 标题
         var titleStyle = new GUIStyle(EditorStyles.boldLabel)
         {
             fontSize = 13,
-            normal = { textColor = ClrTextBright }
+            normal = { textColor = Theme.ClrTextBright }
         };
         GUI.Label(new Rect(x + 16, y + 14, w - 32, 22), "创建新分类", titleStyle);
 
         // 分隔线
-        EditorGUI.DrawRect(new Rect(x + 16, y + 40, w - 32, 1), ClrDivider);
+        EditorGUI.DrawRect(new Rect(x + 16, y + 40, w - 32, 1), Theme.ClrDivider);
 
         // 图标字段
         GUI.Label(new Rect(x + 16, y + 52, 60, 20), "图标", EditorStyles.miniLabel);
@@ -771,19 +730,19 @@ public partial class UnityToolsHub
             new GUIStyle(EditorStyles.label) { richText = true, fontSize = 9 });
 
         // 分隔线
-        EditorGUI.DrawRect(new Rect(x + 16, y + h - 44, w - 32, 1), ClrDivider);
+        EditorGUI.DrawRect(new Rect(x + 16, y + h - 44, w - 32, 1), Theme.ClrDivider);
 
         // 按钮
         var cancelRect = new Rect(x + w - 120, y + h - 36, 50, 24);
         var okRect = new Rect(x + w - 62, y + h - 36, 50, 24);
 
-        if (GUI.Button(cancelRect, "取消", _styleBtnFlat))
+        if (GUI.Button(cancelRect, "取消", Styles.BtnFlat))
         {
             _showNewCategoryDialog = false;
             _newCategoryNameInput = "";
             _newCategoryIconInput = "📁";
         }
-        if (GUI.Button(okRect, "创建", _styleBtnPrimary))
+        if (GUI.Button(okRect, "创建", Styles.BtnPrimary))
         {
             if (!string.IsNullOrEmpty(_newCategoryNameInput))
             {
@@ -830,7 +789,7 @@ public partial class UnityToolsHub
         float y = (position.height - h) * 0.5f;
         var dialogRect = new Rect(x, y, w, h);
         EditorGUI.DrawRect(dialogRect, new Color(0.18f, 0.18f, 0.18f, 1f));
-        DrawBorderRect(dialogRect, ClrSplitter);
+        DrawBorderRect(dialogRect, Theme.ClrSplitter);
 
         GUI.Label(new Rect(x + 12, y + 8, w - 24, 20), $"重命名「{_renameCategoryOldName}」", EditorStyles.boldLabel);
 
@@ -840,7 +799,7 @@ public partial class UnityToolsHub
         var okRect = new Rect(x + w - 130, y + h - 36, 56, 24);
         var cancelRect = new Rect(x + w - 66, y + h - 36, 56, 24);
 
-        if (GUI.Button(okRect, "确认", _styleBtnPrimary))
+        if (GUI.Button(okRect, "确认", Styles.BtnPrimary))
         {
             if (!string.IsNullOrEmpty(_renameCategoryNewName) && _renameCategoryNewName != _renameCategoryOldName)
             {
@@ -850,7 +809,7 @@ public partial class UnityToolsHub
             _renameCategoryNewName = "";
             Repaint();
         }
-        if (GUI.Button(cancelRect, "取消", _styleBtnFlat))
+        if (GUI.Button(cancelRect, "取消", Styles.BtnFlat))
         {
             _showRenameCategoryDialog = false;
             _renameCategoryNewName = "";
@@ -879,7 +838,7 @@ public partial class UnityToolsHub
         float y = (position.height - h) * 0.5f;
         var dialogRect = new Rect(x, y, w, h);
         EditorGUI.DrawRect(dialogRect, new Color(0.18f, 0.18f, 0.18f, 1f));
-        DrawBorderRect(dialogRect, ClrSplitter);
+        DrawBorderRect(dialogRect, Theme.ClrSplitter);
 
         GUI.Label(new Rect(x + 12, y + 8, w - 24, 36),
             $"确定要删除分类「{_deleteCategoryTargetName}」吗？\n其中的工具将移至第一个分类。", EditorStyles.wordWrappedLabel);
@@ -887,14 +846,14 @@ public partial class UnityToolsHub
         var okRect = new Rect(x + w - 130, y + h - 36, 56, 24);
         var cancelRect = new Rect(x + w - 66, y + h - 36, 56, 24);
 
-        if (GUI.Button(okRect, "删除", _styleBtnPrimary))
+        if (GUI.Button(okRect, "删除", Styles.BtnPrimary))
         {
             DeleteCategory(_deleteCategoryTargetName);
             _showDeleteCategoryConfirm = false;
             _deleteCategoryTargetName = "";
             Repaint();
         }
-        if (GUI.Button(cancelRect, "取消", _styleBtnFlat))
+        if (GUI.Button(cancelRect, "取消", Styles.BtnFlat))
         {
             _showDeleteCategoryConfirm = false;
             _deleteCategoryTargetName = "";
@@ -1031,7 +990,7 @@ public partial class UnityToolsHub
     {
         EditorGUILayout.BeginVertical(GUILayout.Width(SplitterWidth));
         var splitRect = GUILayoutUtility.GetRect(SplitterWidth, position.height);
-        EditorGUI.DrawRect(splitRect, ClrSplitter);
+        EditorGUI.DrawRect(splitRect, Theme.ClrSplitter);
         EditorGUILayout.EndVertical();
     }
     #endregion
@@ -1043,14 +1002,14 @@ public partial class UnityToolsHub
         {
             var mousePos = Event.current.mousePosition;
             var ghostRect = new Rect(mousePos.x + 12, mousePos.y - 10, 140, 22);
-            EditorGUI.DrawRect(ghostRect, new Color(ClrItemBg.r, ClrItemBg.g, ClrItemBg.b, 0.85f));
+            EditorGUI.DrawRect(ghostRect, new Color(Palette.ItemBg.r, Palette.ItemBg.g, Palette.ItemBg.b, 0.85f));
             GUI.Label(ghostRect, $"  {_dragToolTypeName.Split('.').Last()}", new GUIStyle(EditorStyles.label)
             {
                 normal = { textColor = new Color(0.9f, 0.9f, 0.9f) },
                 fontSize = 11,
                 clipping = TextClipping.Overflow
             });
-            DrawBorderRect(ghostRect, ClrAccent);
+            DrawBorderRect(ghostRect, Theme.ClrAccent);
         }
     }
     #endregion

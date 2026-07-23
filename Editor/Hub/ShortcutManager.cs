@@ -54,23 +54,15 @@ public partial class UnityToolsHub
         EditorPrefs.DeleteKey(ShortcutPrefsPrefix + typeName);
     }
 
-    /// <summary>检查快捷键是否与已有工具的快捷键冲突（排除自身）</summary>
+    /// <summary>检查快捷键是否与已有工具的快捷键冲突（排除自身），O(1) 字典查找</summary>
     private string FindShortcutConflict(string excludeTypeName, ShortcutBinding binding)
     {
         if (!binding.IsValid) return null;
 
-        foreach (var cat in _categories)
-        {
-            foreach (var tool in cat.tools)
-            {
-                if (string.IsNullOrEmpty(tool.typeName)) continue;
-                if (tool.typeName == excludeTypeName) continue;
+        if (_shortcutIndex.TryGetValue(binding, out var conflict)
+            && conflict.typeName != excludeTypeName)
+            return conflict.name;
 
-                var existing = GetEffectiveShortcut(tool.typeName);
-                if (existing.Equals(binding))
-                    return tool.name;
-            }
-        }
         return null;
     }
     #endregion
