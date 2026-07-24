@@ -21,7 +21,7 @@ public class FolderRuleConfig : ScriptableObject
     // ══════════════════════════════════════════════════════════
     //  基础配置
     // ══════════════════════════════════════════════════════════
-    [FoldoutGroup("基础设置")]
+
     [LabelText("启用此规则")]
     public bool enabled = false;
 
@@ -53,23 +53,20 @@ public class FolderRuleConfig : ScriptableObject
     //  文件命名规范
     // ══════════════════════════════════════════════════════════
 
-    [FoldoutGroup("文件命名规范")]
+    [ToggleGroup("文件命名规范")]
     [LabelText("启用命名检查")]
     public bool enableNamingRule;
 
-    [FoldoutGroup("文件命名规范")]
-    [ShowIf("enableNamingRule")]
+    [ToggleGroup("文件命名规范")]
     [InfoBox("命名规范描述", InfoMessageType.None, "namingDescription")]
     [LabelText("文件名正则")]
     public string fileNamePattern = "^[a-z][a-z0-9_]*$";
 
-    [FoldoutGroup("文件命名规范")]
-    [ShowIf("enableNamingRule")]
+    [ToggleGroup("文件命名规范")]
     [LabelText("规范描述")]
     public string namingDescription = "文件名须为小写字母开头，仅含小写字母、数字、下划线";
 
-    [FoldoutGroup("文件命名规范")]
-    [ShowIf("enableNamingRule")]
+    [ToggleGroup("文件命名规范")]
     [LabelText("忽略的扩展名")]
     public string namingIgnoreExtensions = ".meta,.cs,.asmdef";
 
@@ -77,30 +74,26 @@ public class FolderRuleConfig : ScriptableObject
     //  Addressable 配置
     // ══════════════════════════════════════════════════════════
 
-    [FoldoutGroup("Addressable 配置")]
+    [ToggleGroup("Addressable 配置")]
     [LabelText("启用 Addressable")]
     public bool enableAddressable;
 
-    [FoldoutGroup("Addressable 配置")]
-    [ShowIf("enableAddressable")]
+    [ToggleGroup("Addressable 配置")]
     [InfoBox("变量: {name}=文件名  {folder}=所在文件夹名  {path}=相对路径", InfoMessageType.None)]
     [ValueDropdown("TemplateNameOptions")]
     [LabelText("命名模板")]
     public string addressableNameTemplate = "{folder}/{name}";
 
-    [FoldoutGroup("Addressable 配置")]
-    [ShowIf("enableAddressable")]
+    [ToggleGroup("Addressable 配置")]
     [ValueDropdown("GetGroupNamesOdin")]
     [LabelText("分组名")]
     public string addressableGroupName = "";
 
-    [FoldoutGroup("Addressable 配置")]
-    [ShowIf("enableAddressable")]
+    [ToggleGroup("Addressable 配置")]
     [LabelText("标签")]
     public string addressableLabels = "";
 
-    [FoldoutGroup("Addressable 配置")]
-    [ShowIf("enableAddressable")]
+    [ToggleGroup("Addressable 配置")]
     [LabelText("目标扩展名")]
     public string addressableTargetExtensions = ".png,.jpg,.prefab,.asset";
 
@@ -109,39 +102,33 @@ public class FolderRuleConfig : ScriptableObject
 
     // ══════════════════════════════════════════════════════════
 
-    [FoldoutGroup("贴图导入规则")]
+    [ToggleGroup("贴图导入规则")]
     [LabelText("启用贴图规则")]
     public bool enableTextureRule;
 
-    [FoldoutGroup("贴图导入规则")]
-    [ShowIf("enableTextureRule")]
+    [ToggleGroup("贴图导入规则")]
     [LabelText("目标扩展名")]
     public string textureTargetExtensions = ".png,.jpg,.jpeg,.tga,.psd";
 
     // ── 公共参数（所有贴图） ──
 
     [FoldoutGroup("贴图导入规则/公共参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("纹理类型")]
     public TextureImporterType textureType = TextureImporterType.Default;
 
     [FoldoutGroup("贴图导入规则/公共参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("Alpha Is Transparency")]
     public bool textureAlphaIsTransparency = true;
 
     [FoldoutGroup("贴图导入规则/公共参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("Filter Mode")]
     public FilterMode textureFilterMode = FilterMode.Bilinear;
 
     [FoldoutGroup("贴图导入规则/公共参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("压缩方式")]
     public TextureImporterCompression textureCompression = TextureImporterCompression.Compressed;
 
     [FoldoutGroup("贴图导入规则/公共参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("最大尺寸上限")]
     [ValueDropdown("MaxCapSizeOptions")]
     public int textureMaxCapSize = 4096;
@@ -149,27 +136,22 @@ public class FolderRuleConfig : ScriptableObject
     // ── UI 贴图额外参数 ──
 
     [FoldoutGroup("贴图导入规则/UI 贴图额外参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("UI 贴图关键词")]
     public string textureUiKeywords = "/ui/,/sprite/,/sprites/,/icon/,/icons/";
 
     [FoldoutGroup("贴图导入规则/UI 贴图额外参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("UI 纹理类型")]
     public TextureImporterType textureUiType = TextureImporterType.Sprite;
 
     [FoldoutGroup("贴图导入规则/UI 贴图额外参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("UI Sprite 模式")]
     public SpriteImportMode textureUiSpriteMode = SpriteImportMode.Single;
 
     [FoldoutGroup("贴图导入规则/UI 贴图额外参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("UI Mipmap")]
     public bool textureUiMipmapEnabled;
 
     [FoldoutGroup("贴图导入规则/UI 贴图额外参数")]
-    [ShowIf("enableTextureRule")]
     [LabelText("UI Wrap Mode")]
     public TextureWrapMode textureUiWrapMode = TextureWrapMode.Clamp;
 
