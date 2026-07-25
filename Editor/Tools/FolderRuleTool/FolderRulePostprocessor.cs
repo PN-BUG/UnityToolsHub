@@ -41,6 +41,10 @@ public class FolderRulePostprocessor : AssetPostprocessor
             if (string.IsNullOrEmpty(assetPath)) continue;
             if (AssetDatabase.IsValidFolder(assetPath)) continue;
 
+            // 排除 FolderRuleConfig 自身，避免配置文件触发自身规则检查
+            var assetType = AssetDatabase.GetMainAssetTypeAtPath(assetPath);
+            if (assetType != null && typeof(FolderRuleConfig).IsAssignableFrom(assetType)) continue;
+
             foreach (var config in configs)
             {
                 if (!config.IsInScope(assetPath)) continue;
