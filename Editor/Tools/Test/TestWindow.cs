@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using Nodin;
 using UnityEditor;
 using UnityEngine;
 
@@ -34,12 +36,20 @@ public class TestWindow : EditorWindow
         public FieldInfo Field;
     }
 
+    private class TestPropertyEntry
+    {
+        public string DisplayName;
+        public MonoBehaviour Target;
+        public PropertyInfo Property;
+    }
+
     private class TestGroup
     {
         public string GroupName;           // 组件类型名
         public GameObject GameObject;      // 所属 GameObject
         public List<TestMethodEntry> Methods = new List<TestMethodEntry>();
         public List<TestFieldEntry> Fields = new List<TestFieldEntry>();
+        public List<TestPropertyEntry> Properties = new List<TestPropertyEntry>();
     }
 
     // ── 状态 ─────────────────────────────────────────────────
@@ -144,6 +154,7 @@ public class TestWindow : EditorWindow
             var type = mb.GetType();
             var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
             var group = new TestGroup
             {
@@ -196,8 +207,24 @@ public class TestWindow : EditorWindow
                 });
             }
 
+            foreach (var prop in properties)
+            {
+                var attr = prop.GetCustomAttribute<TestAttribute>();
+                if (attr == null) continue;
+
+                // 跳过索引器
+                if (prop.GetIndexParameters().Length > 0) continue;
+
+                group.Properties.Add(new TestPropertyEntry
+                {
+                    DisplayName = attr.Name,
+                    Target = mb,
+                    Property = prop
+                });
+            }
+
             // 只添加有内容的组
-            if (group.Methods.Count > 0 || group.Fields.Count > 0)
+            if (group.Methods.Count > 0 || group.Fields.Count > 0 || group.Properties.Count > 0)
             {
                 _groups.Add(group);
                 _foldouts[group] = true;
@@ -215,10 +242,11 @@ public class TestWindow : EditorWindow
 
         if (_groups.Count == 0)
         {
-            EditorGUILayout.HelpBox("场景中未找到任何标记了 [Test] 的方法或字段。\n\n" +
+            EditorGUILayout.HelpBox("场景中未找到任何标记了 [Test] 的成员。\n\n" +
                 "用法示例：\n" +
                 "  [Test(\"创建存档\")] public void CreateSaveData() { ... }\n" +
-                "  [Test(\"玩家速度\")] public float speed = 5f;",
+                "  [Test(\"玩家速度\")] public float speed = 5f;\n" +
+                "  [Test(\"生命值\")] public int Health { get; set; }",
                 MessageType.Info);
         }
         else
@@ -293,6 +321,9 @@ public class TestWindow : EditorWindow
         foreach (var f in group.Fields)
             if (f.DisplayName.ToLower().Contains(filter)) return true;
 
+        foreach (var p in group.Properties)
+            if (p.DisplayName.ToLower().Contains(filter)) return true;
+
         return false;
     }
 
@@ -314,14 +345,31 @@ public class TestWindow : EditorWindow
         {
             EditorGUI.indentLevel++;
 
-            // 绘制字段
-            foreach (var entry in group.Fields)
+            // 按继承层级排序：基类成员在前，当前类成员在后
+            var sortedFields = group.Fields
+                .OrderBy(f => GetInheritanceDepth(f.Field.DeclaringType))
+                .ToList();
+            var sortedProperties = group.Properties
+                .OrderBy(p => GetInheritanceDepth(p.Property.DeclaringType))
+                .ToList();
+            var sortedMethods = group.Methods
+                .OrderBy(m => GetInheritanceDepth(m.Method.DeclaringType))
+                .ToList();
+
+            // 先绘制字段（按继承顺序）
+            foreach (var entry in sortedFields)
             {
                 DrawFieldEntry(entry);
             }
 
-            // 绘制方法按钮
-            foreach (var entry in group.Methods)
+            // 绘制属性（按继承顺序）
+            foreach (var entry in sortedProperties)
+            {
+                DrawPropertyEntry(entry);
+            }
+
+            // 再绘制方法按钮（按继承顺序）
+            foreach (var entry in sortedMethods)
             {
                 DrawMethodEntry(entry);
             }
@@ -336,10 +384,16 @@ public class TestWindow : EditorWindow
     {
         if (entry.Target == null) return;
 
+        // 检查 [ReadOnly] 特性
+        bool isReadOnly = entry.Field.GetCustomAttribute<Nodin.ReadOnlyAttribute>() != null;
+
         EditorGUILayout.BeginHorizontal();
 
         // 显示标签
         EditorGUILayout.PrefixLabel(entry.DisplayName);
+
+        // 只读字段禁用编辑
+        EditorGUI.BeginDisabledGroup(isReadOnly);
 
         // 获取当前值
         var value = entry.Field.GetValue(entry.Target);
@@ -409,6 +463,104 @@ public class TestWindow : EditorWindow
             EditorUtility.SetDirty(entry.Target);
         }
 
+        EditorGUI.EndDisabledGroup();
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private void DrawPropertyEntry(TestPropertyEntry entry)
+    {
+        if (entry.Target == null) return;
+
+        var prop = entry.Property;
+
+        // 检查 [ReadOnly] 特性
+        bool isReadOnly = prop.GetCustomAttribute<Nodin.ReadOnlyAttribute>() != null;
+        // 检查是否有 setter
+        bool hasSetter = prop.GetSetMethod(true) != null;
+
+        EditorGUILayout.BeginHorizontal();
+
+        // 显示标签
+        EditorGUILayout.PrefixLabel(entry.DisplayName);
+
+        // 只读字段或无 setter 禁用编辑
+        EditorGUI.BeginDisabledGroup(isReadOnly || !hasSetter);
+
+        // 获取当前值
+        object value = null;
+        try
+        {
+            value = prop.GetValue(entry.Target);
+        }
+        catch { }
+
+        var propType = prop.PropertyType;
+
+        EditorGUI.BeginChangeCheck();
+
+        object newValue = null;
+        bool changed = false;
+
+        // 根据属性类型绘制对应的编辑器控件
+        if (propType == typeof(bool))
+        {
+            newValue = EditorGUILayout.Toggle((bool)(value ?? false));
+            changed = true;
+        }
+        else if (propType == typeof(int))
+        {
+            newValue = EditorGUILayout.IntField((int)(value ?? 0));
+            changed = true;
+        }
+        else if (propType == typeof(float))
+        {
+            newValue = EditorGUILayout.FloatField((float)(value ?? 0f));
+            changed = true;
+        }
+        else if (propType == typeof(string))
+        {
+            newValue = EditorGUILayout.TextField((string)(value ?? ""));
+            changed = true;
+        }
+        else if (propType == typeof(Vector2))
+        {
+            newValue = EditorGUILayout.Vector2Field("", (Vector2)(value ?? Vector2.zero));
+            changed = true;
+        }
+        else if (propType == typeof(Vector3))
+        {
+            newValue = EditorGUILayout.Vector3Field("", (Vector3)(value ?? Vector3.zero));
+            changed = true;
+        }
+        else if (propType == typeof(Color))
+        {
+            newValue = EditorGUILayout.ColorField((Color)(value ?? Color.white));
+            changed = true;
+        }
+        else if (typeof(UnityEngine.Object).IsAssignableFrom(propType))
+        {
+            newValue = EditorGUILayout.ObjectField(value as UnityEngine.Object, propType, true);
+            changed = true;
+        }
+        else if (propType.IsEnum)
+        {
+            newValue = EditorGUILayout.EnumPopup((Enum)(value ?? Enum.GetValues(propType).GetValue(0)));
+            changed = true;
+        }
+        else
+        {
+            // 不支持的类型，只读显示
+            EditorGUILayout.LabelField(value?.ToString() ?? "null");
+        }
+
+        if (changed && EditorGUI.EndChangeCheck() && hasSetter)
+        {
+            Undo.RecordObject(entry.Target, $"[Test] 修改 {entry.DisplayName}");
+            prop.SetValue(entry.Target, newValue);
+            EditorUtility.SetDirty(entry.Target);
+        }
+
+        EditorGUI.EndDisabledGroup();
         EditorGUILayout.EndHorizontal();
     }
 
@@ -530,5 +682,20 @@ public class TestWindow : EditorWindow
         if (typeof(UnityEngine.Object).IsAssignableFrom(type)) return null;
         if (type.IsValueType) return Activator.CreateInstance(type);
         return null;
+    }
+
+    /// <summary>
+    /// 获取类型的继承深度（用于排序：基类成员在前，当前类成员在后）
+    /// </summary>
+    private static int GetInheritanceDepth(Type type)
+    {
+        int depth = 0;
+        var current = type;
+        while (current != null && current != typeof(MonoBehaviour) && current != typeof(object))
+        {
+            depth++;
+            current = current.BaseType;
+        }
+        return depth;
     }
 }

@@ -15,6 +15,7 @@ public partial class UnityToolsHub
     private const float LeftPanelWidth = 230f;
     private const float CategoryHeaderHeight = 30f;
     private const float ToolItemHeight = 26f;
+    private const float SearchResultItemHeight = 38f;
     private const float SplitterWidth = 1f;
     private const float RightPadding = 16f;
 
@@ -415,9 +416,14 @@ public partial class UnityToolsHub
             {
                 bool isSelected = _selectedTool == tool;
                 var style = isSelected ? Styles.ToolItemSelected : Styles.ToolItem;
+                float itemHeight = hasSearch ? SearchResultItemHeight : ToolItemHeight;
+                var effectiveShortcut = GetEffectiveShortcut(tool.typeName);
+                float shortcutWidth = effectiveShortcut.IsValid
+                    ? Styles.Shortcut.CalcSize(new GUIContent(effectiveShortcut.ToString())).x + 10f
+                    : 0f;
 
                 var rawRect = GUILayoutUtility.GetRect(
-                    LeftPanelWidth - ScrollbarReserve, ToolItemHeight,
+                    LeftPanelWidth - ScrollbarReserve, itemHeight,
                     GUILayout.ExpandWidth(true));
                 // 左缩进，与分类标题形成层级
                 var itemRect = new Rect(rawRect.x + 14, rawRect.y, rawRect.width - 14, rawRect.height);
@@ -501,10 +507,15 @@ public partial class UnityToolsHub
                     RecordToolUsage(tool);
                 }
 
+                // 搜索结果使用双行布局：第一行工具名，第二行分类标签，避免与快捷键重叠。
+                var titleRect = hasSearch
+                ? new Rect(itemRect.x, itemRect.y + 1, itemRect.width - shortcutWidth - 4, 19)
+                : itemRect;
+
                 // 绘制工具名称
                 if (!isDraggingThisTool)
                 {
-                    GUI.Label(itemRect, tool.name, style);
+                    GUI.Label(titleRect, tool.name, style);
                 }
 
                 // 搜索模式下显示分类标签
@@ -513,19 +524,16 @@ public partial class UnityToolsHub
                     Styles.CategoryTagSearch.normal.textColor = category.accent;
                     var catTagContent = new GUIContent(category.name);
                     var catTagSize = Styles.CategoryTagSearch.CalcSize(catTagContent);
-                    var catTagRect = new Rect(itemRect.x + 8, itemRect.yMax - 14, catTagSize.x + 8, 12);
+                    var catTagRect = new Rect(itemRect.x + 8, itemRect.yMax - 15, catTagSize.x + 8, 12);
                     EditorGUI.DrawRect(catTagRect, new Color(category.accent.r, category.accent.g, category.accent.b, 0.1f));
                     GUI.Label(catTagRect, catTagContent, Styles.CategoryTagSearch);
                 }
 
                 // 右侧显示快捷键
-                var effectiveShortcut = GetEffectiveShortcut(tool.typeName);
                 if (effectiveShortcut.IsValid)
                 {
-                    var kbContent = new GUIContent(effectiveShortcut.ToString());
-                    var kbSize = Styles.Shortcut.CalcSize(kbContent);
-                    var kbWidth = kbSize.x + 10;
-                    var kbRect = new Rect(itemRect.xMax - kbWidth - 4, itemRect.y + 6, kbWidth, 16);
+                    var kbWidth = shortcutWidth;
+                    var kbRect = new Rect(itemRect.xMax - kbWidth - 4, itemRect.y + (hasSearch ? 3 : 6), kbWidth, 16);
                     if (kbRect.xMax > itemRect.xMax - 2)
                         kbRect.x = itemRect.xMax - kbWidth - 2;
                     EditorGUI.DrawRect(kbRect, Theme.ClrTagBg);
@@ -590,7 +598,7 @@ public partial class UnityToolsHub
         int btnGap = 4;
         float halfW = (LeftPanelWidth - btnPadding * 2 - btnGap) / 2f;
         var toolBtnRect = new Rect(btnPadding, 10, halfW, 26);
-        var catBtnRect  = new Rect(btnPadding + halfW + btnGap, 10, halfW, 26);
+        var catBtnRect = new Rect(btnPadding + halfW + btnGap, 10, halfW, 26);
 
         // +工具
         bool toolActive = _showCreateForm || _showAddToolPanel;
