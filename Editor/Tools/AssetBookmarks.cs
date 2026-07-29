@@ -182,7 +182,15 @@ public class AssetBookmarks : EditorWindow
     {
         if (_instance != null)
         {
-            _instance.Close();
+            try
+            {
+                _instance.Close();
+            }
+            catch (System.Exception)
+            {
+                // 窗口引用已失效（如域重载后），重置实例
+                _instance = null;
+            }
         }
         else
         {

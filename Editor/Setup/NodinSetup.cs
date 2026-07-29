@@ -1,54 +1,112 @@
 #if UNITY_EDITOR
+using System;
 using System.IO;
-using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
 namespace UnityToolsHub.Setup
 {
-    /// <summary>
-    /// Nodin 自动配置 — 首次加载时确保 com.zko.nodin 已写入 manifest.json。
-    /// 独立 asmdef，不引用 Nodin，确保即使 Nodin 未安装也能编译执行。
-    /// </summary>
+    /// <summary>Ensures UnityToolsHub can resolve Nodin without external assembly dependencies.</summary>
     [InitializeOnLoad]
     internal static class NodinSetup
     {
-        private const string NodinPackageName = "com.zko.nodin";
-        private const string NodinGitUrl = "https://github.com/PN-BUG/Nodin.git";
+        private const string PackageName = "com.zko.nodin";
+        private const string EmbeddedReference = "file:nodin";
+        private const string GitReference = "https://github.com/PN-BUG/Nodin.git";
+        private const string SessionKey = "UnityToolsHub.Nodin.ManifestStamp";
 
-        static NodinSetup()
-        {
-            EnsureNodinInManifest();
-        }
+        static NodinSetup() => EnsureNodinInManifest();
 
-        /// <summary>
-        /// 确保 manifest.json 中包含 com.zko.nodin 依赖。
-        /// Nodin 是 UnityToolsHub 的核心依赖，嵌入式包的 package.json 依赖不会被 UPM 自动解析，
-        /// 必须在 manifest.json 中声明。
-        /// </summary>
         internal static bool EnsureNodinInManifest()
         {
-            string manifestPath = Path.Combine(Application.dataPath, "..", "Packages", "manifest.json");
-            if (!File.Exists(manifestPath))
-                return false;
+            string manifestPath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Packages", "manifest.json"));
+            if (!File.Exists(manifestPath)) return false;
 
-            string content = File.ReadAllText(manifestPath);
+            string packageDirectory = Path.Combine(Path.GetDirectoryName(manifestPath), "nodin");
+            string reference = Directory.Exists(packageDirectory) ? EmbeddedReference : GitReference;
+            string stamp = $"{File.GetLastWriteTimeUtc(manifestPath).Ticks}:{reference}";
+            if (SessionState.GetString(SessionKey, string.Empty) == stamp) return true;
 
-            // 精确匹配 JSON key："com.zko.nodin"（避免误匹配子字符串）
-            if (Regex.IsMatch(content, $"\"{Regex.Escape(NodinPackageName)}\"\\s*:"))
+            try
+            {
+                string content = File.ReadAllText(manifestPath);
+                if (!TryUpsertDependency(content, PackageName, reference, out string updated, out bool changed)) return false;
+                if (changed)
+                {
+                    File.WriteAllText(manifestPath, updated);
+                    stamp = $"{File.GetLastWriteTimeUtc(manifestPath).Ticks}:{reference}";
+                    Debug.Log($"[UnityToolsHub] Nodin package source set to {reference}.");
+                }
+                SessionState.SetString(SessionKey, stamp);
                 return true;
-
-            // 在 dependencies 块的第一个条目前插入 com.zko.nodin
-            var match = Regex.Match(content, @"(""dependencies""\s*:\s*\{\s*\r?\n\s*)(""[^""]+"")");
-            if (!match.Success)
+            }
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+            {
+                Debug.LogWarning($"[UnityToolsHub] Failed to update Nodin dependency: {exception.Message}");
                 return false;
+            }
+        }
 
-            string insert = $"{match.Groups[1].Value}\"{NodinPackageName}\": \"{NodinGitUrl}\",\n    {match.Groups[2].Value}";
-            content = content.Substring(0, match.Index) + insert + content.Substring(match.Index + match.Length);
+        private static bool TryUpsertDependency(string json, string key, string value, out string result, out bool changed)
+        {
+            result = json;
+            changed = false;
+            int dependencies = json.IndexOf("\"dependencies\"", StringComparison.Ordinal);
+            if (dependencies < 0) return false;
+            int openBrace = json.IndexOf('{', dependencies);
+            if (openBrace < 0 || !TryFindClosingBrace(json, openBrace, out int closeBrace)) return false;
 
-            File.WriteAllText(manifestPath, content);
-            Debug.Log($"[UnityToolsHub] 已自动将 {NodinPackageName} 添加到 manifest.json，Unity 将在下次刷新时解析。");
+            string quotedKey = "\"" + key + "\"";
+            int keyIndex = json.IndexOf(quotedKey, openBrace + 1, closeBrace - openBrace - 1, StringComparison.Ordinal);
+            if (keyIndex >= 0)
+            {
+                int valueStart = json.IndexOf('"', json.IndexOf(':', keyIndex) + 1);
+                int valueEnd = valueStart >= 0 ? json.IndexOf('"', valueStart + 1) : -1;
+                if (valueStart < 0 || valueEnd < 0) return false;
+                if (json.Substring(valueStart + 1, valueEnd - valueStart - 1) == value) return true;
+                result = json.Substring(0, valueStart + 1) + value + json.Substring(valueEnd);
+                changed = true;
+                return true;
+            }
+
+            string newline = json.Contains("\r\n") ? "\r\n" : "\n";
+            string parentIndent = GetIndent(json, openBrace);
+            int firstProperty = openBrace + 1;
+            while (firstProperty < closeBrace && char.IsWhiteSpace(json[firstProperty])) firstProperty++;
+            bool hasEntries = firstProperty < closeBrace;
+            string propertyIndent = hasEntries ? GetIndent(json, firstProperty) : parentIndent + "  ";
+            string insertion = hasEntries
+                ? propertyIndent + quotedKey + ": \"" + value + "\"," + newline
+                : newline + propertyIndent + quotedKey + ": \"" + value + "\"" + newline + parentIndent;
+            result = json.Insert(hasEntries ? firstProperty : closeBrace, insertion);
+            changed = true;
             return true;
+        }
+
+        private static bool TryFindClosingBrace(string text, int openBrace, out int closeBrace)
+        {
+            int depth = 0;
+            for (int i = openBrace; i < text.Length; i++)
+            {
+                if (text[i] == '"')
+                {
+                    i++;
+                    while (i < text.Length && text[i] != '"') i += text[i] == '\\' ? 2 : 1;
+                    continue;
+                }
+                if (text[i] == '{') depth++;
+                else if (text[i] == '}' && --depth == 0) { closeBrace = i; return true; }
+            }
+            closeBrace = -1;
+            return false;
+        }
+
+        private static string GetIndent(string text, int index)
+        {
+            int lineStart = text.LastIndexOf('\n', Math.Max(0, index - 1)) + 1;
+            int cursor = lineStart;
+            while (cursor < text.Length && (text[cursor] == ' ' || text[cursor] == '\t')) cursor++;
+            return text.Substring(lineStart, cursor - lineStart);
         }
     }
 }
