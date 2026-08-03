@@ -899,7 +899,7 @@ public class FolderRuleManager : EditorWindow
 
         try
         {
-            if (!Regex.IsMatch(fileName, config.fileNamePattern))
+            if (!config.IsFileNameValid(fileName, out _))
             {
                 Debug.LogWarning(
                     $"[FolderRule] 文件名不符合规范 [{config.name}]\n" +
@@ -925,7 +925,7 @@ public class FolderRuleManager : EditorWindow
 
         try
         {
-            if (!Regex.IsMatch(fileName, config.fileNamePattern))
+            if (!config.IsFileNameValid(fileName, out _))
             {
                 _violations.Add(new ViolationEntry
                 {

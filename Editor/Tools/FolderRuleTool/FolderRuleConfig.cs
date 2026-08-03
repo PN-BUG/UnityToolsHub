@@ -1,9 +1,19 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using Nodin;
+
+/// <summary>文件名检查方式。</summary>
+public enum FileNameRuleType
+{
+    Regex,
+    Prefix,
+    Suffix,
+    Template
+}
 
 /// <summary>
 /// 文件夹规则配置 —— ScriptableObject
@@ -58,6 +68,29 @@ public class FolderRuleConfig : ScriptableObject
     public bool enableNamingRule;
 
     [ToggleGroup("文件命名规范")]
+    [LabelText("检查方式")]
+    public FileNameRuleType fileNameRuleType = FileNameRuleType.Regex;
+
+    [ToggleGroup("文件命名规范")]
+    [ShowIf("@fileNameRuleType == FileNameRuleType.Prefix")]
+    [LabelText("前缀")]
+    [Tooltip("例如 XXX_：文件名必须以 XXX_ 开头")]
+    public string fileNamePrefix = "";
+
+    [ToggleGroup("文件命名规范")]
+    [ShowIf("@fileNameRuleType == FileNameRuleType.Suffix")]
+    [LabelText("后缀")]
+    [Tooltip("例如 _icon：文件名必须以 _icon 结尾（不含扩展名）")]
+    public string fileNameSuffix = "";
+
+    [ToggleGroup("文件命名规范")]
+    [ShowIf("@fileNameRuleType == FileNameRuleType.Template")]
+    [LabelText("命名模板")]
+    [Tooltip("例如 XXX_{0}_xxx 或 XXX_{0}_{1}_xxx；{0}、{1} 代表任意非空文本")]
+    public string fileNameTemplate = "";
+
+    [ToggleGroup("文件命名规范")]
+    [ShowIf("@fileNameRuleType == FileNameRuleType.Regex")]
     [InfoBox("命名规范描述", InfoMessageType.None, "namingDescription")]
     [LabelText("文件名正则")]
     public string fileNamePattern = "^[a-z][a-z0-9_]*$";
@@ -237,6 +270,60 @@ public class FolderRuleConfig : ScriptableObject
             if (!string.IsNullOrEmpty(t) && ext == t) return true;
         }
         return false;
+    }
+
+    /// <summary>根据当前配置验证不含扩展名的文件名。</summary>
+    public bool IsFileNameValid(string fileName, out string expectedRule)
+    {
+        expectedRule = "";
+        if (string.IsNullOrEmpty(fileName)) return true;
+
+        switch (fileNameRuleType)
+        {
+            case FileNameRuleType.Prefix:
+                expectedRule = $"前缀「{fileNamePrefix}」";
+                return !string.IsNullOrEmpty(fileNamePrefix) &&
+                       fileName.StartsWith(fileNamePrefix, StringComparison.Ordinal);
+
+            case FileNameRuleType.Suffix:
+                expectedRule = $"后缀「{fileNameSuffix}」";
+                return !string.IsNullOrEmpty(fileNameSuffix) &&
+                       fileName.EndsWith(fileNameSuffix, StringComparison.Ordinal);
+
+            case FileNameRuleType.Template:
+                expectedRule = $"模板「{fileNameTemplate}」";
+                return !string.IsNullOrEmpty(fileNameTemplate) &&
+                       Regex.IsMatch(fileName, BuildTemplateRegex(fileNameTemplate));
+
+            default:
+                expectedRule = $"正则「{fileNamePattern}」";
+                return Regex.IsMatch(fileName, fileNamePattern);
+        }
+    }
+
+    /// <summary>将 {{0}}、{{1}} 等占位符转换为完整匹配的正则表达式。</summary>
+    private static string BuildTemplateRegex(string template)
+    {
+        var matches = Regex.Matches(template, @"\{(\d+)\}");
+        if (matches.Count == 0) return "^" + Regex.Escape(template) + "$";
+
+        var pattern = new System.Text.StringBuilder("^");
+        int position = 0;
+        var declaredPlaceholders = new HashSet<string>();
+        foreach (Match match in matches)
+        {
+            pattern.Append(Regex.Escape(template.Substring(position, match.Index - position)));
+            string index = match.Groups[1].Value;
+            // 同一占位符再次出现时，要求其值保持一致。
+            if (declaredPlaceholders.Add(index))
+                pattern.Append("(?<placeholder_" + index + ">.+?)");
+            else
+                pattern.Append("\\k<placeholder_" + index + ">");
+            position = match.Index + match.Length;
+        }
+        pattern.Append(Regex.Escape(template.Substring(position)));
+        pattern.Append('$');
+        return pattern.ToString();
     }
 
     /// <summary>根据模板生成 Addressable 名称</summary>
