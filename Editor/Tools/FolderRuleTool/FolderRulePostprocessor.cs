@@ -85,13 +85,13 @@ public class FolderRulePostprocessor : AssetPostprocessor
 
         try
         {
-            if (!Regex.IsMatch(fileName, config.fileNamePattern))
+            if (!config.IsFileNameValid(fileName, out string expectedRule))
             {
                 Debug.LogWarning(
                     $"[FolderRule] 文件名不符合规范 [{config.name}]\n" +
                     $"  文件: {assetPath}\n" +
                     $"  规则: {config.namingDescription}\n" +
-                    $"  正则: {config.fileNamePattern}");
+                    $"  检查: {expectedRule}");
             }
         }
         catch (Exception ex)

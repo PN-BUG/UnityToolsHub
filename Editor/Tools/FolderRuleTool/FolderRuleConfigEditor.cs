@@ -373,7 +373,7 @@ public class FolderRuleConfigEditor : NodinEditor
 
         try
         {
-            if (!Regex.IsMatch(fileName, config.fileNamePattern))
+            if (!config.IsFileNameValid(fileName, out _))
             {
                 _violations.Add(new ViolationItem
                 {
