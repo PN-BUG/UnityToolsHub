@@ -224,7 +224,7 @@ public class FolderRuleConfigEditor : NodinEditor
             string assetPath = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(assetPath)) continue;
             if (AssetDatabase.IsValidFolder(assetPath)) continue;
-            if (string.Equals(assetPath, configPath, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(assetPath, configPath, StringComparison.Ordinal)) continue;
             if (config.IsIgnored(assetPath)) continue;
 
             CheckNaming(config, assetPath);
@@ -250,7 +250,7 @@ public class FolderRuleConfigEditor : NodinEditor
             string assetPath = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(assetPath)) continue;
             if (AssetDatabase.IsValidFolder(assetPath)) continue;
-            if (string.Equals(assetPath, configPath, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(assetPath, configPath, StringComparison.Ordinal)) continue;
             if (config.IsIgnored(assetPath)) continue;
 
             // Addressable
@@ -379,7 +379,7 @@ public class FolderRuleConfigEditor : NodinEditor
                 {
                     assetPath = assetPath,
                     ruleType = "命名",
-                    message = $"文件名「{fileName}」不符合规范：{config.namingDescription}"
+                    message = $"文件名「{fileName}」不符合规范：{config.GetNamingDescription()}"
                 });
             }
         }

@@ -33,6 +33,10 @@ public class FolderRulePreset : ScriptableObject
     [Tooltip("是否启用文件命名检查")]
     public bool enableNamingRule;
 
+    public FileNameRuleType fileNameRuleType = FileNameRuleType.CharacterOptions;
+
+    public FileNameCharacterOptions characterOptions = (FileNameCharacterOptions)15;
+
     [Tooltip("文件名正则表达式")]
     public string fileNamePattern = "^[a-z][a-z0-9_]*$";
 
@@ -116,6 +120,8 @@ public class FolderRulePreset : ScriptableObject
         scanInterval = config.scanInterval;
 
         enableNamingRule = config.enableNamingRule;
+        fileNameRuleType = config.fileNameRuleType;
+        characterOptions = config.characterOptions;
         fileNamePattern = config.fileNamePattern;
         namingDescription = config.namingDescription;
         namingIgnoreExtensions = config.namingIgnoreExtensions;
@@ -147,6 +153,8 @@ public class FolderRulePreset : ScriptableObject
         config.scanInterval = scanInterval;
 
         config.enableNamingRule = enableNamingRule;
+        config.fileNameRuleType = fileNameRuleType;
+        config.characterOptions = characterOptions;
         config.fileNamePattern = fileNamePattern;
         config.namingDescription = namingDescription;
         config.namingIgnoreExtensions = namingIgnoreExtensions;

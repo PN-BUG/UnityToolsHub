@@ -7,12 +7,25 @@ using UnityEngine;
 using Nodin;
 
 /// <summary>文件名检查方式。</summary>
+[Flags]
 public enum FileNameRuleType
 {
-    Regex,
-    Prefix,
-    Suffix,
-    Template
+    None = 0,
+    Regex = 1 << 0,
+    Prefix = 1 << 1,
+    Suffix = 1 << 2,
+    Template = 1 << 3,
+    CharacterOptions = 1 << 4
+}
+
+[Flags]
+public enum FileNameCharacterOptions
+{
+    None = 0,
+    AllowChinese = 1 << 0,
+    RequireLowercaseLetterStart = 1 << 1,
+    AllowDigits = 1 << 2,
+    AllowUnderscores = 1 << 3
 }
 
 /// <summary>
@@ -72,30 +85,36 @@ public class FolderRuleConfig : ScriptableObject
     public FileNameRuleType fileNameRuleType = FileNameRuleType.Regex;
 
     [ToggleGroup("文件命名规范")]
-    [ShowIf("@fileNameRuleType == FileNameRuleType.Prefix")]
+    [ShowIf("@fileNameRuleType & FileNameRuleType.Prefix")]
     [LabelText("前缀")]
     [Tooltip("例如 XXX_：文件名必须以 XXX_ 开头")]
     public string fileNamePrefix = "";
 
     [ToggleGroup("文件命名规范")]
-    [ShowIf("@fileNameRuleType == FileNameRuleType.Suffix")]
+    [ShowIf("@fileNameRuleType & FileNameRuleType.Suffix")]
     [LabelText("后缀")]
     [Tooltip("例如 _icon：文件名必须以 _icon 结尾（不含扩展名）")]
     public string fileNameSuffix = "";
 
     [ToggleGroup("文件命名规范")]
-    [ShowIf("@fileNameRuleType == FileNameRuleType.Template")]
+    [ShowIf("@fileNameRuleType & FileNameRuleType.Template")]
     [LabelText("命名模板")]
     [Tooltip("例如 XXX_{0}_xxx 或 XXX_{0}_{1}_xxx；{0}、{1} 代表任意非空文本")]
     public string fileNameTemplate = "";
 
     [ToggleGroup("文件命名规范")]
-    [ShowIf("@fileNameRuleType == FileNameRuleType.Regex")]
+    [ShowIf("@fileNameRuleType & FileNameRuleType.CharacterOptions")]
+    [LabelText("允许字符")]
+    public FileNameCharacterOptions characterOptions = (FileNameCharacterOptions)15;
+
+    [ToggleGroup("文件命名规范")]
+    [ShowIf("@fileNameRuleType & FileNameRuleType.Regex")]
     [InfoBox("命名规范描述", InfoMessageType.None, "namingDescription")]
     [LabelText("文件名正则")]
     public string fileNamePattern = "^[a-z][a-z0-9_]*$";
 
     [ToggleGroup("文件命名规范")]
+    [ShowIf("@fileNameRuleType & FileNameRuleType.Regex")]
     [LabelText("规范描述")]
     public string namingDescription = "文件名须为小写字母开头，仅含小写字母、数字、下划线";
 
@@ -210,13 +229,13 @@ public class FolderRuleConfig : ScriptableObject
         if (!enabled) return false;
         string folder = NormalizedFolderPath;
         if (recursive)
-            return assetPath.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(assetPath, folder, StringComparison.OrdinalIgnoreCase);
+            return assetPath.StartsWith(folder + "/", StringComparison.Ordinal)
+                || string.Equals(assetPath, folder, StringComparison.Ordinal);
         else
         {
             // 非递归：仅匹配该文件夹下的直接子文件
             string dir = System.IO.Path.GetDirectoryName(assetPath)?.Replace('\\', '/');
-            return string.Equals(dir, folder, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(dir, folder, StringComparison.Ordinal);
         }
     }
 
@@ -234,11 +253,11 @@ public class FolderRuleConfig : ScriptableObject
             // 文件夹：忽略其下所有资源
             if (AssetDatabase.IsValidFolder(objPath))
             {
-                if (assetPath.StartsWith(objPath + "/", StringComparison.OrdinalIgnoreCase))
+                if (assetPath.StartsWith(objPath + "/", StringComparison.Ordinal))
                     return true;
             }
             // 单个资源：精确匹配
-            else if (string.Equals(objPath, assetPath, StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(objPath, assetPath, StringComparison.Ordinal))
             {
                 return true;
             }
@@ -250,11 +269,11 @@ public class FolderRuleConfig : ScriptableObject
     public bool IsTargetExtension(string assetPath, string targetExtensions)
     {
         if (string.IsNullOrWhiteSpace(targetExtensions)) return true;
-        string ext = System.IO.Path.GetExtension(assetPath).ToLower();
+        string ext = System.IO.Path.GetExtension(assetPath);
         foreach (var e in targetExtensions.Split(','))
         {
-            string t = e.Trim().ToLower();
-            if (!string.IsNullOrEmpty(t) && ext == t) return true;
+            string t = e.Trim();
+            if (!string.IsNullOrEmpty(t) && string.Equals(ext, t, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
     }
@@ -263,11 +282,11 @@ public class FolderRuleConfig : ScriptableObject
     public bool IsNamingIgnored(string assetPath)
     {
         if (string.IsNullOrWhiteSpace(namingIgnoreExtensions)) return false;
-        string ext = System.IO.Path.GetExtension(assetPath).ToLower();
+        string ext = System.IO.Path.GetExtension(assetPath);
         foreach (var e in namingIgnoreExtensions.Split(','))
         {
-            string t = e.Trim().ToLower();
-            if (!string.IsNullOrEmpty(t) && ext == t) return true;
+            string t = e.Trim();
+            if (!string.IsNullOrEmpty(t) && string.Equals(ext, t, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
     }
@@ -278,27 +297,70 @@ public class FolderRuleConfig : ScriptableObject
         expectedRule = "";
         if (string.IsNullOrEmpty(fileName)) return true;
 
-        switch (fileNameRuleType)
-        {
-            case FileNameRuleType.Prefix:
-                expectedRule = $"前缀「{fileNamePrefix}」";
-                return !string.IsNullOrEmpty(fileNamePrefix) &&
-                       fileName.StartsWith(fileNamePrefix, StringComparison.Ordinal);
+        expectedRule = GetNamingDescription();
+        if (fileNameRuleType == FileNameRuleType.None) return true;
 
-            case FileNameRuleType.Suffix:
-                expectedRule = $"后缀「{fileNameSuffix}」";
-                return !string.IsNullOrEmpty(fileNameSuffix) &&
-                       fileName.EndsWith(fileNameSuffix, StringComparison.Ordinal);
+        if (IsRuleEnabled(FileNameRuleType.Prefix) &&
+            (string.IsNullOrEmpty(fileNamePrefix) || !fileName.StartsWith(fileNamePrefix, StringComparison.Ordinal)))
+            return false;
+        if (IsRuleEnabled(FileNameRuleType.Suffix) &&
+            (string.IsNullOrEmpty(fileNameSuffix) || !fileName.EndsWith(fileNameSuffix, StringComparison.Ordinal)))
+            return false;
+        if (IsRuleEnabled(FileNameRuleType.Template) &&
+            (string.IsNullOrEmpty(fileNameTemplate) || !Regex.IsMatch(fileName, BuildTemplateRegex(fileNameTemplate))))
+            return false;
+        if (IsRuleEnabled(FileNameRuleType.CharacterOptions) && !Regex.IsMatch(fileName, BuildCharacterOptionsRegex()))
+            return false;
+        if (IsRuleEnabled(FileNameRuleType.Regex) && !Regex.IsMatch(fileName, fileNamePattern))
+            return false;
 
-            case FileNameRuleType.Template:
-                expectedRule = $"模板「{fileNameTemplate}」";
-                return !string.IsNullOrEmpty(fileNameTemplate) &&
-                       Regex.IsMatch(fileName, BuildTemplateRegex(fileNameTemplate));
+        return true;
+    }
 
-            default:
-                expectedRule = $"正则「{fileNamePattern}」";
-                return Regex.IsMatch(fileName, fileNamePattern);
-        }
+    private string BuildCharacterOptionsRegex()
+    {
+        var allowedCharacters = new System.Text.StringBuilder("a-z");
+        if (HasCharacterOption(FileNameCharacterOptions.AllowChinese)) allowedCharacters.Append("\\u4e00-\\u9fff");
+        if (HasCharacterOption(FileNameCharacterOptions.AllowDigits)) allowedCharacters.Append("0-9");
+        if (HasCharacterOption(FileNameCharacterOptions.AllowUnderscores)) allowedCharacters.Append("_");
+
+        string characterClass = "[" + allowedCharacters + "]";
+        return HasCharacterOption(FileNameCharacterOptions.RequireLowercaseLetterStart)
+            ? "^[a-z]" + characterClass + "*$"
+            : "^" + characterClass + "+$";
+    }
+
+    private string GetCharacterOptionsDescription()
+    {
+        var parts = new List<string> { "小写字母" };
+        if (HasCharacterOption(FileNameCharacterOptions.AllowChinese)) parts.Add("中文");
+        if (HasCharacterOption(FileNameCharacterOptions.AllowDigits)) parts.Add("数字");
+        if (HasCharacterOption(FileNameCharacterOptions.AllowUnderscores)) parts.Add("下划线");
+
+        return (HasCharacterOption(FileNameCharacterOptions.RequireLowercaseLetterStart) ? "文件名须以小写字母开头，可包含" : "文件名可包含")
+            + string.Join("、", parts);
+    }
+
+    private bool HasCharacterOption(FileNameCharacterOptions option)
+    {
+        return (characterOptions & option) == option;
+    }
+
+    private bool IsRuleEnabled(FileNameRuleType rule)
+    {
+        return (fileNameRuleType & rule) == rule;
+    }
+
+    /// <summary>获取当前检查方式对应的规则描述。</summary>
+    public string GetNamingDescription()
+    {
+        var descriptions = new List<string>();
+        if (IsRuleEnabled(FileNameRuleType.Regex)) descriptions.Add(namingDescription);
+        if (IsRuleEnabled(FileNameRuleType.Prefix)) descriptions.Add($"前缀「{fileNamePrefix}」");
+        if (IsRuleEnabled(FileNameRuleType.Suffix)) descriptions.Add($"后缀「{fileNameSuffix}」");
+        if (IsRuleEnabled(FileNameRuleType.Template)) descriptions.Add($"模板「{fileNameTemplate}」");
+        if (IsRuleEnabled(FileNameRuleType.CharacterOptions)) descriptions.Add(GetCharacterOptionsDescription());
+        return descriptions.Count > 0 ? string.Join("；", descriptions) : "未选择检查方式";
     }
 
     /// <summary>将 {{0}}、{{1}} 等占位符转换为完整匹配的正则表达式。</summary>
@@ -334,7 +396,7 @@ public class FolderRuleConfig : ScriptableObject
         string relPath = assetPath;
         // 相对于规则文件夹的路径
         string ruleFolder = NormalizedFolderPath;
-        if (relPath.StartsWith(ruleFolder + "/"))
+        if (relPath.StartsWith(ruleFolder + "/", StringComparison.Ordinal))
             relPath = relPath.Substring(ruleFolder.Length + 1);
 
         return addressableNameTemplate
@@ -363,7 +425,7 @@ public class FolderRuleConfig : ScriptableObject
         if (string.IsNullOrWhiteSpace(namingIgnoreExtensions)) return list;
         foreach (var e in namingIgnoreExtensions.Split(','))
         {
-            string t = e.Trim().ToLower();
+            string t = e.Trim().ToLowerInvariant();
             if (!string.IsNullOrEmpty(t)) list.Add(t);
         }
         return list;

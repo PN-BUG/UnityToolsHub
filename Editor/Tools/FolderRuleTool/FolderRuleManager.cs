@@ -367,7 +367,7 @@ public class FolderRuleManager : EditorWindow
             {
                 EditorGUILayout.LabelField("命名规则", EditorStyles.boldLabel);
                 EditorGUILayout.LabelField("  正则", config.fileNamePattern);
-                EditorGUILayout.LabelField("  说明", config.namingDescription);
+                EditorGUILayout.LabelField("  说明", config.GetNamingDescription());
                 EditorGUILayout.LabelField("  忽略扩展名", config.namingIgnoreExtensions);
                 EditorGUILayout.Space(2);
             }
@@ -634,7 +634,7 @@ public class FolderRuleManager : EditorWindow
             // 跳过文件夹自身
             if (AssetDatabase.IsValidFolder(assetPath)) continue;
             // 跳过 SO 自身
-            if (string.Equals(assetPath, configPath, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(assetPath, configPath, StringComparison.Ordinal)) continue;
             // 跳过忽略列表中的资源
             if (config.IsIgnored(assetPath)) continue;
 
@@ -681,7 +681,7 @@ public class FolderRuleManager : EditorWindow
                 string assetPath = AssetDatabase.GUIDToAssetPath(guid);
                 if (string.IsNullOrEmpty(assetPath)) continue;
                 if (AssetDatabase.IsValidFolder(assetPath)) continue;
-                if (string.Equals(assetPath, configPath, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(assetPath, configPath, StringComparison.Ordinal)) continue;
                 if (config.IsIgnored(assetPath)) continue;
 
                 bool applied = false;
@@ -733,7 +733,7 @@ public class FolderRuleManager : EditorWindow
                 string assetPath = AssetDatabase.GUIDToAssetPath(guid);
                 if (string.IsNullOrEmpty(assetPath)) continue;
                 if (AssetDatabase.IsValidFolder(assetPath)) continue;
-                if (string.Equals(assetPath, configPath, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(assetPath, configPath, StringComparison.Ordinal)) continue;
                 if (config.IsIgnored(assetPath)) continue;
 
                 bool applied = false;
@@ -904,7 +904,7 @@ public class FolderRuleManager : EditorWindow
                 Debug.LogWarning(
                     $"[FolderRule] 文件名不符合规范 [{config.name}]\n" +
                     $"  文件: {assetPath}\n" +
-                    $"  规则: {config.namingDescription}\n" +
+                    $"  规则: {config.GetNamingDescription()}\n" +
                     $"  正则: {config.fileNamePattern}");
             }
         }
@@ -932,7 +932,7 @@ public class FolderRuleManager : EditorWindow
                     assetPath = assetPath,
                     configName = config.name,
                     ruleType = "命名",
-                    message = $"文件名「{fileName}」不符合规范：{config.namingDescription}",
+                    message = $"文件名「{fileName}」不符合规范：{config.GetNamingDescription()}",
                     config = config
                 });
             }
@@ -1261,7 +1261,7 @@ public class FolderRuleManager : EditorWindow
         string dir = Path.GetDirectoryName(assetPath)?.Replace('\\', '/') ?? "";
 
         // 尝试转换为小写+下划线格式
-        string fixedName = fileName.ToLower()
+        string fixedName = fileName.ToLowerInvariant()
             .Replace(" ", "_")
             .Replace("-", "_");
 

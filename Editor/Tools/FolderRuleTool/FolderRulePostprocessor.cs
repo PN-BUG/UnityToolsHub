@@ -90,7 +90,7 @@ public class FolderRulePostprocessor : AssetPostprocessor
                 Debug.LogWarning(
                     $"[FolderRule] 文件名不符合规范 [{config.name}]\n" +
                     $"  文件: {assetPath}\n" +
-                    $"  规则: {config.namingDescription}\n" +
+                    $"  规则: {config.GetNamingDescription()}\n" +
                     $"  检查: {expectedRule}");
             }
         }

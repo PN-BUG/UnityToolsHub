@@ -13,7 +13,6 @@ using UnityEngine;
 public sealed class FfmpegAudioConverterWindow : EditorWindow
 {
     private const string FfmpegPathPreference = "MermaidsFallAVG.AudioConverter.FfmpegPath";
-    private const string BundledFfmpegMarker = "__UNITY_TOOLS_HUB_BUNDLED_FFMPEG__";
     private const string DefaultOutputFolder = "Assets/Audio/Converted";
     private static readonly string[] AudioExtensions = { ".mp3", ".m4a", ".aac", ".mp4", ".wav", ".ogg", ".flac" };
 
@@ -67,10 +66,12 @@ public sealed class FfmpegAudioConverterWindow : EditorWindow
 
     private void OnEnable()
     {
-        // The marker is resolved from this script's directory every time, so moving
-        // UnityToolsHub does not leave a stale absolute path in EditorPrefs.
-        ffmpegPath = EditorPrefs.GetString(FfmpegPathPreference, BundledFfmpegMarker);
-        if (ffmpegPath == "ffmpeg") ffmpegPath = BundledFfmpegMarker; // Migrate the old default.
+        ffmpegPath = EditorPrefs.GetString(FfmpegPathPreference, string.Empty);
+        if (ffmpegPath == "__UNITY_TOOLS_HUB_BUNDLED_FFMPEG__" || ffmpegPath == "ffmpeg")
+        {
+            ffmpegPath = string.Empty;
+            EditorPrefs.SetString(FfmpegPathPreference, ffmpegPath);
+        }
     }
 
     private void OnDisable()
@@ -98,6 +99,7 @@ public sealed class FfmpegAudioConverterWindow : EditorWindow
     private void DrawSettings()
     {
         EditorGUILayout.LabelField("转换设置", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox("ffmpeg 文件体积较大，工具未内置。请自行下载 ffmpeg，并通过下方“选择 ffmpeg.exe”指定其路径。", MessageType.Info);
         outputFormat = (OutputFormat)EditorGUILayout.EnumPopup("输出格式", outputFormat);
         using (new EditorGUILayout.HorizontalScope())
         {
@@ -112,23 +114,16 @@ public sealed class FfmpegAudioConverterWindow : EditorWindow
                     else outputFolder = assetPath;
                 }
             }
+            if (GUILayout.Button("打开目录", GUILayout.Width(80))) OpenOutputFolder();
         }
 
         using (new EditorGUILayout.HorizontalScope())
         {
-            if (ffmpegPath == BundledFfmpegMarker)
+            var newPath = EditorGUILayout.TextField("ffmpeg.exe", ffmpegPath);
+            if (newPath != ffmpegPath)
             {
-                EditorGUILayout.SelectableLabel("随 UnityToolsHub 附带的 ffmpeg（自动定位）", EditorStyles.textField,
-                    GUILayout.Height(EditorGUIUtility.singleLineHeight));
-            }
-            else
-            {
-                var newPath = EditorGUILayout.TextField("ffmpeg", ffmpegPath);
-                if (newPath != ffmpegPath)
-                {
-                    ffmpegPath = newPath;
-                    EditorPrefs.SetString(FfmpegPathPreference, ffmpegPath);
-                }
+                ffmpegPath = newPath;
+                EditorPrefs.SetString(FfmpegPathPreference, ffmpegPath);
             }
             if (GUILayout.Button("选择 ffmpeg.exe", GUILayout.Width(120)))
             {
@@ -138,11 +133,6 @@ public sealed class FfmpegAudioConverterWindow : EditorWindow
                     ffmpegPath = path;
                     EditorPrefs.SetString(FfmpegPathPreference, ffmpegPath);
                 }
-            }
-            if (ffmpegPath != BundledFfmpegMarker && GUILayout.Button("使用附带版本", GUILayout.Width(100)))
-            {
-                ffmpegPath = BundledFfmpegMarker;
-                EditorPrefs.SetString(FfmpegPathPreference, ffmpegPath);
             }
         }
     }
@@ -198,7 +188,7 @@ public sealed class FfmpegAudioConverterWindow : EditorWindow
             using (new EditorGUI.DisabledScope(completed.Count == 0 || conversionProcess != null))
             {
                 if (GUILayout.Button("一键替换全部")) ReplaceAll();
-                if (GUILayout.Button("清空完成列表")) completed.Clear();
+                if (GUILayout.Button("清空完成列表")) ClearCompletedList();
             }
         }
 
@@ -302,7 +292,7 @@ public sealed class FfmpegAudioConverterWindow : EditorWindow
         var executablePath = ResolveFfmpegExecutable();
         if (string.IsNullOrEmpty(executablePath))
         {
-            status = "未找到随工具附带的 ffmpeg.exe。请确认它位于 AudioConversionTool 文件夹内，或手动选择 ffmpeg.exe。";
+            status = "未配置 ffmpeg.exe。请自行下载 ffmpeg，然后点击“选择 ffmpeg.exe”指定其路径。";
             return;
         }
 
@@ -448,6 +438,45 @@ public sealed class FfmpegAudioConverterWindow : EditorWindow
         playPreviewClip.Invoke(null, new object[] { clip, 0, false });
     }
 
+    private void OpenOutputFolder()
+    {
+        var folder = Path.Combine(GetProjectRoot(), outputFolder);
+        Directory.CreateDirectory(folder);
+        EditorUtility.RevealInFinder(folder);
+    }
+
+    private void ClearCompletedList()
+    {
+        var generatedItems = completed.FindAll(item => !item.replaced);
+        if (generatedItems.Count > 0 && !EditorUtility.DisplayDialog(
+                "清空完成列表",
+                $"将删除 {generatedItems.Count} 个已转换的输出文件，并清空完成列表。\n\n此操作不可撤销。",
+                "删除并清空",
+                "取消")) return;
+
+        AssetDatabase.StartAssetEditing();
+        try
+        {
+            foreach (var item in generatedItems)
+            {
+                if (!string.IsNullOrEmpty(item.outputAssetPath)) AssetDatabase.DeleteAsset(item.outputAssetPath);
+                else if (File.Exists(item.outputAbsolutePath))
+                {
+                    File.Delete(item.outputAbsolutePath);
+                    var metaPath = item.outputAbsolutePath + ".meta";
+                    if (File.Exists(metaPath)) File.Delete(metaPath);
+                }
+            }
+        }
+        finally
+        {
+            AssetDatabase.StopAssetEditing();
+            AssetDatabase.Refresh();
+        }
+
+        completed.Clear();
+    }
+
     private string GetAvailableOutputPath(string sourcePath)
     {
         var extension = outputFormat == OutputFormat.Wav ? ".wav" : ".mp3";
@@ -495,18 +524,7 @@ public sealed class FfmpegAudioConverterWindow : EditorWindow
 
     private string ResolveFfmpegExecutable()
     {
-        if (ffmpegPath != BundledFfmpegMarker) return string.IsNullOrWhiteSpace(ffmpegPath) ? "ffmpeg" : ffmpegPath;
-
-        var scriptGuids = AssetDatabase.FindAssets("FfmpegAudioConverterWindow t:MonoScript");
-        foreach (var guid in scriptGuids)
-        {
-            var scriptAssetPath = AssetDatabase.GUIDToAssetPath(guid);
-            if (!scriptAssetPath.EndsWith("FfmpegAudioConverterWindow.cs", StringComparison.Ordinal)) continue;
-            var scriptDirectory = Path.Combine(GetProjectRoot(), Path.GetDirectoryName(scriptAssetPath) ?? string.Empty);
-            var executables = Directory.GetFiles(scriptDirectory, "ffmpeg.exe", SearchOption.AllDirectories);
-            if (executables.Length > 0) return executables[0];
-        }
-        return null;
+        return string.IsNullOrWhiteSpace(ffmpegPath) ? null : ffmpegPath;
     }
 
     private void SetAllSelections(bool selected)
