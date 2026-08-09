@@ -1,0 +1,40 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Unity meta files
+*.meta text eol=lf
+
+# Unity assets
+*.cs text eol=lf
+*.shader text eol=lf
+*.cginc text eol=lf
+*.hlsl text eol=lf
+*.json text eol=lf
+*.asmdef text eol=lf
+*.unity text eol=lf
+*.prefab text eol=lf
+*.mat text eol=lf
+*.asset text eol=lf
+*.anim text eol=lf
+*.controller text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# Binary assets - no line ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.tga binary
+*.tif binary
+*.tiff binary
+*.psd binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.fbx binary
+*.obj binary
+*.ttf binary
+*.otf binary
+*.dll binary
+*.exr binary
