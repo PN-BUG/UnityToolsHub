@@ -141,7 +141,7 @@ MyToolPackage/
 
 完整使用者/作者说明见 [第三方工具接入指南](INTEGRATION.md)。
 
-Git/本地 UPM 包安装完成后，Hub 会扫描包内的 `EditorWindow` 并创建外部注册记录，不再向第三方源码写入 `[ToolInfo]`。自动发现的入口默认禁用，需由用户在第三方工具管理页确认启用。
+Git/本地 UPM 包安装完成后，Hub 会扫描包内的 `EditorWindow` 并创建外部注册记录，不再向第三方源码写入 `[ToolInfo]`。扫描覆盖 UPM Git 包，以及作为直接依赖安装的 Local/Embedded、`file:` 和 Git submodule 包；入口发现同时检查 AssetDatabase 与 Unity 编译程序集，避免遗漏同文件中的其他窗口类型。自动发现的入口默认禁用，需由用户在第三方工具管理页确认启用。
 
 愿意主动支持 Hub 的作者可以发布仓库中 `SDK~/` 的独立包，并使用 `UnityToolsHub.SDK.UnityToolAttribute` 声明名称、分类和入口。SDK 不引用 Hub，也不负责打开窗口；工具应继续保留自己的 `MenuItem`，因此未安装 Hub 时仍能独立使用。
 

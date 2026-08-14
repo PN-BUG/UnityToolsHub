@@ -25,6 +25,10 @@ Hub 不会向第三方仓库写入 `[ToolInfo]`，也不会修改其脚本。
 
 无需重复安装。Hub 打开时会扫描 `Packages/manifest.json` 中已经解析完成的 Git UPM 包，并自动登记其中的 `EditorWindow`。识别出的入口默认禁用，在第三方工具管理页确认后启用即可。UnityToolsHub 自身会被排除。
 
+对于以 `file:`、嵌入包或 Git submodule 方式放在 `Packages/` 下的直接依赖，UPM 会把来源标记为 Local/Embedded，而不是 Git。Hub 同样会扫描这些包。识别过程以 Unity 编译程序集的源码归属为准，因此能够发现同一个脚本文件中的多个 `EditorWindow` 类型。
+
+纯运行时库、只包含 Inspector/Importer 的扩展或没有 `EditorWindow` 的包不会生成可打开的工具入口；这类包若需要出现在 Hub 中，应使用 SDK 声明 `menu` 或 `static` 入口。
+
 ### 批量隐藏与启用状态
 
 “隐藏项管理”提供两个独立开关：
