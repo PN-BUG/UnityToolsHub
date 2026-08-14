@@ -8,6 +8,7 @@ All notable changes to this package will be documented in this file.
 - 自动识别作为直接依赖安装的 Local/Embedded 包，包括 `file:` 与 Git submodule 包
 - 可选独立 SDK，支持 `window`、`menu`、`static` 三种入口声明，工具脱离 Hub 仍可独立使用
 - 隐藏项管理新增“隐藏内置工具”和“隐藏第三方工具”批量开关
+- 左栏工具项支持双击直接打开，单击仍保留详情选择行为
 - 新增第三方工具接入指南 `INTEGRATION.md`，并在“添加工具”页面提供文档入口
 
 ### Changed
