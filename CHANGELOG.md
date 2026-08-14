@@ -1,6 +1,18 @@
 # Changelog
 All notable changes to this package will be documented in this file.
 
+## [Unreleased]
+### Added
+- 第三方 Git/本地 UPM 包无侵入接入：自动发现包内 `EditorWindow`，无需修改第三方源码
+- 自动识别 `Packages/manifest.json` 中已经安装的 Git 包
+- 可选独立 SDK，支持 `window`、`menu`、`static` 三种入口声明，工具脱离 Hub 仍可独立使用
+- 隐藏项管理新增“隐藏内置工具”和“隐藏第三方工具”批量开关
+- 新增第三方工具接入指南 `INTEGRATION.md`，并在“添加工具”页面提供文档入口
+
+### Changed
+- 第三方工具列表改为响应式宽度，工具名称为来源标签预留空间，自动发现项优先显示包名
+- 批量隐藏仅改变 Hub 列表可见性，不改变第三方启用状态，也不卸载工具包
+
 ## [1.4.0] - 2026-07-23
 ### Changed
 - 移除 `HubCompat.cs` 兼容层：Hub 各文件直接引用 `Theme.*`、`Styles.*`、`Drawing.*`、`Palette.*`，消除间接别名层

@@ -1,0 +1,8 @@
+{
+  "name": "com.zko.unitytoolshub.sdk",
+  "version": "1.0.0",
+  "displayName": "Unity Tools Hub SDK",
+  "description": "Optional standalone metadata SDK for Unity editor tools.",
+  "unity": "2021.3",
+  "type": "library"
+}
