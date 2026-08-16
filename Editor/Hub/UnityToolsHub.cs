@@ -316,6 +316,7 @@ public partial class UnityToolsHub : EditorWindow
         LoadHiddenItems();
         LoadFolderConfig();
         LoadThirdPartyRegistry();
+        RefreshInstalledPackageRecipes();
         _sortMode = (SortMode)EditorPrefs.GetInt(SortModePrefsKey, 0);
         DiscoverTools();
         ApplyFolderConfig();
@@ -448,6 +449,68 @@ public partial class UnityToolsHub : EditorWindow
     {
         _hiddenItems = new HiddenItems();
         SaveHiddenItems();
+    }
+
+    private List<ToolEntry> GetBuiltInTools()
+    {
+        return _toolIndex.Values
+            .Where(tool => tool != null && !tool.isThirdParty && !string.IsNullOrEmpty(tool.typeName))
+            .GroupBy(tool => tool.typeName)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private bool AreAllBuiltInToolsHidden()
+    {
+        var tools = GetBuiltInTools();
+        return tools.Count > 0 && tools.All(tool => _hiddenItems.IsToolHidden(tool.typeName));
+    }
+
+    private void SetBuiltInToolsHidden(bool hidden)
+    {
+        var tools = GetBuiltInTools();
+        foreach (var tool in tools)
+            _hiddenItems.SetToolHidden(tool.typeName, hidden);
+
+        if (hidden && _selectedTool != null && !_selectedTool.isThirdParty)
+        {
+            _selectedTool = null;
+            _selectedCategory = null;
+        }
+
+        SaveHiddenItems();
+        Repaint();
+    }
+
+    private List<ToolEntry> GetThirdPartyTools()
+    {
+        return _toolIndex.Values
+            .Where(tool => tool != null && tool.isThirdParty && !string.IsNullOrEmpty(tool.typeName))
+            .GroupBy(tool => tool.typeName)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private bool AreAllThirdPartyToolsHidden()
+    {
+        var tools = GetThirdPartyTools();
+        return tools.Count > 0 && tools.All(tool => _hiddenItems.IsToolHidden(tool.typeName));
+    }
+
+    private void SetThirdPartyToolsHidden(bool hidden)
+    {
+        var tools = GetThirdPartyTools();
+        foreach (var tool in tools)
+            _hiddenItems.SetToolHidden(tool.typeName, hidden);
+
+        if (hidden && _selectedTool != null && _selectedTool.isThirdParty)
+        {
+            _selectedTool = null;
+            _selectedCategory = null;
+        }
+
+        SaveHiddenItems();
+        Repaint();
     }
     #endregion
 

@@ -530,6 +530,28 @@ public partial class UnityToolsHub
         // ── 全局操作按钮 ──────────────────────────────────
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
+
+        var builtInTools = GetBuiltInTools();
+        bool allBuiltInHidden = AreAllBuiltInToolsHidden();
+        var thirdPartyTools = GetThirdPartyTools();
+        bool allThirdPartyHidden = AreAllThirdPartyToolsHidden();
+
+        EditorGUILayout.BeginVertical(GUILayout.Width(190));
+        bool hideBuiltIn = EditorGUILayout.ToggleLeft(
+            new GUIContent($"隐藏内置工具 ({builtInTools.Count})", "仅隐藏 UnityToolsHub 内置工具，不影响第三方工具和工具本身功能"),
+            allBuiltInHidden,
+            GUILayout.Width(190));
+        if (hideBuiltIn != allBuiltInHidden)
+            SetBuiltInToolsHidden(hideBuiltIn);
+
+        bool hideThirdParty = EditorGUILayout.ToggleLeft(
+            new GUIContent($"隐藏第三方工具 ({thirdPartyTools.Count})", "仅隐藏当前已启用的第三方工具，不会禁用或卸载第三方包"),
+            allThirdPartyHidden,
+            GUILayout.Width(190));
+        if (hideThirdParty != allThirdPartyHidden)
+            SetThirdPartyToolsHidden(hideThirdParty);
+        EditorGUILayout.EndVertical();
+
         GUILayout.FlexibleSpace();
 
         // 一键全部恢复
@@ -639,6 +661,8 @@ public partial class UnityToolsHub
         GUILayout.Space(RightPadding);
         EditorGUILayout.HelpBox(
             "提示：\n" +
+            "• “隐藏内置工具”只影响 Hub 列表显示，不会禁用或卸载工具。\n" +
+            "• “隐藏第三方工具”不会改变第三方管理页中的启用状态。\n" +
             "• 在左侧列表的分类标题或工具项上右键，可快速隐藏/取消隐藏。\n" +
             "• 隐藏的项不会显示在左侧列表中（搜索时仍可见）。\n" +
             "• 工具和分类按使用频率排序，使用越多越靠前。",
@@ -1525,7 +1549,22 @@ public partial class UnityToolsHub
         // ── 说明文字 ──────────────────────────────────────
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
-        GUILayout.Label("扫描指定目录或拖入 .cs 文件，找出未注册的 EditorWindow 扩展并添加 [ToolInfo] 特性", Styles.RightSubtitle);
+        GUILayout.Label("项目内脚本可添加 [ToolInfo]；Git/UPM 工具请使用无侵入接入或可选 SDK", Styles.RightSubtitle);
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(8);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.HelpBox(
+            "两种方式：\n" +
+            "• 项目内工具：扫描或拖入 EditorWindow，Hub 会向脚本添加 [ToolInfo]。\n" +
+            "• 第三方 Git/UPM：前往第三方工具页导入，Hub 自动发现入口且不修改对方源码。作者也可使用独立 SDK 主动声明入口。",
+            MessageType.Info);
+        GUILayout.Space(8);
+        if (GUILayout.Button("查看接入文档", GUILayout.Width(100), GUILayout.Height(38)))
+            OpenIntegrationGuide();
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
 
@@ -1666,6 +1705,19 @@ public partial class UnityToolsHub
             GUILayout.Space(RightPadding);
             EditorGUILayout.EndHorizontal();
         }
+    }
+
+    private static void OpenIntegrationGuide()
+    {
+        foreach (string guid in AssetDatabase.FindAssets("INTEGRATION t:TextAsset"))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (!path.EndsWith("UnityToolsHub/INTEGRATION.md", StringComparison.OrdinalIgnoreCase)) continue;
+            var document = AssetDatabase.LoadAssetAtPath<TextAsset>(path);
+            if (document != null) AssetDatabase.OpenAsset(document);
+            return;
+        }
+        Debug.LogWarning("[UnityToolsHub] 未找到 INTEGRATION.md 接入文档");
     }
 
     /// <summary>绘制候选列表 + 选中后的导入表单</summary>
@@ -2097,7 +2149,7 @@ public partial class UnityToolsHub
         GUILayout.Space(RightPadding);
 
         // ── 左侧：工具列表 ──
-        float listWidth = 220f;
+        float listWidth = Mathf.Clamp(position.width * 0.34f, 250f, 340f);
         EditorGUILayout.BeginVertical(GUILayout.Width(listWidth), GUILayout.Height(contentHeight));
 
         var listHeaderRect = GUILayoutUtility.GetRect(listWidth, 24);
@@ -2136,10 +2188,6 @@ public partial class UnityToolsHub
             Color dotColor = state.isEnabled ? new Color(0.35f, 0.85f, 0.45f, 1f) : new Color(0.85f, 0.35f, 0.35f, 1f);
             EditorGUI.DrawRect(dotRect, dotColor);
 
-            // 工具名
-            var nameRect = new Rect(rowRect.x + 22, rowRect.y + 4, rowRect.width - 30, 18);
-            GUI.Label(nameRect, state.toolName, isSelected ? Styles.ToolItemSelected : Styles.ToolItem);
-
             // 来源标签
             string sourceLabel = "";
             Color sourceColor = Theme.ClrTextDim;
@@ -2147,21 +2195,36 @@ public partial class UnityToolsHub
             else if (state.importSource == "local") { sourceLabel = "本地"; sourceColor = new Color(0.35f, 0.75f, 0.45f, 1f); }
             else if (state.importSource == "manual") { sourceLabel = "手动"; sourceColor = Theme.ClrTextDim; }
 
+            Rect srcRect = default(Rect);
             if (!string.IsNullOrEmpty(sourceLabel))
             {
                 var srcContent = new GUIContent(sourceLabel);
                 var srcSize = Styles.Tag.CalcSize(srcContent);
-                var srcRect = new Rect(rowRect.xMax - srcSize.x - 20, rowRect.y + 5, srcSize.x + 12, 16);
+                srcRect = new Rect(rowRect.xMax - srcSize.x - 10, rowRect.y + 5, srcSize.x + 8, 16);
                 EditorGUI.DrawRect(srcRect, new Color(sourceColor.r, sourceColor.g, sourceColor.b, 0.15f));
                 var srcStyle = new GUIStyle(Styles.Tag) { normal = { textColor = sourceColor }, fontSize = 9 };
                 GUI.Label(srcRect, sourceLabel, srcStyle);
             }
 
-            // 作者
+            // 工具名：为右侧来源标签预留空间，长名称使用省略式裁剪。
+            float nameRight = string.IsNullOrEmpty(sourceLabel) ? rowRect.xMax - 8 : srcRect.x - 6;
+            var nameRect = new Rect(rowRect.x + 22, rowRect.y + 4,
+                Mathf.Max(20, nameRight - rowRect.x - 22), 18);
+            var nameStyle = new GUIStyle(isSelected ? Styles.ToolItemSelected : Styles.ToolItem)
+            {
+                clipping = TextClipping.Clip
+            };
+            GUI.Label(nameRect, new GUIContent(state.toolName, state.toolName), nameStyle);
+
+            // 自动发现项优先显示包名，比“未知作者”更有辨识度。
             var authorRect = new Rect(rowRect.x + 22, rowRect.y + 22, rowRect.width - 30, 12);
-            GUI.Label(authorRect, string.IsNullOrEmpty(state.author) ? "(未知作者)" : state.author, new GUIStyle()
+            string secondaryText = !string.IsNullOrEmpty(state.author)
+                ? state.author
+                : (!string.IsNullOrEmpty(state.packageName) ? state.packageName : "(未知来源)");
+            GUI.Label(authorRect, new GUIContent(secondaryText, secondaryText), new GUIStyle()
             {
                 fontSize = 9,
+                clipping = TextClipping.Clip,
                 normal = { textColor = Theme.ClrTextDim }
             });
 

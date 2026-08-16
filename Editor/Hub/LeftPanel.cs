@@ -468,6 +468,27 @@ public partial class UnityToolsHub
 
                     if (!string.IsNullOrEmpty(tool.typeName))
                     {
+                        // 双击直接打开；单击仍进入下方的拖动/选中流程。
+                        if (toolEvt.clickCount >= 2)
+                        {
+                            _dragType = DragType.None;
+                            _dragToolTypeName = null;
+                            _dragSourceCategory = null;
+                            _dragPending = false;
+                            _isDragActive = false;
+                            _selectedTool = tool;
+                            _selectedCategory = category;
+                            _showCreateForm = false;
+                            _showAddToolPanel = false;
+                            _showThirdPartyManager = false;
+                            _showHiddenManager = false;
+                            _rightScroll = Vector2.zero;
+                            RecordToolUsage(tool);
+                            OpenToolWindow(tool.typeName);
+                            toolEvt.Use();
+                            continue;
+                        }
+
                         // 记录拖动起始状态（待确认）
                         _dragType = DragType.Tool;
                         _dragToolTypeName = tool.typeName;

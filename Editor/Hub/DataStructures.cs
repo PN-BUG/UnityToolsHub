@@ -26,6 +26,9 @@ public partial class UnityToolsHub
         public string authorLink;      // 作者链接/主页 URL
         public bool isThirdParty;      // 是否第三方工具
         public string scriptPath;      // 脚本资产路径 (Assets/.../*.cs)
+        public string entryKind;       // "window" | "menu" | "static"
+        public string menuItem;
+        public string staticMethod;
     }
     #endregion
 
@@ -295,6 +298,16 @@ public partial class UnityToolsHub
             _indexDirty = true;
         }
 
+        public void SetToolHidden(string typeName, bool hidden)
+        {
+            if (string.IsNullOrEmpty(typeName)) return;
+            bool currentlyHidden = hiddenTools.Contains(typeName);
+            if (currentlyHidden == hidden) return;
+            if (hidden) hiddenTools.Add(typeName);
+            else hiddenTools.Remove(typeName);
+            _indexDirty = true;
+        }
+
         public void ToggleCategory(string categoryName)
         {
             if (string.IsNullOrEmpty(categoryName)) return;
@@ -325,6 +338,14 @@ public partial class UnityToolsHub
         public string packagePath;     // 本地包路径 或 UPM 包名
         public string installPath;    // 安装后的实际路径
         public bool isInstalled;       // 是否已安装
+        public string entryKind;       // "window" | "menu" | "static"
+        public string menuItem;
+        public string staticMethod;
+        public string packageName;
+        public string revision;
+        public string[] tags;
+        public string icon;
+        public int priority;
     }
 
     /// <summary>第三方工具注册表（可序列化存储到 EditorPrefs）</summary>
@@ -393,6 +414,19 @@ public partial class UnityToolsHub
                 existing.description = state.description;
                 existing.category = state.category;
                 existing.scriptPath = state.scriptPath;
+                existing.entryKind = state.entryKind;
+                existing.menuItem = state.menuItem;
+                existing.staticMethod = state.staticMethod;
+                existing.packageName = state.packageName;
+                existing.revision = state.revision;
+                existing.tags = state.tags;
+                existing.icon = state.icon;
+                existing.priority = state.priority;
+                if (!string.IsNullOrEmpty(state.importSource)) existing.importSource = state.importSource;
+                if (!string.IsNullOrEmpty(state.gitUrl)) existing.gitUrl = state.gitUrl;
+                if (!string.IsNullOrEmpty(state.packagePath)) existing.packagePath = state.packagePath;
+                if (!string.IsNullOrEmpty(state.installPath)) existing.installPath = state.installPath;
+                existing.isInstalled = state.isInstalled || existing.isInstalled;
                 // 保留已有 isEnabled 状态
             }
             else

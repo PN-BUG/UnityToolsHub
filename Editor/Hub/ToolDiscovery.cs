@@ -56,6 +56,14 @@ public partial class UnityToolsHub
             }
         }
 
+        // Optional SDK metadata is read by reflection, so neither side needs to
+        // reference the other's assembly.
+        foreach (var sdkTool in DiscoverSdkTools())
+        {
+            if (!discovered.Any(tool => tool.typeName == sdkTool.typeName))
+                discovered.Add(sdkTool);
+        }
+
         // ── 2. 同步第三方工具注册表 + 过滤禁用的 ────────────
         bool registryDirty = false;
         for (int i = discovered.Count - 1; i >= 0; i--)
@@ -76,7 +84,13 @@ public partial class UnityToolsHub
                     description = t.description,
                     category = t.category,
                     scriptPath = "",
-                    isEnabled = false // 默认禁用
+                    isEnabled = false, // 默认禁用
+                    entryKind = t.entryKind,
+                    menuItem = t.menuItem,
+                    staticMethod = t.staticMethod,
+                    tags = t.tags,
+                    icon = t.icon,
+                    priority = t.priority
                 });
                 registryDirty = true;
             }
@@ -88,6 +102,12 @@ public partial class UnityToolsHub
                 existing.authorLink = t.authorLink;
                 existing.description = t.description;
                 existing.category = t.category;
+                existing.entryKind = t.entryKind;
+                existing.menuItem = t.menuItem;
+                existing.staticMethod = t.staticMethod;
+                existing.tags = t.tags;
+                existing.icon = t.icon;
+                existing.priority = t.priority;
                 registryDirty = true;
             }
 
@@ -96,6 +116,32 @@ public partial class UnityToolsHub
                 discovered.RemoveAt(i);
         }
         if (registryDirty) SaveThirdPartyRegistry();
+
+        // External recipes are first-class entries even when the source package
+        // cannot or does not want to reference ToolInfo/SDK.
+        foreach (var state in _thirdPartyRegistry.tools)
+        {
+            if (!state.isEnabled || !state.isInstalled) continue;
+            if (discovered.Any(tool => tool.typeName == state.typeName)) continue;
+            discovered.Add(new ToolEntry
+            {
+                name = state.toolName,
+                description = state.description ?? "",
+                category = string.IsNullOrEmpty(state.category) ? "Third-party Tools" : state.category,
+                originalCategory = string.IsNullOrEmpty(state.category) ? "Third-party Tools" : state.category,
+                typeName = state.typeName,
+                icon = string.IsNullOrEmpty(state.icon) ? "Tool" : state.icon,
+                tags = state.tags,
+                priority = state.priority,
+                author = state.author ?? "",
+                authorLink = state.authorLink ?? "",
+                isThirdParty = true,
+                scriptPath = state.scriptPath,
+                entryKind = state.entryKind,
+                menuItem = state.menuItem,
+                staticMethod = state.staticMethod
+            });
+        }
 
         // ── 3. 按分类分组 ────────────────────────────────
         // 排序规则：使用频率高的分类在前（频率相同则按 Priority）
@@ -331,6 +377,34 @@ public partial class UnityToolsHub
     private void OpenToolWindow(string typeName)
     {
         if (string.IsNullOrEmpty(typeName)) return;
+
+        _toolIndex.TryGetValue(typeName, out var entry);
+        var state = _thirdPartyRegistry.Find(typeName);
+        string entryKind = entry?.entryKind ?? state?.entryKind;
+        string menuItem = entry?.menuItem ?? state?.menuItem;
+        string staticMethod = entry?.staticMethod ?? state?.staticMethod;
+
+        if (entryKind == "menu")
+        {
+            if (!string.IsNullOrEmpty(menuItem) && EditorApplication.ExecuteMenuItem(menuItem)) return;
+            Debug.LogWarning($"[UnityToolsHub] Menu item was not found: {menuItem}");
+            return;
+        }
+
+        if (entryKind == "static")
+        {
+            int separator = string.IsNullOrEmpty(staticMethod) ? -1 : staticMethod.LastIndexOf('.');
+            if (separator > 0)
+            {
+                var owner = FindType(staticMethod.Substring(0, separator));
+                var method = owner?.GetMethod(staticMethod.Substring(separator + 1),
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                    null, Type.EmptyTypes, null);
+                if (method != null) { method.Invoke(null, null); return; }
+            }
+            Debug.LogWarning($"[UnityToolsHub] Static entry point was not found: {staticMethod}");
+            return;
+        }
 
         var type = FindType(typeName);
         if (type == null)
@@ -1026,6 +1100,12 @@ public partial class UnityToolsHub
             _isImporting = false;
             if (success)
             {
+                var addRequest = request as UnityEditor.PackageManager.Requests.AddRequest;
+                if (addRequest?.Result != null)
+                {
+                    var installedPackage = addRequest.Result;
+                    EditorApplication.delayCall += () => RegisterPackageWindows(installedPackage);
+                }
                 // 注册到 ThirdPartyToolRegistry
                 var state = new ThirdPartyToolState
                 {
@@ -1106,6 +1186,12 @@ public partial class UnityToolsHub
                 _isImporting = false;
                 if (success)
                 {
+                    var addRequest = request as UnityEditor.PackageManager.Requests.AddRequest;
+                    if (addRequest?.Result != null)
+                    {
+                        var installedPackage = addRequest.Result;
+                        EditorApplication.delayCall += () => RegisterPackageWindows(installedPackage);
+                    }
                     var state = new ThirdPartyToolState
                     {
                         typeName = localPath,
