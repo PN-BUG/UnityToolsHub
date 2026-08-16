@@ -286,6 +286,23 @@ public partial class UnityToolsHub
         _categoryHeaderRects = new Dictionary<float, Rect>();
         bool isFirstCategory = true;
 
+        if (!hasSearch)
+        {
+            if (_hubSettings.showRecentTools)
+            {
+                var recent = _toolIndex.Values.Where(t => !_hiddenItems.IsToolHidden(t.typeName) && _usageStats.GetToolLastUsed(t.typeName) > 0)
+                    .OrderByDescending(t => _usageStats.GetToolLastUsed(t.typeName)).Take(_hubSettings.recentToolsCount).ToList();
+                DrawSmartToolSection("最近使用", recent, new Color(0.36f, 0.57f, 0.91f));
+            }
+            if (_hubSettings.showMostUsedTools)
+            {
+                var mostUsed = _toolIndex.Values.Where(t => !_hiddenItems.IsToolHidden(t.typeName) && _usageStats.GetToolCount(t.typeName) > 0)
+                    .OrderByDescending(t => _usageStats.GetToolCount(t.typeName)).ThenByDescending(t => _usageStats.GetToolLastUsed(t.typeName))
+                    .Take(_hubSettings.mostUsedToolsCount).ToList();
+                DrawSmartToolSection("最常使用", mostUsed, new Color(0.43f, 0.76f, 0.52f));
+            }
+        }
+
         foreach (var category in _categories)
         {
             if (!hasSearch && _hiddenItems.IsCategoryHidden(category.name)) continue;
@@ -655,7 +672,7 @@ public partial class UnityToolsHub
         var hiddenBg = _showHiddenManager ? new Color(Theme.ClrAccent.r, Theme.ClrAccent.g, Theme.ClrAccent.b, 0.15f) : (hiddenHover ? Theme.ClrHover : new Color(0, 0, 0, 0));
         if (hiddenBg.a > 0f)
             Drawing.DrawRoundedRect(hiddenBtnRect, hiddenBg, 5f);
-        string hiddenLabel = hiddenCount > 0 ? $"⚙  管理隐藏项 ({hiddenCount})" : "⚙  管理隐藏项";
+        string hiddenLabel = hiddenCount > 0 ? $"⚙  设置 ({hiddenCount} 项隐藏)" : "⚙  设置";
         Styles.MiniLabelBoldCenter.normal.textColor = _showHiddenManager ? Theme.ClrTextBright : Theme.ClrTextDim;
         Styles.MiniLabelBoldCenter.fontStyle = _showHiddenManager ? FontStyle.Bold : FontStyle.Normal;
         GUI.Label(hiddenBtnRect, hiddenLabel, Styles.MiniLabelBoldCenter);
@@ -694,6 +711,38 @@ public partial class UnityToolsHub
         {
             DrawDeleteCategoryConfirm();
         }
+    }
+
+    private void DrawSmartToolSection(string title, List<ToolEntry> tools, Color accent)
+    {
+        if (tools == null || tools.Count == 0) return;
+        var header = GUILayoutUtility.GetRect(LeftPanelWidth - 16f, 22f, GUILayout.ExpandWidth(true));
+        EditorGUI.DrawRect(header, Palette.ItemBg);
+        EditorGUI.DrawRect(new Rect(header.x + 1, header.y + 5, 3, header.height - 10), accent);
+        GUI.Label(new Rect(header.x + 10, header.y, header.width - 10, header.height), title, Styles.CategoryHeader);
+        foreach (var tool in tools)
+        {
+            var raw = GUILayoutUtility.GetRect(LeftPanelWidth - 16f, ToolItemHeight, GUILayout.ExpandWidth(true));
+            var rect = new Rect(raw.x + 14, raw.y, raw.width - 14, raw.height);
+            bool selected = _selectedTool == tool;
+            bool hover = rect.Contains(Event.current.mousePosition);
+            if (selected) EditorGUI.DrawRect(rect, Theme.ClrSelection);
+            else if (hover) EditorGUI.DrawRect(rect, Theme.ClrHover);
+            GUI.Label(rect, tool.name, selected ? Styles.ToolItemSelected : Styles.ToolItem);
+            EditorGUIUtility.AddCursorRect(rect, MouseCursor.Link);
+            var evt = Event.current;
+            if (evt.type == EventType.MouseDown && evt.button == 0 && rect.Contains(evt.mousePosition))
+            {
+                _selectedTool = tool;
+                _selectedCategory = _categories.FirstOrDefault(c => c.tools.Contains(tool));
+                _showCreateForm = _showAddToolPanel = _showThirdPartyManager = _showHiddenManager = false;
+                _rightScroll = Vector2.zero;
+                RecordToolUsage(tool);
+                if (evt.clickCount >= 2) OpenToolWindow(tool.typeName);
+                evt.Use();
+            }
+        }
+        EditorGUILayout.Space(4);
     }
 
     /// <summary>绘制矩形边框</summary>

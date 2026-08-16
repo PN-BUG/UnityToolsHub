@@ -2,6 +2,10 @@
 All notable changes to this package will be documented in this file.
 
 ## [Unreleased]
+
+- 将“管理隐藏项”升级为设置界面，新增最近使用/最常使用快捷列表及数量配置。
+- Unity 顶部 `UnityToolsHub` 菜单新增“最近使用”和“最常使用”弹出列表。
+- 工具详情新增 Unity 菜单栏显示开关，可生成 `UnityToolsHub/工具` 下的项目级入口。
 ### Added
 - 第三方 Git/本地 UPM 包无侵入接入：自动发现包内 `EditorWindow`，无需修改第三方源码
 - 自动识别 `Packages/manifest.json` 中已经安装的 Git 包
@@ -12,6 +16,13 @@ All notable changes to this package will be documented in this file.
 - 新增第三方工具接入指南 `INTEGRATION.md`，并在“添加工具”页面提供文档入口
 
 ### Changed
+- GitPackageSwitcher 重构为摘要卡片、分段筛选和模式色条包卡片布局，统一操作按钮的颜色语义并改善长路径显示
+- GitPackageSwitcher 操作按钮改为低饱和深色填充与细语义色强调，降低大面积高亮色带来的视觉干扰
+- GitPackageSwitcher 合并统计卡与重复筛选栏，改为紧凑的“全部 / Git / 本地”视图 Toggle，并在右侧显示已选数量
+- 提高 GitPackageSwitcher 按钮默认亮度并移除视图 Toggle 前的冗余标题
+- GitPackageSwitcher 的 Git 模式新增“Git 更新”，通过 UPM 重新解析依赖，不直接修改 PackageCache
+- GitPackageSwitcher 使用高对比自绘复选框，增强未选中边框、悬停和选中勾标识
+- GitPackageSwitcher 包卡片的信息区域支持整行点击选择，右侧操作按钮区域不会触发选择
 - 第三方入口发现改为结合 AssetDatabase 与 Unity 编译程序集源码归属，避免 `MonoScript.GetClass()` 只返回单一类型导致漏检
 - 第三方工具列表改为响应式宽度，工具名称为来源标签预留空间，自动发现项优先显示包名
 - 批量隐藏仅改变 Hub 列表可见性，不改变第三方启用状态，也不卸载工具包
