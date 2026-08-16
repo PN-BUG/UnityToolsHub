@@ -107,7 +107,7 @@ public partial class UnityToolsHub
         public void IncrementTool(string typeName)
         {
             if (string.IsNullOrEmpty(typeName)) return;
-            var now = UnityEditor.EditorApplication.timeSinceStartup;
+            var now = DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
             var e = tools.Find(x => x.key == typeName);
             if (e == null) tools.Add(new UsageEntry { key = typeName, count = 1, lastUsed = now });
             else { e.count++; e.lastUsed = now; }
@@ -117,7 +117,7 @@ public partial class UnityToolsHub
         public void IncrementCategory(string categoryName)
         {
             if (string.IsNullOrEmpty(categoryName)) return;
-            var now = UnityEditor.EditorApplication.timeSinceStartup;
+            var now = DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
             var e = categories.Find(x => x.key == categoryName);
             if (e == null) categories.Add(new UsageEntry { key = categoryName, count = 1, lastUsed = now });
             else { e.count++; e.lastUsed = now; }
@@ -137,6 +137,28 @@ public partial class UnityToolsHub
         public string key;
         public int count;
         public double lastUsed; // EditorApplication.timeSinceStartup timestamp of last use
+    }
+    #endregion
+
+    #region Hub 设置
+    [Serializable]
+    private class HubSettings
+    {
+        public bool showRecentTools = true;
+        public int recentToolsCount = 5;
+        public bool showMostUsedTools = true;
+        public int mostUsedToolsCount = 5;
+        public List<string> unityMenuTools = new List<string>();
+
+        public bool IsInUnityMenu(string typeName)
+            => !string.IsNullOrEmpty(typeName) && unityMenuTools.Contains(typeName);
+
+        public void SetInUnityMenu(string typeName, bool visible)
+        {
+            if (string.IsNullOrEmpty(typeName)) return;
+            unityMenuTools.RemoveAll(x => x == typeName);
+            if (visible) unityMenuTools.Add(typeName);
+        }
     }
     #endregion
 

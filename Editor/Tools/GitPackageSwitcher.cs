@@ -82,6 +82,11 @@ public class GitPackageSwitcher : ToolEditorWindow
     private GUIStyle _cardStyle;
     private GUIStyle _tagStyle;
     private GUIStyle _coloredBtnStyle;
+    private GUIStyle _packageNameStyle;
+    private GUIStyle _metaStyle;
+    private GUIStyle _segmentStyle;
+    private GUIStyle _selectedCountStyle;
+    private GUIStyle _checkMarkStyle;
 
     private class ScannedPackage
     {
@@ -128,6 +133,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         EnsureStyles();
 
         DrawToolbarArea();
+        DrawViewToggles();
         DrawScanSection();
         DrawCacheSection();
         DrawStatusArea();
@@ -148,8 +154,9 @@ public class GitPackageSwitcher : ToolEditorWindow
         {
             _cardStyle = new GUIStyle("box")
             {
-                padding = new RectOffset(10, 10, 8, 8),
-                margin = new RectOffset(0, 0, 2, 2),
+                padding = new RectOffset(14, 12, 10, 10),
+                margin = new RectOffset(0, 0, 3, 3),
+                normal = { background = null },
             };
         }
         if (_tagStyle == null)
@@ -166,12 +173,58 @@ public class GitPackageSwitcher : ToolEditorWindow
             _coloredBtnStyle = new GUIStyle
             {
                 fontSize = 12,
-                fontStyle = FontStyle.Bold,
+                fontStyle = FontStyle.Normal,
                 alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white, background = null },
+                normal = { textColor = ClrTextBright, background = null },
                 hover = { textColor = Color.white, background = null },
                 active = { textColor = new Color(0.85f, 0.85f, 0.85f), background = null },
                 padding = new RectOffset(6, 6, 4, 4),
+            };
+        }
+        if (_packageNameStyle == null)
+        {
+            _packageNameStyle = new GUIStyle(StTitle)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                clipping = TextClipping.Clip,
+            };
+        }
+        if (_metaStyle == null)
+        {
+            _metaStyle = new GUIStyle(StLabelDim)
+            {
+                fontSize = 10,
+                clipping = TextClipping.Clip,
+            };
+        }
+        if (_segmentStyle == null)
+        {
+            _segmentStyle = new GUIStyle
+            {
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = ClrTextDim },
+                hover = { textColor = ClrTextBright },
+                active = { textColor = Color.white },
+            };
+        }
+        if (_selectedCountStyle == null)
+        {
+            _selectedCountStyle = new GUIStyle(StLabel)
+            {
+                alignment = TextAnchor.MiddleRight,
+            };
+        }
+        if (_checkMarkStyle == null)
+        {
+            _checkMarkStyle = new GUIStyle
+            {
+                fontSize = 13,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white },
             };
         }
     }
@@ -181,7 +234,18 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         var rect = GUILayoutUtility.GetRect(GUIContent.none, _coloredBtnStyle, options);
         bool isHover = rect.Contains(Event.current.mousePosition);
-        EditorGUI.DrawRect(rect, isHover ? hover : normal);
+        // 将高饱和语义色混入深色卡片背景，只保留轻量色彩提示。
+        // 悬停时提高混合比例，并用底部细线强化交互反馈。
+        float blend = isHover ? 0.70f : 0.52f;
+        Color semantic = isHover ? hover : normal;
+        Color background = Color.Lerp(ClrCardBg, semantic, blend);
+        Drawing.DrawRoundedRect(rect, background, 4f);
+
+        Color accent = Color.Lerp(background, semantic, isHover ? 0.85f : 0.65f);
+        accent.a = 0.9f;
+        EditorGUI.DrawRect(new Rect(rect.x + 3, rect.yMax - 2, rect.width - 6, 2), accent);
+
+        _coloredBtnStyle.normal.textColor = isHover ? Color.white : ClrTextBright;
         return GUI.Button(rect, text, _coloredBtnStyle);
     }
 
@@ -190,29 +254,52 @@ public class GitPackageSwitcher : ToolEditorWindow
     private bool BtnWarn(string text, params GUILayoutOption[] opts)    => DrawColoredBtn(text, ClrBtnWarn, ClrBtnWarnHov, opts);
     private bool BtnDanger(string text, params GUILayoutOption[] opts)  => DrawColoredBtn(text, ClrBtnDanger, ClrBtnDangerHov, opts);
 
+    private bool DrawPackageToggle(bool value, string tooltip = "选择此包")
+    {
+        var layoutRect = GUILayoutUtility.GetRect(20, 20, GUILayout.Width(20), GUILayout.Height(20));
+        var rect = new Rect(layoutRect.x + 2, layoutRect.y + 2, 16, 16);
+        bool hover = rect.Contains(Event.current.mousePosition);
+
+        Color border = value ? ClrAccent : (hover ? ClrTextDim : ClrDivider);
+        Color background = value
+            ? Color.Lerp(ClrCardBg, ClrAccent, hover ? 0.85f : 0.70f)
+            : (hover ? ClrItemHover : ClrItemBg);
+        Drawing.DrawRoundedRect(rect, border, 3f);
+        Drawing.DrawRoundedRect(new Rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2), background, 2f);
+
+        if (value)
+            GUI.Label(rect, "✓", _checkMarkStyle);
+
+        if (GUI.Button(rect, new GUIContent("", tooltip), GUIStyle.none))
+            value = !value;
+        return value;
+    }
+
     // ─── 顶部工具栏 ───────────────────────────────────────────
 
     private void DrawToolbarArea()
     {
+        var toolbarRect = EditorGUILayout.BeginVertical(_cardStyle);
+        Drawing.DrawRoundedRect(toolbarRect, ClrToolbarBg, 6f);
         // 第一行：主要操作按钮
         EditorGUILayout.BeginHorizontal();
         {
-            if (BtnSuccess("🔄 刷新列表", GUILayout.Width(100)))
+            if (BtnPrimary("刷新列表", GUILayout.Width(96), GUILayout.Height(28)))
                 RefreshPackageList();
 
             GUILayout.Space(6);
 
-            if (BtnSuccess("➕ 添加 Git 包", GUILayout.Width(110)))
+            if (BtnSuccess("添加 Git 包", GUILayout.Width(108), GUILayout.Height(28)))
                 _showAddForm = !_showAddForm;
 
             GUILayout.Space(6);
 
-            if (BtnWarn("📂 扫描目录", GUILayout.Width(100)))
+            if (BtnPrimary("扫描目录", GUILayout.Width(96), GUILayout.Height(28)))
                 PickAndScanDirectory();
 
             GUILayout.Space(6);
 
-            if (BtnDanger("🔍 检测缓存", GUILayout.Width(100)))
+            if (BtnWarn("检测缓存", GUILayout.Width(96), GUILayout.Height(28)))
                 ScanPackageCache();
 
             GUILayout.FlexibleSpace();
@@ -230,8 +317,38 @@ public class GitPackageSwitcher : ToolEditorWindow
         if (_showAddForm)
             DrawAddGitPackageForm();
 
-        EditorGUILayout.Space(4);
-        DrawDivider();
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(6);
+    }
+
+    private void DrawViewToggles()
+    {
+        int gitCount = _packages.Count(p => p.isGit);
+        int localCount = _packages.Count(p => p.isLocal);
+        int selectedCount = _packages.Count(p => p.isSelected);
+
+        var rect = EditorGUILayout.BeginHorizontal(_cardStyle, GUILayout.Height(40));
+        Drawing.DrawRoundedRect(rect, ClrToolbarBg, 6f);
+
+        if (DrawFilterSegment($"全部  {_packages.Count}", _filter == PackageFilter.All, ClrAccent, 88))
+            _filter = PackageFilter.All;
+
+        GUILayout.Space(4);
+        if (DrawFilterSegment($"Git  {gitCount}", _filter == PackageFilter.Git, ClrCatOrange, 76))
+            _filter = PackageFilter.Git;
+
+        GUILayout.Space(4);
+        if (DrawFilterSegment($"本地  {localCount}", _filter == PackageFilter.Local, ClrCatGreen, 82))
+            _filter = PackageFilter.Local;
+
+        GUILayout.FlexibleSpace();
+        Color selectedColor = selectedCount > 0 ? ClrCatPurple : ClrTextDim;
+        _selectedCountStyle.normal.textColor = selectedColor;
+        GUILayout.Label($"已选 {selectedCount}", _selectedCountStyle, GUILayout.Width(64));
+
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(6);
     }
 
     // ─── 状态提示 ─────────────────────────────────────────────
@@ -344,7 +461,7 @@ public class GitPackageSwitcher : ToolEditorWindow
             {
                 EditorGUILayout.BeginHorizontal();
                 {
-                    pkg.isSelected = EditorGUILayout.Toggle(pkg.isSelected, GUILayout.Width(20));
+                    pkg.isSelected = DrawPackageToggle(pkg.isSelected);
 
                     EditorGUILayout.BeginVertical();
                     {
@@ -554,7 +671,7 @@ public class GitPackageSwitcher : ToolEditorWindow
             {
                 EditorGUILayout.BeginHorizontal();
                 {
-                    pkg.isSelected = EditorGUILayout.Toggle(pkg.isSelected, GUILayout.Width(20));
+                    pkg.isSelected = DrawPackageToggle(pkg.isSelected);
 
                     EditorGUILayout.BeginVertical();
                     {
@@ -649,38 +766,6 @@ public class GitPackageSwitcher : ToolEditorWindow
 
     private void DrawPackageList()
     {
-        // ── 过滤标签栏 ──
-        EditorGUILayout.BeginHorizontal();
-        {
-            GUILayout.Label("分类:", StLabel, GUILayout.Width(36));
-
-            int gitCount = _packages.Count(p => p.isGit);
-            int localCount = _packages.Count(p => p.isLocal);
-
-            if (_filter == PackageFilter.All)
-                DrawTag($"📦 全部 ({_packages.Count})", ClrAccent);
-            else if (DrawFlatButton($"📦 全部 ({_packages.Count})", GUILayout.Width(90)))
-                _filter = PackageFilter.All;
-
-            GUILayout.Space(4);
-
-            if (_filter == PackageFilter.Git)
-                DrawTag($"🔀 Git ({gitCount})", ClrCatOrange);
-            else if (DrawFlatButton($"🔀 Git ({gitCount})", GUILayout.Width(80)))
-                _filter = PackageFilter.Git;
-
-            GUILayout.Space(4);
-
-            if (_filter == PackageFilter.Local)
-                DrawTag($"📂 本地 ({localCount})", ClrCatGreen);
-            else if (DrawFlatButton($"📂 本地 ({localCount})", GUILayout.Width(90)))
-                _filter = PackageFilter.Local;
-
-            GUILayout.FlexibleSpace();
-        }
-        EditorGUILayout.EndHorizontal();
-        EditorGUILayout.Space(6);
-
         // ── 按过滤分组显示 ──
         _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
 
@@ -705,21 +790,61 @@ public class GitPackageSwitcher : ToolEditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    private bool DrawFilterSegment(string text, bool active, Color accent, float width)
+    {
+        var rect = GUILayoutUtility.GetRect(width, 26, GUILayout.Width(width), GUILayout.Height(26));
+        bool hover = rect.Contains(Event.current.mousePosition);
+        Color background = active
+            ? new Color(accent.r, accent.g, accent.b, 0.28f)
+            : (hover ? ClrItemHover : ClrCardBg);
+        Drawing.DrawRoundedRect(rect, background, 4f);
+        if (active)
+            EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - 2, rect.width, 2), accent);
+        _segmentStyle.normal.textColor = active ? ClrTextBright : ClrTextDim;
+        GUI.Label(rect, text, _segmentStyle);
+        return GUI.Button(rect, GUIContent.none, GUIStyle.none);
+    }
+
     private void DrawPackageRow(PackageInfo pkg)
     {
-        EditorGUILayout.BeginVertical(_cardStyle);
+        Color modeColor = pkg.isGit ? ClrCatOrange : ClrCatGreen;
+        var cardRect = EditorGUILayout.BeginVertical(_cardStyle);
+        var selectionRect = new Rect(cardRect.x, cardRect.y, Mathf.Max(0, cardRect.width - 216), cardRect.height);
+        bool rowHover = selectionRect.Contains(Event.current.mousePosition);
+        Color cardColor = pkg.isSelected
+            ? Color.Lerp(ClrCardBg, modeColor, 0.12f)
+            : (rowHover ? ClrItemHover : ClrCardBg);
+        Drawing.DrawRoundedRect(cardRect, cardColor, 7f);
+        EditorGUI.DrawRect(new Rect(cardRect.x, cardRect.y + 6, 3, Mathf.Max(0, cardRect.height - 12)), modeColor);
+        EditorGUIUtility.AddCursorRect(selectionRect, MouseCursor.Link);
+
+        if (Event.current.type == EventType.MouseDown && Event.current.button == 0
+            && selectionRect.Contains(Event.current.mousePosition))
+        {
+            pkg.isSelected = !pkg.isSelected;
+            Event.current.Use();
+            Repaint();
+        }
         {
             EditorGUILayout.BeginHorizontal();
             {
-                // 选中框
-                pkg.isSelected = EditorGUILayout.Toggle(pkg.isSelected, GUILayout.Width(20));
+                // 选中框：使用独立列，让不同高度卡片中的勾选框始终垂直居中。
+                GUILayout.Space(2);
+                EditorGUILayout.BeginVertical(GUILayout.Width(20), GUILayout.ExpandHeight(true));
+                {
+                    GUILayout.FlexibleSpace();
+                    pkg.isSelected = DrawPackageToggle(pkg.isSelected);
+                    GUILayout.FlexibleSpace();
+                }
+                EditorGUILayout.EndVertical();
+                GUILayout.Space(4);
 
                 // 包名 & 状态标签
                 EditorGUILayout.BeginVertical();
                 {
                     EditorGUILayout.BeginHorizontal();
                     {
-                        GUILayout.Label(pkg.packageName, StTitle);
+                        GUILayout.Label(new GUIContent(pkg.packageName, pkg.packageName), _packageNameStyle);
 
                         if (pkg.isLocal)
                             DrawStatusTag("本地", ClrSuccess);
@@ -731,18 +856,18 @@ public class GitPackageSwitcher : ToolEditorWindow
                     EditorGUILayout.EndHorizontal();
 
                     if (!string.IsNullOrEmpty(pkg.gitUrl))
-                        GUILayout.Label(pkg.gitUrl, StLabelDim);
+                        GUILayout.Label(new GUIContent(pkg.gitUrl, pkg.gitUrl), _metaStyle);
 
                     if (pkg.isLocal)
                     {
                         string localPath = Path.Combine("Packages", pkg.localFolder);
                         bool exists = Directory.Exists(Path.Combine(_projectRoot, "Packages", pkg.localFolder));
-                        string status = exists ? "✅ 目录存在" : "❌ 目录缺失";
-                        GUILayout.Label($"本地路径: {localPath}  ({status})", StLabelDim);
+                        string status = exists ? "目录存在" : "目录缺失";
+                        GUILayout.Label(new GUIContent($"本地路径  {localPath}  ·  {status}", localPath), _metaStyle);
                     }
 
                     if (!string.IsNullOrEmpty(pkg.branch))
-                        GUILayout.Label($"分支: {pkg.branch}", StLabelDim);
+                        GUILayout.Label($"分支  {pkg.branch}", _metaStyle);
                 }
                 EditorGUILayout.EndVertical();
 
@@ -757,28 +882,37 @@ public class GitPackageSwitcher : ToolEditorWindow
 
     private void DrawPackageActions(PackageInfo pkg)
     {
-        EditorGUILayout.BeginVertical(GUILayout.Width(210));
+        EditorGUILayout.BeginVertical(GUILayout.Width(204));
         {
             if (pkg.isGit)
             {
-                if (BtnSuccess("📥 切换到本地", GUILayout.Width(200), GUILayout.Height(24)))
-                    SwitchToLocal(pkg);
+                EditorGUILayout.BeginHorizontal();
+                {
+                    if (BtnSuccess("切换到本地", GUILayout.Width(96), GUILayout.Height(26)))
+                        SwitchToLocal(pkg);
+
+                    GUILayout.Space(4);
+
+                    if (BtnWarn("Git 更新", GUILayout.Width(96), GUILayout.Height(26)))
+                        UpdateGitPackage(pkg);
+                }
+                EditorGUILayout.EndHorizontal();
 
                 GUILayout.Space(4);
 
-                if (BtnDanger("🗑 从 manifest 移除", GUILayout.Width(200), GUILayout.Height(22)))
+                if (BtnDanger("从 manifest 移除", GUILayout.Width(196), GUILayout.Height(24)))
                     RemoveFromManifest(pkg);
             }
             else if (pkg.isLocal)
             {
                 EditorGUILayout.BeginHorizontal();
                 {
-                    if (BtnPrimary("📤 切回 Git", GUILayout.Width(96), GUILayout.Height(24)))
+                    if (BtnPrimary("切回 Git", GUILayout.Width(96), GUILayout.Height(26)))
                         SwitchToGit(pkg);
 
                     GUILayout.Space(4);
 
-                    if (BtnWarn("🔄 Git 更新", GUILayout.Width(96), GUILayout.Height(24)))
+                    if (BtnWarn("Git 更新", GUILayout.Width(96), GUILayout.Height(26)))
                         PullFromGit(pkg);
                 }
                 EditorGUILayout.EndHorizontal();
@@ -787,7 +921,7 @@ public class GitPackageSwitcher : ToolEditorWindow
 
                 EditorGUILayout.BeginHorizontal();
                 {
-                    if (BtnPrimary("📂 打开目录", GUILayout.Width(96), GUILayout.Height(22)))
+                    if (BtnPrimary("打开目录", GUILayout.Width(96), GUILayout.Height(24)))
                     {
                         string localPath = Path.Combine(_projectRoot, "Packages", pkg.localFolder);
                         if (Directory.Exists(localPath))
@@ -798,7 +932,7 @@ public class GitPackageSwitcher : ToolEditorWindow
 
                     GUILayout.Space(4);
 
-                    if (BtnDanger("🗑 删除本地", GUILayout.Width(96), GUILayout.Height(22)))
+                    if (BtnDanger("删除本地", GUILayout.Width(96), GUILayout.Height(24)))
                         DeleteLocalPackage(pkg);
                 }
                 EditorGUILayout.EndHorizontal();
@@ -809,10 +943,10 @@ public class GitPackageSwitcher : ToolEditorWindow
 
     private void DrawStatusTag(string text, Color color)
     {
-        var oldColor = GUI.color;
-        GUI.color = color;
-        GUILayout.Label(text, _tagStyle, GUILayout.Width(40));
-        GUI.color = oldColor;
+        var rect = GUILayoutUtility.GetRect(44, 18, GUILayout.Width(44), GUILayout.Height(18));
+        Drawing.DrawRoundedRect(rect, new Color(color.r, color.g, color.b, 0.18f), 4f);
+        _tagStyle.normal.textColor = color;
+        GUI.Label(rect, text, _tagStyle);
     }
 
     // ─── 批量操作 ─────────────────────────────────────────────
@@ -823,27 +957,27 @@ public class GitPackageSwitcher : ToolEditorWindow
         if (selected.Count == 0) return;
 
         EditorGUILayout.Space(4);
-        DrawDivider();
-        EditorGUILayout.Space(4);
-
-        EditorGUILayout.BeginHorizontal();
+        var batchRect = EditorGUILayout.BeginHorizontal(_cardStyle);
+        Drawing.DrawRoundedRect(batchRect, ClrToolbarBg, 6f);
         {
-            GUILayout.Label($"已选 {selected.Count} 个包", StLabel, GUILayout.Width(100));
+            GUILayout.Label($"已选择 {selected.Count} 个包", StTitle, GUILayout.Width(120));
 
             GUILayout.Space(8);
 
-            if (BtnSuccess("📥 批量切换到本地", GUILayout.Width(140)))
+            if (BtnSuccess("批量切换到本地", GUILayout.Width(140), GUILayout.Height(28)))
                 SwitchBatchToLocal(selected);
 
             GUILayout.Space(6);
 
-            if (BtnPrimary("📤 批量切回 Git", GUILayout.Width(130)))
+            if (BtnPrimary("批量切回 Git", GUILayout.Width(130), GUILayout.Height(28)))
                 SwitchBatchToGit(selected);
 
             GUILayout.Space(6);
 
-            if (BtnWarn("🔄 批量 Git 更新", GUILayout.Width(130)))
+            if (BtnWarn("批量 Git 更新", GUILayout.Width(130), GUILayout.Height(28)))
                 PullBatchFromGit(selected);
+
+            GUILayout.FlexibleSpace();
         }
         EditorGUILayout.EndHorizontal();
     }
@@ -1225,6 +1359,43 @@ public class GitPackageSwitcher : ToolEditorWindow
         {
             _isProcessing = false;
         }
+    }
+
+    /// <summary>让 UPM 重新解析 Git 依赖；不直接修改只读的 PackageCache。</summary>
+    private void UpdateGitPackage(PackageInfo pkg)
+    {
+        if (_isProcessing || pkg == null) return;
+        if (string.IsNullOrEmpty(pkg.gitUrl))
+        {
+            ShowStatus($"{pkg?.packageName} 没有 Git URL，无法更新", MessageType.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        ShowStatus($"正在通过 UPM 更新 {pkg.packageName} ...", MessageType.Info);
+        Repaint();
+
+        var request = UnityEditor.PackageManager.Client.Add(pkg.gitUrl);
+        EditorApplication.CallbackFunction onUpdate = null;
+        onUpdate = () =>
+        {
+            if (!request.IsCompleted) return;
+            EditorApplication.update -= onUpdate;
+            _isProcessing = false;
+
+            if (request.Status == UnityEditor.PackageManager.StatusCode.Success)
+            {
+                ShowStatus($"✅ {pkg.packageName} 已由 UPM 重新解析", MessageType.Info);
+                RefreshPackageList();
+            }
+            else
+            {
+                string error = request.Error != null ? request.Error.message : "未知错误";
+                ShowStatus($"更新失败: {pkg.packageName} · {error}", MessageType.Error);
+            }
+            Repaint();
+        };
+        EditorApplication.update += onUpdate;
     }
 
     // ─── 批量操作 ─────────────────────────────────────────────

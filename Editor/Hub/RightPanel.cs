@@ -511,7 +511,7 @@ public partial class UnityToolsHub
         }
 
         GUILayout.Space(8);
-        GUILayout.Label("隐藏项管理", Styles.RightTitle);
+        GUILayout.Label("UnityToolsHub 设置", Styles.RightTitle);
         GUILayout.FlexibleSpace();
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
@@ -521,11 +521,31 @@ public partial class UnityToolsHub
         EditorGUILayout.Space(4);
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
-        GUILayout.Label("管理被隐藏的分类与工具，可单独恢复或一键全部恢复", Styles.RightSubtitle);
+        GUILayout.Label("配置快捷列表、Unity 菜单入口、隐藏项与使用数据", Styles.RightSubtitle);
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.Space(16);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        GUILayout.Label("快捷列表", Styles.SectionHeader);
+        EditorGUI.BeginChangeCheck();
+        _hubSettings.showRecentTools = EditorGUILayout.ToggleLeft("显示最近使用列表", _hubSettings.showRecentTools);
+        using (new EditorGUI.DisabledScope(!_hubSettings.showRecentTools))
+            _hubSettings.recentToolsCount = EditorGUILayout.IntSlider("显示数量", _hubSettings.recentToolsCount, 1, 20);
+        _hubSettings.showMostUsedTools = EditorGUILayout.ToggleLeft("显示最常使用列表", _hubSettings.showMostUsedTools);
+        using (new EditorGUI.DisabledScope(!_hubSettings.showMostUsedTools))
+            _hubSettings.mostUsedToolsCount = EditorGUILayout.IntSlider("显示数量", _hubSettings.mostUsedToolsCount, 1, 20);
+        if (EditorGUI.EndChangeCheck()) { SaveHubSettings(); Repaint(); }
+        EditorGUILayout.HelpBox("快捷列表显示在左侧顶部，只收录已经使用过且未隐藏的工具。", MessageType.None);
+        GUILayout.Space(12);
+        GUILayout.Label("隐藏项", Styles.SectionHeader);
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(8);
 
         // ── 全局操作按钮 ──────────────────────────────────
         EditorGUILayout.BeginHorizontal();
@@ -1056,6 +1076,28 @@ public partial class UnityToolsHub
 
         // ── 脚本信息 + 作者 ──────────────────────────────
         DrawScriptInfoSection(tool, accent);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        bool showInUnityMenu = _hubSettings.IsInUnityMenu(tool.typeName);
+        EditorGUI.BeginChangeCheck();
+        showInUnityMenu = EditorGUILayout.ToggleLeft(
+            new GUIContent("显示在 Unity 菜单栏", "在 UnityToolsHub/工具 下生成此工具的菜单入口"),
+            showInUnityMenu, GUILayout.Height(24));
+        if (EditorGUI.EndChangeCheck())
+        {
+            _hubSettings.SetInUnityMenu(tool.typeName, showInUnityMenu);
+            SaveHubSettings();
+            RebuildGeneratedUnityMenu();
+        }
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.HelpBox("入口：UnityToolsHub/工具/" + tool.name, MessageType.None);
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(12);
 
         // ── 主操作按钮 ────────────────────────────────────
         if (!string.IsNullOrEmpty(tool.typeName))
