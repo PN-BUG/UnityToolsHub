@@ -8,6 +8,7 @@ namespace Zko.UnityToolsHub.Toolbar
     {
         private Vector2 _scroll;
         [MenuItem("Window/Unity Tools Hub/Toolbar Buttons")]
+        [ToolbarButton("管理", Tooltip = "打开工具栏按钮管理窗口", Side = ToolbarSide.Right, Order = -100)]
         public static void ShowWindow() => GetWindow<ToolbarButtonManagerWindow>("Toolbar Buttons");
         private void OnEnable() { ToolbarButtonRegistry.Changed += Repaint; ToolbarButtonRegistry.Refresh(); }
         private void OnDisable() { ToolbarButtonRegistry.Changed -= Repaint; }
@@ -15,7 +16,7 @@ namespace Zko.UnityToolsHub.Toolbar
         {
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField("Unity 主工具栏按钮", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("给无参数静态方法添加 [ToolbarButton(\"文字\")]，即可自动显示。配置保存在本机 EditorPrefs。", MessageType.Info);
+            EditorGUILayout.HelpBox("给无参数静态方法添加 [ToolbarButton(\"文字\")]，即可自动显示。按钮默认按文字自适应宽度，也可在标签中填写 Width。配置保存在本机 EditorPrefs。", MessageType.Info);
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("重新扫描", GUILayout.Width(90))) ToolbarButtonRegistry.Refresh();
             if (GUILayout.Button("恢复默认", GUILayout.Width(90)) && EditorUtility.DisplayDialog("恢复默认", "清除所有工具栏按钮配置？", "恢复", "取消")) ToolbarButtonRegistry.Reset();

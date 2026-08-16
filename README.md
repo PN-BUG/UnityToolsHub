@@ -189,13 +189,15 @@ using Zko.UnityToolsHub.Toolbar;
 
 public static class ProjectToolbarButtons
 {
-    [ToolbarButton("Build", Tooltip = "构建当前项目", Side = ToolbarSide.Right, Order = 10)]
+    [ToolbarButton("Build", Tooltip = "构建当前项目", Side = ToolbarSide.Right, Order = 10, Width = 72)]
     private static void BuildProject()
     {
         // 执行编辑器操作
     }
 }
 ```
+
+按钮默认根据 `Text` 的显示长度自适应宽度；需要统一或扩大尺寸时可在标签中填写 `Width`，小于等于 `0` 表示自动宽度。
 
 在 Hub 的“编辑器工具 > 工具栏按钮”中可以启用/禁用按钮、切换左右区域、调整显示顺序或恢复标签中的默认配置。配置保存在本机 `EditorPrefs`，不会产生项目资源改动。
 

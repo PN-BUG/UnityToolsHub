@@ -78,7 +78,11 @@ namespace Zko.UnityToolsHub.Toolbar
             {
                 if (!b.IsValid || !IsEnabled(b) || GetSide(b) != side) continue;
                 var content = new GUIContent(b.Attribute.Text, b.Attribute.Tooltip);
-                bool clicked = b.Attribute.Width > 0 ? GUILayout.Button(content, GUILayout.Width(b.Attribute.Width)) : GUILayout.Button(content);
+                GUIStyle style = EditorStyles.toolbarButton;
+                float width = b.Attribute.Width > 0f
+                    ? b.Attribute.Width
+                    : Mathf.Max(24f, Mathf.Ceil(style.CalcSize(content).x + 6f));
+                bool clicked = GUILayout.Button(content, style, GUILayout.Width(width));
                 if (!clicked) continue;
                 try { b.Method.Invoke(null, null); }
                 catch (TargetInvocationException e) { Debug.LogException(e.InnerException ?? e); }
