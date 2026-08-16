@@ -14,6 +14,7 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **快捷键**：为常用工具绑定键盘快捷键，O(1) 字典查找导航，冲突检测 O(1)
 - **使用统计**：记录工具使用频率，常用工具自动置顶，O(1) 字典查找
 - **隐藏管理**：支持隐藏不需要的工具和分类，一键恢复默认分类
+- **工具栏按钮**：用 `[ToolbarButton]` 标记静态方法，自动显示到 Unity 主工具栏，并可在 Hub 中管理启用状态、左右位置和顺序
 - **第三方工具管理**：类似 Unity Package Manager 的管理界面，支持从本地文件夹或 Git URL 导入第三方工具包，默认禁用确保安全
 - **脚本信息展示**：工具详情页显示脚本名称、路径，支持一键打开脚本
 - **作者信息**：支持在 `[ToolInfo]` 中标注作者和链接，详情页可点击跳转
@@ -157,6 +158,25 @@ MyToolPackage/
 | 测试窗口 | 调试工具 | 聚合展示场景中标记了 [Test] 的方法和字段 |
 
 > **注意**：所有工具均通过 `[ToolInfo]` 特性自动注册，无需手动维护此列表。
+
+## Unity 主工具栏按钮
+
+给无参数、返回 `void` 的静态方法添加 `[ToolbarButton]`，Hub 会自动扫描并在 Unity 主工具栏显示按钮：
+
+```csharp
+using Zko.UnityToolsHub.Toolbar;
+
+public static class ProjectToolbarButtons
+{
+    [ToolbarButton("Build", Tooltip = "构建当前项目", Side = ToolbarSide.Right, Order = 10)]
+    private static void BuildProject()
+    {
+        // 执行编辑器操作
+    }
+}
+```
+
+在 Hub 的“编辑器工具 > 工具栏按钮”中可以启用/禁用按钮、切换左右区域、调整显示顺序或恢复标签中的默认配置。配置保存在本机 `EditorPrefs`，不会产生项目资源改动。
 
 ## 目录结构
 
