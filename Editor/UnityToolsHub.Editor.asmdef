@@ -2,6 +2,7 @@
     "name": "UnityToolsHub.Editor",
     "rootNamespace": "",
     "references": [
+        "UnityToolsHub.SDK",
         "Nodin.Runtime",
         "Nodin.Editor",
         "UnityFramework"

@@ -2,6 +2,7 @@
     "name": "FolderRuleTool.Editor",
     "rootNamespace": "",
     "references": [
+        "UnityToolsHub.SDK",
         "GUID:3d7a04e7515d08c41b316af582ebeaa0",
         "UnityFramework",
         "GUID:69448af7b92c7f342b298e06a37122aa",
