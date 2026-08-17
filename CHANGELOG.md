@@ -6,6 +6,7 @@ All notable changes to this package will be documented in this file.
 - 将“管理隐藏项”升级为设置界面，新增最近使用/最常使用快捷列表及数量配置。
 - Unity 顶部 `UnityToolsHub` 菜单新增“最近使用”和“最常使用”原生二级工具列表。
 - 主面板左栏不再重复显示最近使用和最常使用列表。
+- 生成菜单改为写入项目级 `Assets/UnityToolsHub.Generated/Editor`，兼容 Git/UPM/PackageCache 安装方式。
 - 工具详情新增 Unity 菜单栏显示开关，可生成 `UnityToolsHub/工具` 下的项目级入口。
 ### Added
 - 第三方 Git/本地 UPM 包无侵入接入：自动发现包内 `EditorWindow`，无需修改第三方源码

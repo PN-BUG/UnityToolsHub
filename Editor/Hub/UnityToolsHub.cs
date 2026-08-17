@@ -115,7 +115,9 @@ public partial class UnityToolsHub : EditorWindow
     private const string UsageStatsPrefsKey   = "UnityToolsHub.UsageStats";
     private const string HiddenItemsPrefsKey  = "UnityToolsHub.HiddenItems";
     private const string HubSettingsPrefsKey  = "UnityToolsHub.Settings";
-    private const string GeneratedMenuPath = "Assets/UnityFramework/Editor/UnityToolsHub/Editor/Hub/UnityToolsHub.GeneratedMenu.cs";
+    private const string GeneratedMenuDirectory = "Assets/UnityToolsHub.Generated/Editor";
+    private const string GeneratedMenuPath = GeneratedMenuDirectory + "/UnityToolsHub.GeneratedMenu.cs";
+    private const string GeneratedMenuAssemblyPath = GeneratedMenuDirectory + "/UnityToolsHub.Generated.asmdef";
     private bool _generatedMenuRefreshQueued;
 
     [InitializeOnLoadMethod]
@@ -561,10 +563,25 @@ public partial class UnityToolsHub : EditorWindow
         sb.AppendLine("#endif");
 
         string content = sb.ToString();
-        if (System.IO.File.Exists(GeneratedMenuPath) && System.IO.File.ReadAllText(GeneratedMenuPath) == content)
+        const string assemblyContent = "{\n" +
+            "    \"name\": \"UnityToolsHub.Generated\",\n" +
+            "    \"references\": [\"UnityToolsHub.Editor\"],\n" +
+            "    \"includePlatforms\": [\"Editor\"],\n" +
+            "    \"autoReferenced\": true\n" +
+            "}\n";
+
+        System.IO.Directory.CreateDirectory(GeneratedMenuDirectory);
+        bool menuUnchanged = System.IO.File.Exists(GeneratedMenuPath) &&
+                             System.IO.File.ReadAllText(GeneratedMenuPath) == content;
+        bool assemblyUnchanged = System.IO.File.Exists(GeneratedMenuAssemblyPath) &&
+                                 System.IO.File.ReadAllText(GeneratedMenuAssemblyPath) == assemblyContent;
+        if (menuUnchanged && assemblyUnchanged)
             return;
-        System.IO.File.WriteAllText(GeneratedMenuPath, content, new System.Text.UTF8Encoding(false));
-        AssetDatabase.ImportAsset(GeneratedMenuPath, ImportAssetOptions.ForceUpdate);
+        if (!assemblyUnchanged)
+            System.IO.File.WriteAllText(GeneratedMenuAssemblyPath, assemblyContent, new System.Text.UTF8Encoding(false));
+        if (!menuUnchanged)
+            System.IO.File.WriteAllText(GeneratedMenuPath, content, new System.Text.UTF8Encoding(false));
+        AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
     }
 
     private List<ToolEntry> GetBuiltInTools()
