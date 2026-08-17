@@ -539,7 +539,7 @@ public partial class UnityToolsHub
         using (new EditorGUI.DisabledScope(!_hubSettings.showMostUsedTools))
             _hubSettings.mostUsedToolsCount = EditorGUILayout.IntSlider("显示数量", _hubSettings.mostUsedToolsCount, 1, 20);
         if (EditorGUI.EndChangeCheck()) { SaveHubSettings(); Repaint(); }
-        EditorGUILayout.HelpBox("快捷列表显示在左侧顶部，只收录已经使用过且未隐藏的工具。", MessageType.None);
+        EditorGUILayout.HelpBox("快捷列表生成在 Unity 顶部 UnityToolsHub 菜单中，只收录已经使用过且未隐藏的工具。", MessageType.None);
         GUILayout.Space(12);
         GUILayout.Label("隐藏项", Styles.SectionHeader);
         EditorGUILayout.EndVertical();

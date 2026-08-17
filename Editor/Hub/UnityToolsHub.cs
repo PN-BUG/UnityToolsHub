@@ -115,7 +115,30 @@ public partial class UnityToolsHub : EditorWindow
     private const string UsageStatsPrefsKey   = "UnityToolsHub.UsageStats";
     private const string HiddenItemsPrefsKey  = "UnityToolsHub.HiddenItems";
     private const string HubSettingsPrefsKey  = "UnityToolsHub.Settings";
-    private const string GeneratedMenuPath = "Assets/UnityToolsHub.GeneratedMenu.cs";
+    private const string GeneratedMenuPath = "Assets/UnityFramework/Editor/UnityToolsHub/Editor/Hub/UnityToolsHub.GeneratedMenu.cs";
+    private bool _generatedMenuRefreshQueued;
+
+    [InitializeOnLoadMethod]
+    private static void InitializeGeneratedUnityMenu()
+    {
+        EditorApplication.delayCall += () =>
+        {
+            if (HasOpenInstances<UnityToolsHub>())
+            {
+                GetWindow<UnityToolsHub>().QueueGeneratedMenuRefresh();
+                return;
+            }
+
+            var hub = CreateInstance<UnityToolsHub>();
+            hub.LoadUsageStats();
+            hub.LoadHiddenItems();
+            hub.LoadHubSettings();
+            hub.LoadThirdPartyRegistry();
+            hub.DiscoverTools();
+            hub.RebuildGeneratedUnityMenu();
+            DestroyImmediate(hub);
+        };
+    }
 
     // ── 文件夹分类配置 ──────────────────────────────────
     private FolderConfig _folderConfig = new FolderConfig();
@@ -326,6 +349,7 @@ public partial class UnityToolsHub : EditorWindow
         ApplyFolderConfig();
         ApplySorting();
         _animTimer = 0f;
+        QueueGeneratedMenuRefresh();
     }
 
     private void Update()
@@ -388,6 +412,7 @@ public partial class UnityToolsHub : EditorWindow
         _usageStats.IncrementTool(tool.typeName);
         _usageStats.IncrementCategory(tool.category);
         SaveUsageStats();
+        QueueGeneratedMenuRefresh();
     }
 
     private void LoadUsageStats()
@@ -447,64 +472,13 @@ public partial class UnityToolsHub : EditorWindow
         _usageStats = new UsageStats();
         SaveUsageStats();
         DiscoverTools();
+        QueueGeneratedMenuRefresh();
     }
 
     private void UnhideAllItems()
     {
         _hiddenItems = new HiddenItems();
         SaveHiddenItems();
-    }
-
-    [MenuItem("UnityToolsHub/最近使用...", false, -90)]
-    private static void ShowRecentToolsMenu()
-    {
-        ShowUsageToolsMenu(true);
-    }
-
-    [MenuItem("UnityToolsHub/最常使用...", false, -89)]
-    private static void ShowMostUsedToolsMenu()
-    {
-        ShowUsageToolsMenu(false);
-    }
-
-    private static void ShowUsageToolsMenu(bool recent)
-    {
-        var hub = GetWindow<UnityToolsHub>();
-        hub.LoadUsageStats();
-        hub.LoadHiddenItems();
-        hub.LoadHubSettings();
-        hub.DiscoverTools();
-
-        int count = recent ? hub._hubSettings.recentToolsCount : hub._hubSettings.mostUsedToolsCount;
-        var tools = hub._toolIndex.Values
-            .Where(t => !hub._hiddenItems.IsToolHidden(t.typeName) && hub._usageStats.GetToolCount(t.typeName) > 0);
-        tools = recent
-            ? tools.OrderByDescending(t => hub._usageStats.GetToolLastUsed(t.typeName))
-            : tools.OrderByDescending(t => hub._usageStats.GetToolCount(t.typeName))
-                .ThenByDescending(t => hub._usageStats.GetToolLastUsed(t.typeName));
-
-        var entries = tools.Take(count).ToList();
-        var menu = new GenericMenu();
-        if (entries.Count == 0)
-        {
-            menu.AddDisabledItem(new GUIContent("暂无使用记录"));
-        }
-        else
-        {
-            foreach (var tool in entries)
-            {
-                var captured = tool;
-                string label = recent
-                    ? captured.name
-                    : $"{captured.name}  ({hub._usageStats.GetToolCount(captured.typeName)} 次)";
-                menu.AddItem(new GUIContent(label), false, () =>
-                {
-                    hub.RecordToolUsage(captured);
-                    hub.OpenToolWindow(captured.typeName);
-                });
-            }
-        }
-        menu.ShowAsContext();
     }
 
     private void LoadHubSettings()
@@ -532,6 +506,18 @@ public partial class UnityToolsHub : EditorWindow
         if (hub._toolIndex.TryGetValue(typeName, out var tool)) hub.RecordToolUsage(tool);
     }
 
+    private void QueueGeneratedMenuRefresh()
+    {
+        if (_generatedMenuRefreshQueued) return;
+        _generatedMenuRefreshQueued = true;
+        EditorApplication.delayCall += () =>
+        {
+            if (this == null) return;
+            _generatedMenuRefreshQueued = false;
+            RebuildGeneratedUnityMenu();
+        };
+    }
+
     private void RebuildGeneratedUnityMenu()
     {
         var selected = _hubSettings.unityMenuTools
@@ -539,6 +525,19 @@ public partial class UnityToolsHub : EditorWindow
             .Where(tool => tool != null)
             .OrderBy(tool => tool.name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var available = _toolIndex.Values
+            .Where(tool => tool != null && !string.IsNullOrEmpty(tool.typeName) &&
+                           !_hiddenItems.IsToolHidden(tool.typeName) && _usageStats.GetToolCount(tool.typeName) > 0)
+            .GroupBy(tool => tool.typeName).Select(group => group.First()).ToList();
+        var recent = _hubSettings.showRecentTools
+            ? available.OrderByDescending(tool => _usageStats.GetToolLastUsed(tool.typeName))
+                .Take(_hubSettings.recentToolsCount).ToList()
+            : new List<ToolEntry>();
+        var mostUsed = _hubSettings.showMostUsedTools
+            ? available.OrderByDescending(tool => _usageStats.GetToolCount(tool.typeName))
+                .ThenByDescending(tool => _usageStats.GetToolLastUsed(tool.typeName))
+                .Take(_hubSettings.mostUsedToolsCount).ToList()
+            : new List<ToolEntry>();
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("// <auto-generated by UnityToolsHub />");
@@ -546,17 +545,25 @@ public partial class UnityToolsHub : EditorWindow
         sb.AppendLine("using UnityEditor;");
         sb.AppendLine("internal static class UnityToolsHubGeneratedMenu");
         sb.AppendLine("{");
-        for (int i = 0; i < selected.Count; i++)
+        int methodIndex = 0;
+        Action<string, ToolEntry, int> appendMenuItem = (group, tool, priority) =>
         {
-            string menuName = selected[i].name.Replace("/", "／").Replace("\"", "\\\"");
-            string typeName = selected[i].typeName.Replace("\\", "\\\\").Replace("\"", "\\\"");
-            sb.AppendLine($"    [MenuItem(\"UnityToolsHub/工具/{menuName}\", false, {1000 + i})]");
-            sb.AppendLine($"    private static void Open{i}() => UnityToolsHub.OpenRegisteredTool(\"{typeName}\");");
-        }
+            string menuName = tool.name.Replace("/", "／").Replace("\"", "\\\"");
+            string typeName = tool.typeName.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            sb.AppendLine($"    [MenuItem(\"UnityToolsHub/{group}/{menuName}\", false, {priority})]");
+            sb.AppendLine($"    private static void Open{methodIndex++}() => UnityToolsHub.OpenRegisteredTool(\"{typeName}\");");
+        };
+        for (int i = 0; i < recent.Count; i++) appendMenuItem("最近使用", recent[i], -80 + i);
+        for (int i = 0; i < mostUsed.Count; i++) appendMenuItem("最常使用", mostUsed[i], -60 + i);
+        for (int i = 0; i < selected.Count; i++)
+            appendMenuItem("工具", selected[i], 1000 + i);
         sb.AppendLine("}");
         sb.AppendLine("#endif");
 
-        System.IO.File.WriteAllText(GeneratedMenuPath, sb.ToString(), new System.Text.UTF8Encoding(false));
+        string content = sb.ToString();
+        if (System.IO.File.Exists(GeneratedMenuPath) && System.IO.File.ReadAllText(GeneratedMenuPath) == content)
+            return;
+        System.IO.File.WriteAllText(GeneratedMenuPath, content, new System.Text.UTF8Encoding(false));
         AssetDatabase.ImportAsset(GeneratedMenuPath, ImportAssetOptions.ForceUpdate);
     }
 
