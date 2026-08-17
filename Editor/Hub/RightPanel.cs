@@ -21,7 +21,6 @@ public partial class UnityToolsHub
     private static GUIStyle _cachedHintStyle;
     private static GUIStyle _cachedDimLabel;
     private static readonly GUIContent _cachedContent = new GUIContent();
-    private static bool _isDragOverPanel;
 
     private static GUIStyle CachedTooltipStyle
         => _cachedTooltipStyle ?? (_cachedTooltipStyle = new GUIStyle()
@@ -1088,7 +1087,7 @@ public partial class UnityToolsHub
         {
             _hubSettings.SetInUnityMenu(tool.typeName, showInUnityMenu);
             SaveHubSettings();
-            RebuildGeneratedUnityMenu();
+            RefreshDynamicUnityMenu();
         }
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
@@ -1625,7 +1624,8 @@ public partial class UnityToolsHub
 
         // 检测是否有活跃的拖拽操作
         var dropAreaRect = GUILayoutUtility.GetRect(0, 56, GUILayout.ExpandWidth(true));
-        bool isDragOver = _isDragOverPanel && dropAreaRect.Contains(Event.current.mousePosition);
+        bool isDragOver = DragAndDrop.objectReferences != null && DragAndDrop.objectReferences.Length > 0 &&
+                          dropAreaRect.Contains(Event.current.mousePosition);
 
         // 背景 + 边框效果
         var borderColor = isDragOver ? accent : new Color(0.3f, 0.3f, 0.32f, 1f);

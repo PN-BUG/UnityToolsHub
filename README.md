@@ -69,8 +69,8 @@ public class MyCustomTool : EditorWindow
 - **隐藏工具**：右键工具项 →「隐藏」，或点击底部「设置」查看和恢复
 - **快捷列表**：设置中可分别开启“最近使用”和“最常使用”，并设置显示数量（1–20）；Unity 顶部菜单直接生成 `UnityToolsHub/最近使用/工具名` 与 `UnityToolsHub/最常使用/工具名` 二级入口
 - **Unity 菜单栏**：在工具详情中开启“显示在 Unity 菜单栏”，入口生成到 `UnityToolsHub/工具/工具名`
-  - 菜单桥接代码生成在项目的 `Assets/UnityToolsHub.Generated/Editor`，不依赖 Hub 的实际安装路径
-  - 从旧版本升级后若仍有 `Assets/UnityToolsHub.GeneratedMenu.cs`，可安全删除该旧文件
+  - 菜单通过 UnityEditor 动态注册，不生成脚本、asmdef 或额外目录
+  - 从旧版本升级后若仍有 `Assets/UnityToolsHub.GeneratedMenu.cs` 或 `Assets/UnityToolsHub.Generated`，可安全删除
 - **快速打开**：单击左栏工具查看详情，双击直接打开工具
 - **批量隐藏内置工具**：在「管理隐藏项」开启“隐藏内置工具”，仅隐藏 Hub 内置工具
 - **批量隐藏第三方工具**：在「管理隐藏项」开启“隐藏第三方工具”，仅隐藏当前已启用的第三方工具

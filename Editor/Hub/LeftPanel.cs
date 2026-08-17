@@ -125,7 +125,6 @@ public partial class UnityToolsHub
         _dragCategoryName = null;
         _dragCategorySourceIndex = -1;
         _isDragActive = false;
-        _hoveredCategoryName = null;
         _dragPending = false;
         _dragGhostRect = Rect.zero;
     }

@@ -206,7 +206,9 @@ public class SpriteSheetSlicer : EditorWindow
             }
         }
 
+#pragma warning disable 0618 // 兼容未安装 com.unity.2d.sprite 的项目
         importer.spritesheet = spriteSheet.ToArray();
+#pragma warning restore 0618
         importer.SaveAndReimport();
 
         // 重新加载切分后的 Sprite

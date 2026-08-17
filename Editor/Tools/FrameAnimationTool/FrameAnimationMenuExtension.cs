@@ -40,7 +40,7 @@ public static class FrameAnimationMenuExtension
         if (string.IsNullOrEmpty(animName)) return;
 
         // 弹出设置对话框
-        var settings = FrameAnimSettingsDialog.Show();
+        var settings = FrameAnimSettingsDialog.ShowDialog();
         if (settings == null) return;
 
         CreateAnimationClip(sprites, animName, settings);
@@ -75,7 +75,7 @@ public static class FrameAnimationMenuExtension
 
         if (string.IsNullOrEmpty(animName)) return;
 
-        var settings = FrameAnimSettingsDialog.Show();
+        var settings = FrameAnimSettingsDialog.ShowDialog();
         if (settings == null) return;
 
         CreateAnimationClip(sprites, animName, settings);
@@ -110,7 +110,7 @@ public static class FrameAnimationMenuExtension
             return;
         }
 
-        var settings = FrameAnimSettingsDialog.Show();
+        var settings = FrameAnimSettingsDialog.ShowDialog();
         if (settings == null) return;
 
         string savePath = $"Assets/Animations/{go.name}Anim.anim";
@@ -327,7 +327,7 @@ public class FrameAnimSettingsDialog : EditorWindow
     private static FrameAnimSettingsDialog window;
     private static FrameAnimSettings result;
 
-    public static FrameAnimSettings Show()
+    public static FrameAnimSettings ShowDialog()
     {
         result = null;
         window = CreateInstance<FrameAnimSettingsDialog>();

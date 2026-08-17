@@ -168,8 +168,6 @@ public class AssetBookmarks : EditorWindow
     private double _lastClickTime;
     private const double DoubleClickTime = 0.3;
     private bool _showGroupDropdown;
-    private int _editingGroupIndex = -1;
-    private string _editingGroupName = "";
     private AutoGroupMode _autoGroupMode = AutoGroupMode.None;
     private SortMode _sortMode = SortMode.Default;
     #endregion
