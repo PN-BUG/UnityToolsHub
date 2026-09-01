@@ -375,10 +375,17 @@ public class FolderRuleManager : EditorWindow
             if (config.enableAddressable)
             {
                 EditorGUILayout.LabelField("Addressable 规则", EditorStyles.boldLabel);
-                EditorGUILayout.LabelField("  命名模板", config.addressableNameTemplate);
-                EditorGUILayout.LabelField("  分组", string.IsNullOrEmpty(config.addressableGroupName) ? "（默认）" : config.addressableGroupName);
-                EditorGUILayout.LabelField("  标签", string.IsNullOrEmpty(config.addressableLabels) ? "（无）" : config.addressableLabels);
-                EditorGUILayout.LabelField("  目标扩展名", config.addressableTargetExtensions);
+                int ruleCount = config.addressableRules?.Count ?? 0;
+                EditorGUILayout.LabelField("  扩展名配置数", ruleCount.ToString());
+                if (config.addressableRules != null)
+                {
+                    foreach (var rule in config.addressableRules)
+                    {
+                        if (rule == null) continue;
+                        string group = string.IsNullOrEmpty(rule.groupName) ? "默认分组" : rule.groupName;
+                        EditorGUILayout.LabelField($"  {rule.extension}", $"{group} · {rule.nameTemplate}");
+                    }
+                }
                 EditorGUILayout.Space(2);
             }
 
@@ -770,8 +777,8 @@ public class FolderRuleManager : EditorWindow
     private bool ApplyAddressableToAsset(FolderRuleConfig config, string assetPath)
     {
 #if ADDRESSABLES
-        if (!config.IsTargetExtension(assetPath, config.addressableTargetExtensions))
-            return false;
+        var rule = config.GetAddressableRule(assetPath);
+        if (rule == null) return false;
 
         var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
         if (settings == null) return false;
@@ -780,7 +787,7 @@ public class FolderRuleManager : EditorWindow
         if (string.IsNullOrEmpty(guid)) return false;
 
         // 获取目标分组
-        string groupName = config.addressableGroupName;
+        string groupName = rule.groupName;
         var targetGroup = settings.FindGroup(groupName);
         if (targetGroup == null && !string.IsNullOrEmpty(groupName))
         {
@@ -804,7 +811,7 @@ public class FolderRuleManager : EditorWindow
             }
 
             // 检查地址名称是否需要更新
-            string expectedName = config.ResolveAddressableName(assetPath);
+            string expectedName = config.ResolveAddressableName(assetPath, rule);
             if (!string.IsNullOrEmpty(expectedName) && existingEntry.address != expectedName)
             {
                 existingEntry.address = expectedName;
@@ -825,11 +832,11 @@ public class FolderRuleManager : EditorWindow
         // 不存在，创建条目
         var entry = settings.CreateOrMoveEntry(guid, targetGroup, readOnly: false, postEvent: true);
 
-        string address = config.ResolveAddressableName(assetPath);
+        string address = config.ResolveAddressableName(assetPath, rule);
         if (!string.IsNullOrEmpty(address))
             entry.address = address;
 
-        var labels = config.GetAddressableLabels();
+        var labels = config.GetAddressableLabels(rule);
         foreach (string label in labels)
         {
             if (!settings.GetLabels().Contains(label))
@@ -948,7 +955,8 @@ public class FolderRuleManager : EditorWindow
     {
 #if ADDRESSABLES
         if (!config.enableAddressable) return;
-        if (!config.IsTargetExtension(assetPath, config.addressableTargetExtensions)) return;
+        var rule = config.GetAddressableRule(assetPath);
+        if (rule == null) return;
 
         var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
         if (settings == null) return;
@@ -969,7 +977,7 @@ public class FolderRuleManager : EditorWindow
         }
 
         // 检查分组是否匹配
-        string expectedGroup = config.addressableGroupName;
+        string expectedGroup = rule.groupName;
         string actualGroup = entry.parentGroup?.Name ?? "";
         if (!string.IsNullOrEmpty(expectedGroup) &&
             !string.Equals(actualGroup, expectedGroup, StringComparison.Ordinal))
@@ -985,7 +993,7 @@ public class FolderRuleManager : EditorWindow
         }
 
         // 检查命名是否符合模板
-        string expectedName = config.ResolveAddressableName(assetPath);
+        string expectedName = config.ResolveAddressableName(assetPath, rule);
         if (!string.IsNullOrEmpty(expectedName) && entry.address != expectedName)
         {
             _violations.Add(new ViolationEntry
@@ -1318,8 +1326,11 @@ public class FolderRuleManager : EditorWindow
 
         Undo.RecordObject(settings, "FolderRule 修复 Addressable");
 
+        var rule = v.config.GetAddressableRule(v.assetPath);
+        if (rule == null) return false;
+
         // 获取目标分组
-        string groupName = v.config.addressableGroupName;
+        string groupName = rule.groupName;
         var targetGroup = settings.FindGroup(groupName);
         if (targetGroup == null && !string.IsNullOrEmpty(groupName))
         {
@@ -1349,12 +1360,12 @@ public class FolderRuleManager : EditorWindow
         }
 
         // 设置 Addressable 名称
-        string expectedName = v.config.ResolveAddressableName(v.assetPath);
+        string expectedName = v.config.ResolveAddressableName(v.assetPath, rule);
         if (!string.IsNullOrEmpty(expectedName))
             entry.address = expectedName;
 
         // 设置标签
-        var labels = v.config.GetAddressableLabels();
+        var labels = v.config.GetAddressableLabels(rule);
         foreach (string label in labels)
         {
             if (!settings.GetLabels().Contains(label))

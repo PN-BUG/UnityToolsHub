@@ -28,6 +28,47 @@ public enum FileNameCharacterOptions
     AllowUnderscores = 1 << 3
 }
 
+[Serializable]
+public class AddressableExtensionRule
+{
+    [LabelText("扩展名")]
+    [Tooltip("单个扩展名，例如 .png 或 .prefab")]
+    public string extension = ".png";
+
+    [InfoBox("变量: {name}=文件名  {folder}=所在文件夹名  {path}=相对路径", InfoMessageType.None)]
+    [ValueDropdown("TemplateNameOptions")]
+    [LabelText("命名模板")]
+    public string nameTemplate = "{folder}/{name}";
+
+    [ValueDropdown("GetGroupNamesOdin")]
+    [LabelText("分组名")]
+    public string groupName = "";
+
+    [LabelText("标签")]
+    public string labels = "";
+
+    private IEnumerable<string> TemplateNameOptions()
+    {
+        return new[] { "{folder}/{name}", "{path}", "{name}", "{folder}/{path}", "assets/{folder}/{name}" };
+    }
+
+    private IEnumerable<string> GetGroupNamesOdin()
+    {
+        var names = new List<string> { "" };
+#if ADDRESSABLES
+        var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.GetSettings(true);
+        if (settings != null)
+        {
+            foreach (var group in settings.groups)
+            {
+                if (group != null) names.Add(group.Name);
+            }
+        }
+#endif
+        return names;
+    }
+}
+
 /// <summary>
 /// 文件夹规则配置 —— ScriptableObject
 /// 用户手动创建此 SO，放置在项目任意文件夹下。
@@ -39,7 +80,7 @@ public enum FileNameCharacterOptions
 ///   3. 贴图导入规则（可选）
 /// </summary>
 [CreateAssetMenu(fileName = "FolderRuleConfig", menuName = "UnityToolsHub/文件夹规则配置", order = 200)]
-public class FolderRuleConfig : ScriptableObject
+public class FolderRuleConfig : ScriptableObject, ISerializationCallbackReceiver
 {
     // ══════════════════════════════════════════════════════════
     //  基础配置
@@ -131,23 +172,15 @@ public class FolderRuleConfig : ScriptableObject
     public bool enableAddressable;
 
     [ToggleGroup("Addressable 配置")]
-    [InfoBox("变量: {name}=文件名  {folder}=所在文件夹名  {path}=相对路径", InfoMessageType.None)]
-    [ValueDropdown("TemplateNameOptions")]
-    [LabelText("命名模板")]
-    public string addressableNameTemplate = "{folder}/{name}";
+    [LabelText("按扩展名配置")]
+    [ListDrawerSettings(ShowFoldout = true, DraggableItems = true)]
+    public List<AddressableExtensionRule> addressableRules = new List<AddressableExtensionRule>();
 
-    [ToggleGroup("Addressable 配置")]
-    [ValueDropdown("GetGroupNamesOdin")]
-    [LabelText("分组名")]
-    public string addressableGroupName = "";
-
-    [ToggleGroup("Addressable 配置")]
-    [LabelText("标签")]
-    public string addressableLabels = "";
-
-    [ToggleGroup("Addressable 配置")]
-    [LabelText("目标扩展名")]
-    public string addressableTargetExtensions = ".png,.jpg,.prefab,.asset";
+    // 仅用于把旧版“多扩展名共用一套配置”的资源无损迁移到 List。
+    [SerializeField, HideInInspector] private string addressableNameTemplate;
+    [SerializeField, HideInInspector] private string addressableGroupName;
+    [SerializeField, HideInInspector] private string addressableLabels;
+    [SerializeField, HideInInspector] private string addressableTargetExtensions;
 
     // ══════════════════════════════════════════════════════════
     //  贴图导入规则（可选）
@@ -389,8 +422,46 @@ public class FolderRuleConfig : ScriptableObject
     }
 
     /// <summary>根据模板生成 Addressable 名称</summary>
-    public string ResolveAddressableName(string assetPath)
+    public AddressableExtensionRule GetAddressableRule(string assetPath)
     {
+        string extension = System.IO.Path.GetExtension(assetPath)?.ToLowerInvariant();
+        if (string.IsNullOrEmpty(extension) || addressableRules == null) return null;
+
+        foreach (var rule in addressableRules)
+        {
+            if (rule == null || string.IsNullOrWhiteSpace(rule.extension)) continue;
+            string configuredExtension = rule.extension.Trim().ToLowerInvariant();
+            if (!configuredExtension.StartsWith(".")) configuredExtension = "." + configuredExtension;
+            if (configuredExtension == extension) return rule;
+        }
+        return null;
+    }
+
+    public void OnBeforeSerialize() { }
+
+    public void OnAfterDeserialize()
+    {
+        if ((addressableRules != null && addressableRules.Count > 0) ||
+            string.IsNullOrWhiteSpace(addressableTargetExtensions)) return;
+
+        addressableRules = new List<AddressableExtensionRule>();
+        foreach (string value in addressableTargetExtensions.Split(','))
+        {
+            string extension = value.Trim();
+            if (string.IsNullOrEmpty(extension)) continue;
+            addressableRules.Add(new AddressableExtensionRule
+            {
+                extension = extension,
+                nameTemplate = string.IsNullOrEmpty(addressableNameTemplate) ? "{folder}/{name}" : addressableNameTemplate,
+                groupName = addressableGroupName ?? "",
+                labels = addressableLabels ?? ""
+            });
+        }
+    }
+
+    public string ResolveAddressableName(string assetPath, AddressableExtensionRule rule)
+    {
+        if (rule == null) return "";
         string name = System.IO.Path.GetFileNameWithoutExtension(assetPath);
         string folder = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(assetPath)?.Replace('\\', '/'));
         string relPath = assetPath;
@@ -399,18 +470,18 @@ public class FolderRuleConfig : ScriptableObject
         if (relPath.StartsWith(ruleFolder + "/", StringComparison.Ordinal))
             relPath = relPath.Substring(ruleFolder.Length + 1);
 
-        return addressableNameTemplate
+        return (rule.nameTemplate ?? "")
             .Replace("{name}", name)
             .Replace("{folder}", folder ?? "")
             .Replace("{path}", relPath);
     }
 
     /// <summary>获取 Addressable 标签列表</summary>
-    public List<string> GetAddressableLabels()
+    public List<string> GetAddressableLabels(AddressableExtensionRule rule)
     {
         var labels = new List<string>();
-        if (string.IsNullOrWhiteSpace(addressableLabels)) return labels;
-        foreach (var l in addressableLabels.Split(','))
+        if (rule == null || string.IsNullOrWhiteSpace(rule.labels)) return labels;
+        foreach (var l in rule.labels.Split(','))
         {
             string t = l.Trim();
             if (!string.IsNullOrEmpty(t)) labels.Add(t);
