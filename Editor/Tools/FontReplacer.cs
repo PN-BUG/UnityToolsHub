@@ -14,6 +14,8 @@ using UnityEngine.SceneManagement;
     Icon = "🔤", Tags = new[] { "UGUI", "TMP", "批量替换" })]
 public class FontReplacer : EditorWindow
 {
+    private const string ConvertContextMenu = "GameObject/Font Replacer/Text 与 TMP 相互转换";
+
     private Font newFont; // 普通UGUI字体
     private bool hasTMP;
 #if TMP_PRESENT
@@ -32,6 +34,157 @@ public class FontReplacer : EditorWindow
     public static void ShowWindow()
     {
         GetWindow<FontReplacer>("Font Replacer");
+    }
+
+    [MenuItem(ConvertContextMenu, false, 20)]
+    private static void ConvertSelectedTextComponents()
+    {
+        int undoGroup = Undo.GetCurrentGroup();
+        Undo.SetCurrentGroupName("Convert Text and TMP");
+
+        int converted = 0;
+        foreach (GameObject gameObject in Selection.gameObjects)
+        {
+            Text legacyText = gameObject.GetComponent<Text>();
+            if (legacyText != null)
+            {
+                ConvertLegacyTextToTMP(legacyText);
+                converted++;
+                continue;
+            }
+
+            TMPro.TextMeshProUGUI tmpText = gameObject.GetComponent<TMPro.TextMeshProUGUI>();
+            if (tmpText != null)
+            {
+                ConvertTMPToLegacyText(tmpText);
+                converted++;
+            }
+        }
+
+        Undo.CollapseUndoOperations(undoGroup);
+        Debug.Log($"Font Replacer：已转换 {converted} 个 Text/TMP 组件。");
+    }
+
+    [MenuItem(ConvertContextMenu, true)]
+    private static bool ValidateConvertSelectedTextComponents()
+    {
+        return Selection.gameObjects.Any(gameObject =>
+            gameObject.GetComponent<Text>() != null ||
+            gameObject.GetComponent<TMPro.TextMeshProUGUI>() != null);
+    }
+
+    [MenuItem("CONTEXT/Text/转换为 TextMeshProUGUI")]
+    private static void ConvertTextComponent(MenuCommand command)
+    {
+        ConvertLegacyTextToTMP((Text)command.context);
+    }
+
+    [MenuItem("CONTEXT/TextMeshProUGUI/转换为 UGUI Text")]
+    private static void ConvertTMPComponent(MenuCommand command)
+    {
+        ConvertTMPToLegacyText((TMPro.TextMeshProUGUI)command.context);
+    }
+
+    private static TMPro.TextMeshProUGUI ConvertLegacyTextToTMP(Text source)
+    {
+        GameObject gameObject = source.gameObject;
+        string text = source.text;
+        Color color = source.color;
+        int fontSize = source.fontSize;
+        FontStyle fontStyle = source.fontStyle;
+        TextAnchor alignment = source.alignment;
+        bool raycastTarget = source.raycastTarget;
+        bool maskable = source.maskable;
+        bool richText = source.supportRichText;
+
+        Undo.DestroyObjectImmediate(source);
+        var target = Undo.AddComponent<TMPro.TextMeshProUGUI>(gameObject);
+        target.text = text;
+        target.color = color;
+        target.fontSize = fontSize;
+        target.fontStyle = ConvertFontStyle(fontStyle);
+        target.alignment = ConvertAlignment(alignment);
+        target.raycastTarget = raycastTarget;
+        target.maskable = maskable;
+        target.richText = richText;
+        target.enableAutoSizing = false;
+        EditorUtility.SetDirty(gameObject);
+        return target;
+    }
+
+    private static Text ConvertTMPToLegacyText(TMPro.TextMeshProUGUI source)
+    {
+        GameObject gameObject = source.gameObject;
+        string text = source.text;
+        Color color = source.color;
+        int fontSize = Mathf.Max(1, Mathf.RoundToInt(source.fontSize));
+        TMPro.FontStyles fontStyle = source.fontStyle;
+        TMPro.TextAlignmentOptions alignment = source.alignment;
+        bool raycastTarget = source.raycastTarget;
+        bool maskable = source.maskable;
+        bool richText = source.richText;
+
+        Undo.DestroyObjectImmediate(source);
+        var target = Undo.AddComponent<Text>(gameObject);
+        target.text = text;
+        target.color = color;
+        target.fontSize = fontSize;
+        target.fontStyle = ConvertFontStyle(fontStyle);
+        target.alignment = ConvertAlignment(alignment);
+        target.raycastTarget = raycastTarget;
+        target.maskable = maskable;
+        target.supportRichText = richText;
+        EditorUtility.SetDirty(gameObject);
+        return target;
+    }
+
+    private static TMPro.FontStyles ConvertFontStyle(FontStyle style)
+    {
+        switch (style)
+        {
+            case FontStyle.Bold: return TMPro.FontStyles.Bold;
+            case FontStyle.Italic: return TMPro.FontStyles.Italic;
+            case FontStyle.BoldAndItalic: return TMPro.FontStyles.Bold | TMPro.FontStyles.Italic;
+            default: return TMPro.FontStyles.Normal;
+        }
+    }
+
+    private static FontStyle ConvertFontStyle(TMPro.FontStyles style)
+    {
+        bool bold = (style & TMPro.FontStyles.Bold) != 0;
+        bool italic = (style & TMPro.FontStyles.Italic) != 0;
+        if (bold && italic) return FontStyle.BoldAndItalic;
+        if (bold) return FontStyle.Bold;
+        if (italic) return FontStyle.Italic;
+        return FontStyle.Normal;
+    }
+
+    private static TMPro.TextAlignmentOptions ConvertAlignment(TextAnchor alignment)
+    {
+        switch (alignment)
+        {
+            case TextAnchor.UpperLeft: return TMPro.TextAlignmentOptions.TopLeft;
+            case TextAnchor.UpperCenter: return TMPro.TextAlignmentOptions.Top;
+            case TextAnchor.UpperRight: return TMPro.TextAlignmentOptions.TopRight;
+            case TextAnchor.MiddleLeft: return TMPro.TextAlignmentOptions.Left;
+            case TextAnchor.MiddleRight: return TMPro.TextAlignmentOptions.Right;
+            case TextAnchor.LowerLeft: return TMPro.TextAlignmentOptions.BottomLeft;
+            case TextAnchor.LowerCenter: return TMPro.TextAlignmentOptions.Bottom;
+            case TextAnchor.LowerRight: return TMPro.TextAlignmentOptions.BottomRight;
+            default: return TMPro.TextAlignmentOptions.Center;
+        }
+    }
+
+    private static TextAnchor ConvertAlignment(TMPro.TextAlignmentOptions alignment)
+    {
+        if ((alignment & TMPro.TextAlignmentOptions.Top) != 0)
+            return (alignment & TMPro.TextAlignmentOptions.Left) != 0 ? TextAnchor.UpperLeft :
+                (alignment & TMPro.TextAlignmentOptions.Right) != 0 ? TextAnchor.UpperRight : TextAnchor.UpperCenter;
+        if ((alignment & TMPro.TextAlignmentOptions.Bottom) != 0)
+            return (alignment & TMPro.TextAlignmentOptions.Left) != 0 ? TextAnchor.LowerLeft :
+                (alignment & TMPro.TextAlignmentOptions.Right) != 0 ? TextAnchor.LowerRight : TextAnchor.LowerCenter;
+        return (alignment & TMPro.TextAlignmentOptions.Left) != 0 ? TextAnchor.MiddleLeft :
+            (alignment & TMPro.TextAlignmentOptions.Right) != 0 ? TextAnchor.MiddleRight : TextAnchor.MiddleCenter;
     }
 
     private void OnEnable()

@@ -5,7 +5,12 @@
         "UnityToolsHub.SDK",
         "Nodin.Runtime",
         "Nodin.Editor",
-        "UnityFramework"
+        "UnityFramework",
+        "Unity.Localization",
+        "Unity.Localization.Editor",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI",
+        "UnityToolsHub.Localization.Runtime"
     ],
     "includePlatforms": [
         "Editor"
