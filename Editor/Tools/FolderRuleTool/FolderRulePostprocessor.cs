@@ -104,8 +104,8 @@ public class FolderRulePostprocessor : AssetPostprocessor
     private static bool TryApplyAddressable(FolderRuleConfig config, string assetPath)
     {
 #if ADDRESSABLES
-        if (!config.IsTargetExtension(assetPath, config.addressableTargetExtensions))
-            return false;
+        var rule = config.GetAddressableRule(assetPath);
+        if (rule == null) return false;
 
         var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
         if (settings == null) return false;
@@ -117,7 +117,7 @@ public class FolderRulePostprocessor : AssetPostprocessor
         if (existingEntry != null) return false; // 已存在则跳过
 
         // 查找或创建分组
-        string groupName = config.addressableGroupName;
+        string groupName = rule.groupName;
         var group = settings.FindGroup(groupName);
 
         if (group == null && !string.IsNullOrEmpty(groupName))
@@ -144,12 +144,12 @@ public class FolderRulePostprocessor : AssetPostprocessor
         }
 
         // 设置地址名称
-        string address = config.ResolveAddressableName(assetPath);
+        string address = config.ResolveAddressableName(assetPath, rule);
         if (!string.IsNullOrEmpty(address))
             entry.address = address;
 
         // 设置标签
-        var labels = config.GetAddressableLabels();
+        var labels = config.GetAddressableLabels(rule);
         foreach (string label in labels)
         {
             if (!settings.GetLabels().Contains(label))

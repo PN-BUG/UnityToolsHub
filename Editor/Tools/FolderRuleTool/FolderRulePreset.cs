@@ -54,17 +54,8 @@ public class FolderRulePreset : ScriptableObject
     [Tooltip("是否自动将资源添加到 Addressable")]
     public bool enableAddressable;
 
-    [Tooltip("Addressable 命名模板")]
-    public string addressableNameTemplate = "{folder}/{name}";
-
-    [Tooltip("Addressable 分组名")]
-    public string addressableGroupName = "";
-
-    [Tooltip("Addressable 标签")]
-    public string addressableLabels = "";
-
-    [Tooltip("目标扩展名")]
-    public string addressableTargetExtensions = ".png,.jpg,.prefab,.asset";
+    [Tooltip("每个扩展名对应一套 Addressable 配置")]
+    public List<AddressableExtensionRule> addressableRules = new List<AddressableExtensionRule>();
 
     // ══════════════════════════════════════════════════════════
     //  贴图导入规则
@@ -127,10 +118,7 @@ public class FolderRulePreset : ScriptableObject
         namingIgnoreExtensions = config.namingIgnoreExtensions;
 
         enableAddressable = config.enableAddressable;
-        addressableNameTemplate = config.addressableNameTemplate;
-        addressableGroupName = config.addressableGroupName;
-        addressableLabels = config.addressableLabels;
-        addressableTargetExtensions = config.addressableTargetExtensions;
+        addressableRules = CloneAddressableRules(config.addressableRules);
 
         enableTextureRule = config.enableTextureRule;
         textureTargetExtensions = config.textureTargetExtensions;
@@ -160,10 +148,7 @@ public class FolderRulePreset : ScriptableObject
         config.namingIgnoreExtensions = namingIgnoreExtensions;
 
         config.enableAddressable = enableAddressable;
-        config.addressableNameTemplate = addressableNameTemplate;
-        config.addressableGroupName = addressableGroupName;
-        config.addressableLabels = addressableLabels;
-        config.addressableTargetExtensions = addressableTargetExtensions;
+        config.addressableRules = CloneAddressableRules(addressableRules);
 
         config.enableTextureRule = enableTextureRule;
         config.textureTargetExtensions = textureTargetExtensions;
@@ -179,6 +164,24 @@ public class FolderRulePreset : ScriptableObject
         config.textureUiWrapMode = textureUiWrapMode;
 
         EditorUtility.SetDirty(config);
+    }
+
+    private static List<AddressableExtensionRule> CloneAddressableRules(List<AddressableExtensionRule> source)
+    {
+        var result = new List<AddressableExtensionRule>();
+        if (source == null) return result;
+        foreach (var rule in source)
+        {
+            if (rule == null) continue;
+            result.Add(new AddressableExtensionRule
+            {
+                extension = rule.extension,
+                nameTemplate = rule.nameTemplate,
+                groupName = rule.groupName,
+                labels = rule.labels
+            });
+        }
+        return result;
     }
 }
 #endif

@@ -390,7 +390,8 @@ public class FolderRuleConfigEditor : NodinEditor
     {
 #if ADDRESSABLES
         if (!config.enableAddressable) return;
-        if (!config.IsTargetExtension(assetPath, config.addressableTargetExtensions)) return;
+        var rule = config.GetAddressableRule(assetPath);
+        if (rule == null) return;
 
         var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
         if (settings == null) return;
@@ -409,7 +410,7 @@ public class FolderRuleConfigEditor : NodinEditor
         }
 
         // 检查分组是否匹配
-        string expectedGroup = config.addressableGroupName;
+        string expectedGroup = rule.groupName;
         string actualGroup = entry.parentGroup?.Name ?? "";
         if (!string.IsNullOrEmpty(expectedGroup) &&
             !string.Equals(actualGroup, expectedGroup, StringComparison.Ordinal))
@@ -423,7 +424,7 @@ public class FolderRuleConfigEditor : NodinEditor
         }
 
         // 检查命名是否符合模板
-        string expectedName = config.ResolveAddressableName(assetPath);
+        string expectedName = config.ResolveAddressableName(assetPath, rule);
         if (!string.IsNullOrEmpty(expectedName) && entry.address != expectedName)
         {
             _violations.Add(new ViolationItem
@@ -517,7 +518,8 @@ public class FolderRuleConfigEditor : NodinEditor
     private void ApplyAddressable(FolderRuleConfig config, string assetPath)
     {
 #if ADDRESSABLES
-        if (!config.IsTargetExtension(assetPath, config.addressableTargetExtensions)) return;
+        var rule = config.GetAddressableRule(assetPath);
+        if (rule == null) return;
 
         var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
         if (settings == null) return;
@@ -526,7 +528,7 @@ public class FolderRuleConfigEditor : NodinEditor
         if (string.IsNullOrEmpty(guid)) return;
 
         // 获取目标分组
-        string groupName = config.addressableGroupName;
+        string groupName = rule.groupName;
         var targetGroup = settings.FindGroup(groupName);
         if (targetGroup == null && !string.IsNullOrEmpty(groupName))
         {
@@ -549,7 +551,7 @@ public class FolderRuleConfigEditor : NodinEditor
             }
 
             // 检查地址名是否需要更新
-            string expectedName = config.ResolveAddressableName(assetPath);
+            string expectedName = config.ResolveAddressableName(assetPath, rule);
             if (!string.IsNullOrEmpty(expectedName) && existingEntry.address != expectedName)
             {
                 existingEntry.address = expectedName;
@@ -567,10 +569,10 @@ public class FolderRuleConfigEditor : NodinEditor
 
         // 不存在，创建条目
         var entry = settings.CreateOrMoveEntry(guid, targetGroup, readOnly: false, postEvent: true);
-        string address = config.ResolveAddressableName(assetPath);
+        string address = config.ResolveAddressableName(assetPath, rule);
         if (!string.IsNullOrEmpty(address)) entry.address = address;
 
-        var labels = config.GetAddressableLabels();
+        var labels = config.GetAddressableLabels(rule);
         foreach (string label in labels)
         {
             if (!settings.GetLabels().Contains(label)) settings.AddLabel(label);
