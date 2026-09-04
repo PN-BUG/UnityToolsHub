@@ -110,6 +110,16 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         public string reason;
     }
 
+    [Serializable]
+    private sealed class DuplicateKeyGroup
+    {
+        public bool selected = true;
+        public string sourceText;
+        public string canonicalKey;
+        public List<string> duplicateKeys = new List<string>();
+        public bool hasTranslationConflict;
+    }
+
     private const string GeneratedPrefix = "auto.";
     private const string DefaultCollection = "ProjectText";
     private const string DefaultDirectory = "Assets/Localization/ProjectText";
@@ -136,6 +146,9 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     private static readonly Regex HanLayoutWhitespaceRegex = new Regex(
         "(?<=[\\u3400-\\u9FFF])[\\p{Zs}\\t]+(?=[\\u3400-\\u9FFF])",
         RegexOptions.Compiled);
+    private static readonly Regex BoundaryWhitespaceRegex = new Regex(
+        "^(?<leading>\\s*)(?<content>.*?)(?<trailing>\\s*)$",
+        RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     private static readonly SemaphoreSlim GoogleRequestGate = new SemaphoreSlim(1, 1);
     private static readonly SemaphoreSlim MyMemoryRequestGate = new SemaphoreSlim(1, 1);
@@ -191,6 +204,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     [SerializeField] private bool showSettings;
     [NonSerialized] private List<DynamicPreviewItem> dynamicPreviewItems = new List<DynamicPreviewItem>();
     [NonSerialized] private List<BindingMismatch> bindingMismatches = new List<BindingMismatch>();
+    [NonSerialized] private List<DuplicateKeyGroup> duplicateKeyGroups = new List<DuplicateKeyGroup>();
     [NonSerialized] private bool showDynamicPreview = true;
     private bool busy;
     private GUIStyle cardStyle;
@@ -544,6 +558,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             GUILayout.Space(10);
             DrawReferenceFinder();
             GUILayout.Space(10);
+            DrawDuplicateKeyPreview();
+            if (duplicateKeyGroups.Count > 0) GUILayout.Space(10);
             DrawBindingMismatchPreview();
             if (bindingMismatches.Count > 0) GUILayout.Space(10);
             DrawDynamicPreview();
@@ -645,6 +661,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
                 ScanSelectedScriptInstancesAcrossProject(Selection.objects.OfType<MonoScript>());
             if (GUILayout.Button("检查全项目 Key / Text 错配", flatButtonStyle, GUILayout.Height(25)))
                 ScanBindingMismatches();
+            if (GUILayout.Button("扫描 String Table 重复原文", flatButtonStyle, GUILayout.Height(25)))
+                ScanDuplicateKeys();
         }
     }
 
@@ -898,6 +916,46 @@ public sealed class LocalizationPipelineWindow : EditorWindow
                     GUILayout.Label(item.targetPath, dimStyle);
                     GUILayout.Label($"来源  {item.scriptName} · {item.candidate.origin}", dimStyle);
                     GUILayout.Label("Key  " + item.entryKey, dimStyle);
+                }
+            }
+        }
+    }
+
+    private void DrawDuplicateKeyPreview()
+    {
+        if (duplicateKeyGroups == null || duplicateKeyGroups.Count == 0) return;
+        var duplicateCount = duplicateKeyGroups.Sum(item => item.duplicateKeys.Count);
+        DrawSectionTitle($"String Table 重复原文（{duplicateKeyGroups.Count} 组 / 可移除 {duplicateCount} 条）", HubWarning);
+        using (new EditorGUILayout.VerticalScope(cardStyle))
+        {
+            EditorGUILayout.HelpBox("修复会先扫描并迁移 Prefab、场景和 ScriptableObject 中的旧 Key 引用，确认全部保存成功后才删除重复表项。译文冲突项默认不勾选。", MessageType.Info);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("全选无冲突", flatButtonStyle, GUILayout.Width(88)))
+                    duplicateKeyGroups.ForEach(item => item.selected = !item.hasTranslationConflict);
+                if (GUILayout.Button("全不选", flatButtonStyle, GUILayout.Width(64)))
+                    duplicateKeyGroups.ForEach(item => item.selected = false);
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("重新扫描", flatButtonStyle, GUILayout.Width(72))) ScanDuplicateKeys();
+                using (new EditorGUI.DisabledScope(!duplicateKeyGroups.Any(item => item.selected)))
+                    if (GUILayout.Button("迁移引用并去重", successButtonStyle, GUILayout.Width(132), GUILayout.Height(26)))
+                        RepairSelectedDuplicateKeys();
+            }
+
+            foreach (var item in duplicateKeyGroups)
+            {
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        item.selected = EditorGUILayout.Toggle(item.selected, GUILayout.Width(18));
+                        GUILayout.Label(Shorten(item.sourceText, 72), sectionStyle);
+                        GUILayout.FlexibleSpace();
+                        DrawMiniTag(item.hasTranslationConflict ? "译文冲突" : "内容一致",
+                            item.hasTranslationConflict ? HubWarning : HubSuccess);
+                    }
+                    GUILayout.Label("保留  " + item.canonicalKey, dimStyle);
+                    foreach (var key in item.duplicateKeys) GUILayout.Label("移除  " + key, dimStyle);
                 }
             }
         }
@@ -1202,6 +1260,252 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     private void ScanAllScenes()
     {
         ScanPaths(Array.Empty<string>(), FindAssetPaths("t:Scene", null), false);
+    }
+
+    private void ScanDuplicateKeys()
+    {
+        duplicateKeyGroups.Clear();
+        var collection = LocalizationEditorSettings.GetStringTableCollection(collectionName);
+        if (collection == null)
+        {
+            status = $"找不到 String Table：{collectionName}";
+            return;
+        }
+
+        var hans = collection.GetTable(new LocaleIdentifier("zh-Hans")) as StringTable;
+        if (hans == null)
+        {
+            status = "找不到简中表 zh-Hans";
+            return;
+        }
+
+        var localeTables = new[] { "zh-Hans", "zh-TW", "en" }
+            .Select(locale => collection.GetTable(new LocaleIdentifier(locale)) as StringTable)
+            .Where(table => table != null).ToArray();
+        duplicateKeyGroups = collection.SharedData.Entries
+            .Select(entry => new { Entry = entry, Source = DecodeTableValue(hans.GetEntry(entry.Id)?.Value) })
+            .Where(item => !string.IsNullOrEmpty(item.Source))
+            .GroupBy(item => item.Source, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group =>
+            {
+                var ordered = group.OrderBy(item => GetEntryKeyReusePriority(item.Entry.Key))
+                    .ThenBy(item => item.Entry.Key, StringComparer.Ordinal).ToList();
+                var conflict = localeTables.Any(table => ordered
+                    .Select(item => DecodeTableValue(table.GetEntry(item.Entry.Id)?.Value))
+                    .Where(value => !string.IsNullOrEmpty(value)).Distinct(StringComparer.Ordinal).Count() > 1);
+                return new DuplicateKeyGroup
+                {
+                    selected = !conflict,
+                    sourceText = group.Key,
+                    canonicalKey = ordered[0].Entry.Key,
+                    duplicateKeys = ordered.Skip(1).Select(item => item.Entry.Key).ToList(),
+                    hasTranslationConflict = conflict
+                };
+            })
+            .OrderBy(item => item.hasTranslationConflict)
+            .ThenBy(item => item.sourceText, StringComparer.Ordinal).ToList();
+        var removable = duplicateKeyGroups.Sum(item => item.duplicateKeys.Count);
+        var conflicts = duplicateKeyGroups.Count(item => item.hasTranslationConflict);
+        status = $"重复扫描完成：{duplicateKeyGroups.Count} 组，可移除 {removable} 条，译文冲突 {conflicts} 组";
+        Repaint();
+    }
+
+    private void RepairSelectedDuplicateKeys()
+    {
+        if (busy) return;
+        var selected = duplicateKeyGroups.Where(item => item.selected).ToList();
+        if (selected.Count == 0) return;
+        if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+        var collection = LocalizationEditorSettings.GetStringTableCollection(collectionName);
+        if (collection == null) { status = $"找不到 String Table：{collectionName}"; return; }
+
+        var keyMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        var idMap = new Dictionary<long, string>();
+        foreach (var group in selected)
+        foreach (var duplicateKey in group.duplicateKeys)
+        {
+            var duplicate = collection.SharedData.GetEntry(duplicateKey);
+            if (duplicate == null) continue;
+            keyMap[duplicateKey] = group.canonicalKey;
+            idMap[duplicate.Id] = group.canonicalKey;
+        }
+
+        busy = true;
+        var changedReferences = 0;
+        var failedAssets = 0;
+        var cancelled = false;
+        var setup = EditorSceneManager.GetSceneManagerSetup();
+        try
+        {
+            var prefabPaths = OrderPrefabPathsDependencyFirst(
+                AssetDatabase.FindAssets("t:Prefab", new[] { "Assets" }).Select(AssetDatabase.GUIDToAssetPath), false);
+            var scenePaths = AssetDatabase.FindAssets("t:Scene", new[] { "Assets" })
+                .Select(AssetDatabase.GUIDToAssetPath).ToArray();
+            var dataPaths = AssetDatabase.FindAssets("t:ScriptableObject", new[] { "Assets" })
+                .Select(AssetDatabase.GUIDToAssetPath).Distinct().ToArray();
+            var total = Mathf.Max(1, prefabPaths.Length + scenePaths.Length + dataPaths.Length);
+            var progress = 0;
+
+            foreach (var path in prefabPaths)
+            {
+                if (EditorUtility.DisplayCancelableProgressBar("迁移重复 Localization Key",
+                        $"Prefab {progress + 1}/{total}  {path}", progress++ / (float)total)) { cancelled = true; break; }
+                GameObject root = null;
+                try
+                {
+                    root = PrefabUtility.LoadPrefabContents(path);
+                    var changed = MigrateLocalizationReferences(root.GetComponentsInChildren<Component>(true),
+                        collection, keyMap, idMap);
+                    if (changed > 0) PrefabUtility.SaveAsPrefabAsset(root, path);
+                    changedReferences += changed;
+                }
+                catch (Exception exception)
+                {
+                    failedAssets++;
+                    Debug.LogWarning($"重复 Key 引用迁移失败：{path}\n{exception.Message}");
+                }
+                finally { if (root != null) PrefabUtility.UnloadPrefabContents(root); }
+            }
+
+            if (!cancelled)
+            foreach (var path in scenePaths)
+            {
+                if (EditorUtility.DisplayCancelableProgressBar("迁移重复 Localization Key",
+                        $"场景 {progress + 1}/{total}  {path}", progress++ / (float)total)) { cancelled = true; break; }
+                Scene scene = default;
+                try
+                {
+                    scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+                    var components = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Component>(true));
+                    var changed = MigrateLocalizationReferences(components, collection, keyMap, idMap);
+                    if (changed > 0) EditorSceneManager.SaveScene(scene);
+                    changedReferences += changed;
+                }
+                catch (Exception exception)
+                {
+                    failedAssets++;
+                    Debug.LogWarning($"重复 Key 引用迁移失败：{path}\n{exception.Message}");
+                }
+                finally { if (scene.IsValid() && scene.isLoaded) EditorSceneManager.CloseScene(scene, true); }
+            }
+
+            if (!cancelled)
+            foreach (var path in dataPaths)
+            {
+                if (EditorUtility.DisplayCancelableProgressBar("迁移重复 Localization Key",
+                        $"数据资源 {progress + 1}/{total}  {path}", progress++ / (float)total)) { cancelled = true; break; }
+                try
+                {
+                    changedReferences += MigrateLocalizationReferences(
+                        AssetDatabase.LoadAllAssetsAtPath(path).Where(asset => asset is ScriptableObject),
+                        collection, keyMap, idMap);
+                }
+                catch (Exception exception)
+                {
+                    failedAssets++;
+                    Debug.LogWarning($"重复 Key 引用迁移失败：{path}\n{exception.Message}");
+                }
+            }
+
+            // Never delete keys after a partial migration. Rerunning is safe and will finish the rest.
+            if (cancelled || failedAssets > 0)
+            {
+                AssetDatabase.SaveAssets();
+                status = cancelled
+                    ? $"迁移已取消：已更新 {changedReferences} 处引用，未删除任何 Key"
+                    : $"有 {failedAssets} 个资源迁移失败：已更新 {changedReferences} 处引用，未删除任何 Key";
+                return;
+            }
+
+            ConsolidateDuplicateTranslations(collection, selected);
+            var removed = 0;
+            foreach (var oldKey in keyMap.Keys)
+                if (collection.SharedData.GetEntry(oldKey) != null) { collection.RemoveEntry(oldKey); removed++; }
+            EditorUtility.SetDirty(collection.SharedData);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            ScanDuplicateKeys();
+            status = $"去重完成：迁移 {changedReferences} 处引用，删除 {removed} 个重复 Key";
+            Debug.Log(status);
+        }
+        catch (Exception exception)
+        {
+            status = "重复 Key 修复失败；为防止断链，未完成阶段不会删除表项";
+            Debug.LogException(exception);
+        }
+        finally
+        {
+            EditorSceneManager.RestoreSceneManagerSetup(setup);
+            EditorUtility.ClearProgressBar();
+            busy = false;
+            Repaint();
+        }
+    }
+
+    private static int MigrateLocalizationReferences(IEnumerable<UnityEngine.Object> targets,
+        StringTableCollection collection, IReadOnlyDictionary<string, string> keyMap,
+        IReadOnlyDictionary<long, string> idMap)
+    {
+        var changed = 0;
+        var collectionGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(collection.SharedData));
+        foreach (var target in targets.Where(target => target != null))
+        {
+            var serialized = new SerializedObject(target);
+            var iterator = serialized.GetIterator();
+            var objectChanged = false;
+            while (iterator.Next(true))
+            {
+                const string suffix = "m_TableEntryReference.m_Key";
+                if (iterator.propertyType != SerializedPropertyType.String ||
+                    !iterator.propertyPath.EndsWith(suffix, StringComparison.Ordinal)) continue;
+                var prefix = iterator.propertyPath.Substring(0, iterator.propertyPath.Length - suffix.Length);
+                var tableProperty = serialized.FindProperty(prefix + "m_TableReference.m_TableCollectionName");
+                if (tableProperty == null || (tableProperty.stringValue != collection.TableCollectionName &&
+                    (string.IsNullOrEmpty(collectionGuid) || tableProperty.stringValue.IndexOf(collectionGuid,
+                        StringComparison.OrdinalIgnoreCase) < 0))) continue;
+
+                var idProperty = serialized.FindProperty(prefix + "m_TableEntryReference.m_KeyId");
+                string canonicalKey = null;
+                if (!string.IsNullOrEmpty(iterator.stringValue)) keyMap.TryGetValue(iterator.stringValue, out canonicalKey);
+                if (canonicalKey == null && idProperty != null && idProperty.longValue != 0)
+                    idMap.TryGetValue(idProperty.longValue, out canonicalKey);
+                if (canonicalKey == null) continue;
+                iterator.stringValue = canonicalKey;
+                if (idProperty != null) idProperty.longValue = 0;
+                objectChanged = true;
+                changed++;
+            }
+            if (!objectChanged) continue;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(target);
+        }
+        return changed;
+    }
+
+    private static void ConsolidateDuplicateTranslations(StringTableCollection collection,
+        IEnumerable<DuplicateKeyGroup> groups)
+    {
+        foreach (var locale in new[] { "zh-Hans", "zh-TW", "en" })
+        {
+            var table = collection.GetTable(new LocaleIdentifier(locale)) as StringTable;
+            if (table == null) continue;
+            foreach (var group in groups)
+            {
+                var canonical = collection.SharedData.GetEntry(group.canonicalKey);
+                if (canonical == null) continue;
+                var value = DecodeTableValue(table.GetEntry(canonical.Id)?.Value);
+                if (string.IsNullOrEmpty(value))
+                {
+                    value = group.duplicateKeys.Select(key => collection.SharedData.GetEntry(key))
+                        .Where(entry => entry != null)
+                        .Select(entry => DecodeTableValue(table.GetEntry(entry.Id)?.Value))
+                        .FirstOrDefault(candidate => !string.IsNullOrEmpty(candidate));
+                }
+                if (!string.IsNullOrEmpty(value)) SetEntry(table, canonical.Id, value);
+            }
+            EditorUtility.SetDirty(table);
+        }
     }
 
     private void ScanBindingMismatches()
@@ -1544,7 +1848,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         }
 
         var normalKey = MakeEntryKey(candidate.source);
-        var key = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
+        var generatedKey = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
+        var key = ResolveExistingEntryKey(collection, candidate.source, generatedKey);
         bySource.Add(candidate.source, new DynamicPreviewItem
         {
             target = null,
@@ -2225,7 +2530,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
 
     private static string EnsureDefaultStringEntry(StringTableCollection collection, string source)
     {
-        var key = MakeEntryKey(source);
+        var key = ResolveExistingEntryKey(collection, source, MakeEntryKey(source));
         var shared = collection.SharedData.GetEntry(key) ?? collection.SharedData.AddKey(key);
         var hans = GetOrCreateTable(collection, "zh-Hans");
         SetEntry(hans, shared.Id, source);
@@ -2270,7 +2575,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             foreach (var candidate in candidatesBySource.Values.Where(IsSourceResolverCandidate))
             {
                 var normalKey = MakeEntryKey(candidate.source);
-                var key = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
+                var generatedKey = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
+                var key = ResolveExistingEntryKey(collection, candidate.source, generatedKey);
                 preview.Add(new DynamicPreviewItem
                 {
                     target = behaviour,
@@ -2288,7 +2594,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             foreach (var target in FindTextTargetsForCandidate(behaviour, candidate))
             {
                 var normalKey = MakeEntryKey(candidate.source);
-                var key = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
+                var generatedKey = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
+                var key = ResolveExistingEntryKey(collection, candidate.source, generatedKey);
                 preview.Add(new DynamicPreviewItem
                 {
                     target = target,
@@ -2637,7 +2944,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     private static string EnsureDynamicStringEntry(StringTableCollection collection, DynamicSourceCandidate candidate)
     {
         var normalKey = MakeEntryKey(candidate.source);
-        var key = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
+        var generatedKey = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
+        var key = ResolveExistingEntryKey(collection, candidate.hans ?? candidate.source, generatedKey);
         var shared = collection.SharedData.GetEntry(key) ?? collection.SharedData.AddKey(key);
         var hans = GetOrCreateTable(collection, "zh-Hans");
         SetEntry(hans, shared.Id, candidate.hans ?? candidate.source);
@@ -2708,7 +3016,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             try
             {
                 traditional = await TranslateTemplateAsync(source, "zh-TW", forceTraditional);
-                if (TokenSignature(source) != TokenSignature(traditional))
+                if (TokenSignature(source) != TokenSignature(traditional) ||
+                    HasMissingRequiredWhitespace(source, traditional))
                     throw new InvalidDataException("繁中译文的富文本标签、占位符或保留符号不一致");
                 SetEntry(traditionalTable, shared.Id, traditional);
                 EditorUtility.SetDirty(traditionalTable);
@@ -2720,7 +3029,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             try
             {
                 english = await TranslateTemplateAsync(source, "en", forceEnglish);
-                if (TokenSignature(source) != TokenSignature(english))
+                if (TokenSignature(source) != TokenSignature(english) ||
+                    HasMissingRequiredWhitespace(source, english))
                     throw new InvalidDataException("英文译文的富文本标签、占位符或保留符号不一致");
                 if (NeedsEnglishTranslation(source, english))
                     throw new InvalidDataException("翻译服务返回的英文仍与中文原文相同");
@@ -2876,18 +3186,24 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         // 中文 UI 常用空格拉开字距，例如“设     置”。这些是排版信息，不是词语边界。
         // 翻译时合并为“设置”，避免服务把每个汉字当成独立单词。
         var translationInput = NormalizeTranslationInput(text);
-        if (TryGetExactUiTranslation(translationInput, targetLocale, out var exactTranslation))
-            return exactTranslation;
+        var boundaryMatch = BoundaryWhitespaceRegex.Match(translationInput);
+        var leadingWhitespace = boundaryMatch.Groups["leading"].Value;
+        var translationContent = boundaryMatch.Groups["content"].Value;
+        var trailingWhitespace = boundaryMatch.Groups["trailing"].Value;
+        if (string.IsNullOrEmpty(translationContent)) return translationInput;
+        if (TryGetExactUiTranslation(translationContent, targetLocale, out var exactTranslation))
+            return leadingWhitespace + exactTranslation + trailingWhitespace;
 
-        var cacheKey = targetLocale + "\n" + translationInput;
+        var cacheKey = targetLocale + "\n" + translationContent;
         Task<string> translationTask;
         lock (TranslationCache)
         {
             if (forceRetranslate) TranslationCache.Remove(cacheKey);
-            if (TranslationCache.TryGetValue(cacheKey, out var cached)) return cached;
+            if (TranslationCache.TryGetValue(cacheKey, out var cached))
+                return leadingWhitespace + cached + trailingWhitespace;
             if (!TranslationInFlight.TryGetValue(cacheKey, out translationTask))
             {
-                translationTask = TranslatePlainTextUncachedAsync(translationInput, targetLocale);
+                translationTask = TranslatePlainTextUncachedAsync(translationContent, targetLocale);
                 TranslationInFlight[cacheKey] = translationTask;
             }
         }
@@ -2900,7 +3216,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
                 if (TranslationInFlight.TryGetValue(cacheKey, out var current) && current == translationTask)
                     TranslationInFlight.Remove(cacheKey);
             }
-            return translatedText;
+            return leadingWhitespace + translatedText + trailingWhitespace;
         }
         catch
         {
@@ -2920,6 +3236,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     {
         if (string.IsNullOrWhiteSpace(translation)) return true;
         if (TokenSignature(source) != TokenSignature(translation)) return true;
+        if (HasMissingRequiredWhitespace(source, translation)) return true;
         return HasTranslatableChineseContent(source) && TranslationEqualsSource(source, translation);
     }
 
@@ -2927,6 +3244,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     {
         if (string.IsNullOrWhiteSpace(translation)) return true;
         if (TokenSignature(source) != TokenSignature(translation)) return true;
+        if (HasMissingRequiredWhitespace(source, translation)) return true;
         // Simplified and Traditional Chinese can legitimately be identical. Treat equality as
         // missing only while English is also missing/untranslated; this catches the common case
         // where all three table values were copied from the source without repeatedly replacing
@@ -2944,6 +3262,44 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     {
         return string.Equals(NormalizeTranslationInput(source).Trim(),
             NormalizeTranslationInput(translation).Trim(), StringComparison.Ordinal);
+    }
+
+    private static bool HasMissingRequiredWhitespace(string source, string translation)
+    {
+        source = NormalizeTranslationInput(source ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+        translation = (translation ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+        if (source.Count(character => character == '\n') != translation.Count(character => character == '\n'))
+            return true;
+
+        var sourceTokens = ProtectedTokenRegex.Matches(source).Cast<Match>().ToArray();
+        var translatedTokens = ProtectedTokenRegex.Matches(translation).Cast<Match>().ToArray();
+        if (sourceTokens.Length != translatedTokens.Length)
+            return true;
+
+        for (var index = 0; index < sourceTokens.Length; index++)
+        {
+            var requiredBefore = ReadAdjacentWhitespace(source, sourceTokens[index].Index, -1);
+            var requiredAfter = ReadAdjacentWhitespace(source, sourceTokens[index].Index + sourceTokens[index].Length, 1);
+            var actualBefore = ReadAdjacentWhitespace(translation, translatedTokens[index].Index, -1);
+            var actualAfter = ReadAdjacentWhitespace(translation, translatedTokens[index].Index + translatedTokens[index].Length, 1);
+            if (!string.IsNullOrEmpty(requiredBefore) && requiredBefore != actualBefore) return true;
+            if (!string.IsNullOrEmpty(requiredAfter) && requiredAfter != actualAfter) return true;
+        }
+
+        return false;
+    }
+
+    private static string ReadAdjacentWhitespace(string value, int position, int direction)
+    {
+        var result = new StringBuilder();
+        for (var index = position + (direction < 0 ? -1 : 0);
+             index >= 0 && index < value.Length && char.IsWhiteSpace(value[index]);
+             index += direction)
+        {
+            if (direction < 0) result.Insert(0, value[index]);
+            else result.Append(value[index]);
+        }
+        return result.ToString();
     }
 
     private static bool TryGetExactUiTranslation(string text, string targetLocale, out string translation)
@@ -3347,6 +3703,9 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         var source = TokenSignature(record.sourceText);
         if (source != TokenSignature(record.traditional) || source != TokenSignature(record.english))
             throw new InvalidDataException($"富文本、占位符或保留符号不一致：{record.entryKey}");
+        if (HasMissingRequiredWhitespace(record.sourceText, record.traditional) ||
+            HasMissingRequiredWhitespace(record.sourceText, record.english))
+            throw new InvalidDataException($"换行或占位符相邻空白不一致：{record.entryKey}");
     }
 
     private static string TokenSignature(string value) => string.Join("|", ProtectedTokenRegex.Matches(value ?? string.Empty).Cast<Match>().Select(m => m.Value));
@@ -3436,13 +3795,41 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         return $"{GeneratedPrefix}{slug}.{textHash}";
     }
 
+    private static string ResolveExistingEntryKey(StringTableCollection collection, string sourceText, string fallbackKey)
+    {
+        if (collection == null || string.IsNullOrEmpty(sourceText)) return fallbackKey;
+        var hans = collection.GetTable(new LocaleIdentifier("zh-Hans")) as StringTable;
+        if (hans == null) return fallbackKey;
+
+        // One source string has one canonical key. Prefer an explicit semantic key, then a
+        // dynamic key, and only use auto.* when no more recognizable existing key is present.
+        // This keeps scanners, right-click helpers and dynamic analysis from creating parallel
+        // entries such as ui.setting.title and auto.设置.xxxxxxxxxx for the same source text.
+        return collection.SharedData.Entries
+                   .Where(entry => string.Equals(DecodeTableValue(hans.GetEntry(entry.Id)?.Value), sourceText,
+                       StringComparison.Ordinal))
+                   .Select(entry => entry.Key)
+                   .OrderBy(GetEntryKeyReusePriority)
+                   .ThenBy(key => key, StringComparer.Ordinal)
+                   .FirstOrDefault() ?? fallbackKey;
+    }
+
+    private static int GetEntryKeyReusePriority(string key)
+    {
+        if (string.IsNullOrEmpty(key)) return 3;
+        if (!key.StartsWith(GeneratedPrefix, StringComparison.Ordinal) &&
+            !key.StartsWith("dynamic.", StringComparison.Ordinal)) return 0;
+        return key.StartsWith("dynamic.", StringComparison.Ordinal) ? 1 : 2;
+    }
+
     private void RefreshRecordKeys()
     {
         if (records == null) return;
+        var collection = LocalizationEditorSettings.GetStringTableCollection(collectionName);
         foreach (var record in records)
         {
             if (record == null || string.IsNullOrEmpty(record.sourceText)) continue;
-            record.entryKey = MakeEntryKey(record.sourceText);
+            record.entryKey = ResolveExistingEntryKey(collection, record.sourceText, MakeEntryKey(record.sourceText));
         }
         foreach (var group in records.Where(record => record != null && !string.IsNullOrEmpty(record.entryKey)).GroupBy(record => record.entryKey))
         {
