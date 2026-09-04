@@ -34,10 +34,10 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
 
     private static readonly Regex TemplateTokenRegex = new Regex(@"\{[^{}]+\}", RegexOptions.Compiled);
 
-    public void ApplyLocalizedText(string localizedTemplate)
+    public async void ApplyLocalizedText(string localizedTemplate)
     {
         ResolveTargets();
-        var resolvedTemplate = ApplyTemplateValues(localizedTemplate ?? string.Empty);
+        var resolvedTemplate = await ApplyTemplateValuesAsync(localizedTemplate ?? string.Empty);
         var value = PlatformStringReplace.Replace(resolvedTemplate, HasJoystick());
         expectedDisplay = value;
         if (legacyText != null) legacyText.text = value;
@@ -166,10 +166,18 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
         activeTemplateValues = null;
     }
 
-    private string ApplyTemplateValues(string template)
+    private async System.Threading.Tasks.Task<string> ApplyTemplateValuesAsync(string template)
     {
         if (activeTemplateValues == null || activeTemplateValues.Count == 0) return template;
-        foreach (var pair in activeTemplateValues) template = template.Replace(pair.Key, pair.Value);
+        foreach (var pair in activeTemplateValues)
+        {
+            // A template value may itself be player-facing source text, such as a
+            // LevelDataSO levelName ("关卡 1"). Resolve it independently before
+            // inserting it into the localized outer template. Numeric/user data
+            // simply falls back to its original value.
+            var localizedValue = await LocalizedSourceTextResolver.ResolveAsync(pair.Value);
+            template = template.Replace(pair.Key, localizedValue);
+        }
         return template;
     }
 

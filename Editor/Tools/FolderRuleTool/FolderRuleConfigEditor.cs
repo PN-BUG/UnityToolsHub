@@ -465,10 +465,11 @@ public class FolderRuleConfigEditor : NodinEditor
         if (importer.maxTextureSize != expectedMaxSize)
             issues.Add($"MaxSize: {importer.maxTextureSize} → {expectedMaxSize}");
 
+        if (expectedType == TextureImporterType.Sprite && importer.spriteImportMode != config.textureUiSpriteMode)
+            issues.Add($"SpriteMode: {importer.spriteImportMode} → {config.textureUiSpriteMode}");
+
         if (isUi)
         {
-            if (importer.spriteImportMode != config.textureUiSpriteMode)
-                issues.Add($"SpriteMode: {importer.spriteImportMode} → {config.textureUiSpriteMode}");
             if (importer.mipmapEnabled != config.textureUiMipmapEnabled)
                 issues.Add($"Mipmap: {(importer.mipmapEnabled ? "开" : "关")} → {(config.textureUiMipmapEnabled ? "开" : "关")}");
             if (importer.wrapMode != config.textureUiWrapMode)
@@ -605,9 +606,11 @@ public class FolderRuleConfigEditor : NodinEditor
         int expectedMaxSize = config.GetRecommendedMaxSize(importer);
         if (importer.maxTextureSize != expectedMaxSize) { importer.maxTextureSize = expectedMaxSize; changed = true; }
 
+        if (expectedType == TextureImporterType.Sprite && importer.spriteImportMode != config.textureUiSpriteMode)
+        { importer.spriteImportMode = config.textureUiSpriteMode; changed = true; }
+
         if (isUi)
         {
-            if (importer.spriteImportMode != config.textureUiSpriteMode) { importer.spriteImportMode = config.textureUiSpriteMode; changed = true; }
             if (importer.mipmapEnabled != config.textureUiMipmapEnabled) { importer.mipmapEnabled = config.textureUiMipmapEnabled; changed = true; }
             if (importer.wrapMode != config.textureUiWrapMode) { importer.wrapMode = config.textureUiWrapMode; changed = true; }
         }

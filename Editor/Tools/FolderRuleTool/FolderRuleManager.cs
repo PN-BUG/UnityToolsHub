@@ -879,10 +879,13 @@ public class FolderRuleManager : EditorWindow
         int expectedMaxSize = config.GetRecommendedMaxSize(importer);
         if (importer.maxTextureSize != expectedMaxSize) { importer.maxTextureSize = expectedMaxSize; changed = true; }
 
-        // UI 贴图额外参数
+        // Sprite Mode 对所有目标类型为 Sprite 的贴图生效。
+        if (expectedType == TextureImporterType.Sprite && importer.spriteImportMode != config.textureUiSpriteMode)
+        { importer.spriteImportMode = config.textureUiSpriteMode; changed = true; }
+
+        // 其余 UI 贴图额外参数
         if (isUi)
         {
-            if (importer.spriteImportMode != config.textureUiSpriteMode) { importer.spriteImportMode = config.textureUiSpriteMode; changed = true; }
             if (importer.mipmapEnabled != config.textureUiMipmapEnabled) { importer.mipmapEnabled = config.textureUiMipmapEnabled; changed = true; }
             if (importer.wrapMode != config.textureUiWrapMode) { importer.wrapMode = config.textureUiWrapMode; changed = true; }
         }
@@ -1056,15 +1059,16 @@ public class FolderRuleManager : EditorWindow
             violated = true;
         }
 
-        // UI 贴图额外参数
+        // Sprite Mode 对所有目标类型为 Sprite 的贴图检查。
+        if (expectedType == TextureImporterType.Sprite && importer.spriteImportMode != config.textureUiSpriteMode)
+        {
+            issues.Add($"SpriteMode: {importer.spriteImportMode} → {config.textureUiSpriteMode}");
+            violated = true;
+        }
+
+        // 其余 UI 贴图额外参数
         if (isUi)
         {
-            if (importer.spriteImportMode != config.textureUiSpriteMode)
-            {
-                issues.Add($"SpriteMode: {importer.spriteImportMode} → {config.textureUiSpriteMode}");
-                violated = true;
-            }
-
             if (importer.mipmapEnabled != config.textureUiMipmapEnabled)
             {
                 issues.Add($"Mipmap: {(importer.mipmapEnabled ? "开" : "关")} → {(config.textureUiMipmapEnabled ? "开" : "关")}");
@@ -1393,7 +1397,8 @@ public class FolderRuleManager : EditorWindow
         bool isUi = v.config.IsUiTexture(v.assetPath);
 
         // 纹理类型
-        importer.textureType = isUi ? v.config.textureUiType : v.config.textureType;
+        var expectedType = isUi ? v.config.textureUiType : v.config.textureType;
+        importer.textureType = expectedType;
 
         // 公共参数
         importer.alphaIsTransparency = v.config.textureAlphaIsTransparency;
@@ -1401,10 +1406,13 @@ public class FolderRuleManager : EditorWindow
         importer.textureCompression = v.config.textureCompression;
         importer.maxTextureSize = v.config.GetRecommendedMaxSize(importer);
 
-        // UI 贴图额外参数
+        // Sprite Mode 对所有目标类型为 Sprite 的贴图生效。
+        if (expectedType == TextureImporterType.Sprite)
+            importer.spriteImportMode = v.config.textureUiSpriteMode;
+
+        // 其余 UI 贴图额外参数
         if (isUi)
         {
-            importer.spriteImportMode = v.config.textureUiSpriteMode;
             importer.mipmapEnabled = v.config.textureUiMipmapEnabled;
             importer.wrapMode = v.config.textureUiWrapMode;
         }

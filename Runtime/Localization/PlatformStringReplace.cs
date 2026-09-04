@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 public static class PlatformStringReplace
@@ -58,7 +59,7 @@ public static class PlatformStringReplace
         var dict = GetReplaceDict(hasJoystick);
         foreach (var kv in dict)
         {
-            str = str.Replace(kv.Key, kv.Value);
+            str = ReplaceTokenWithLatinSpacing(str, kv.Key, kv.Value);
         }
         return str;
     }
@@ -71,8 +72,59 @@ public static class PlatformStringReplace
         var dict = GetReplaceDict(hasJoystick);
         foreach (var kv in dict)
         {
-            str = str.Replace(kv.Key, $"<color={color}>{kv.Value}</color>");
+            str = ReplaceTokenWithLatinSpacing(str, kv.Key, $"<color={color}>{kv.Value}</color>");
         }
         return str;
+    }
+
+    /// <summary>
+    /// Keeps platform placeholders readable inside Latin text. For example,
+    /// "press{确认}to continue" becomes "press A to continue". CJK text is
+    /// intentionally left compact: "按{确认}继续" remains "按A继续".
+    /// </summary>
+    private static string ReplaceTokenWithLatinSpacing(string source, string token, string replacement)
+    {
+        if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(token))
+        {
+            return source;
+        }
+
+        var firstIndex = source.IndexOf(token, System.StringComparison.Ordinal);
+        if (firstIndex < 0)
+        {
+            return source;
+        }
+
+        var result = new StringBuilder(source.Length + replacement.Length);
+        var sourceIndex = 0;
+        var matchIndex = firstIndex;
+        while (matchIndex >= 0)
+        {
+            result.Append(source, sourceIndex, matchIndex - sourceIndex);
+
+            var tokenEnd = matchIndex + token.Length;
+            if (matchIndex > 0 && IsLatinWordCharacter(source[matchIndex - 1]))
+            {
+                result.Append(' ');
+            }
+
+            result.Append(replacement);
+
+            if (tokenEnd < source.Length && IsLatinWordCharacter(source[tokenEnd]))
+            {
+                result.Append(' ');
+            }
+
+            sourceIndex = tokenEnd;
+            matchIndex = source.IndexOf(token, sourceIndex, System.StringComparison.Ordinal);
+        }
+
+        result.Append(source, sourceIndex, source.Length - sourceIndex);
+        return result.ToString();
+    }
+
+    private static bool IsLatinWordCharacter(char value)
+    {
+        return value <= 0x7F && (char.IsLetterOrDigit(value) || value == '_');
     }
 }

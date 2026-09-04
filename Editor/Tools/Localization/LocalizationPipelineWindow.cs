@@ -88,6 +88,14 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     }
 
     [Serializable]
+    private sealed class LocalizationReferenceHit
+    {
+        public string assetPath;
+        public int lineNumber;
+        public string preview;
+    }
+
+    [Serializable]
     private sealed class BindingMismatch
     {
         public bool selected = true;
@@ -108,7 +116,12 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     private const string DefaultAssetCollection = "ProjectAssets";
     private const string DefaultAssetDirectory = "Assets/Localization/ProjectAssets";
     private static readonly Regex ChineseRegex = new Regex("[\\u3400-\\u9FFF]", RegexOptions.Compiled);
-    private static readonly Regex ProtectedTokenRegex = new Regex("(<[^>]+>|\\{[^{}]+\\})", RegexOptions.Compiled);
+    // Rich-text tags, runtime placeholders and author-authored paired typography are formatting,
+    // not translatable content. Keep them byte-for-byte instead of allowing a provider to replace
+    // 「」 with ASCII/curly quotes or to remove them entirely.
+    private static readonly Regex ProtectedTokenRegex = new Regex(
+        "(<[^>]+>|\\{[^{}]+\\}|[「」『』《》〈〉【】〔〕〖〗（）“”‘’])",
+        RegexOptions.Compiled);
     // Unity Localization 1.4.5 always creates a SmartFormat cache when a LocalizedString is
     // refreshed. A CJK selector such as {确认} overflows SmartFormat's byte-based parser even
     // when the table entry is not marked Smart. Store business placeholders as escaped literal
@@ -170,6 +183,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     [SerializeField] private bool showScanFolders = true;
     [SerializeField] private List<ScanRecord> records = new List<ScanRecord>();
     [SerializeField] private string filter = string.Empty;
+    [SerializeField] private string referenceQuery = string.Empty;
+    [SerializeField] private List<LocalizationReferenceHit> referenceHits = new List<LocalizationReferenceHit>();
     [SerializeField] private string status = "尚未扫描";
     [SerializeField] private Vector2 scroll;
     [SerializeField] private bool lastScanWasFullProject;
@@ -527,6 +542,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             GUILayout.Space(8);
             DrawConfiguration();
             GUILayout.Space(10);
+            DrawReferenceFinder();
+            GUILayout.Space(10);
             DrawBindingMismatchPreview();
             if (bindingMismatches.Count > 0) GUILayout.Space(10);
             DrawDynamicPreview();
@@ -736,6 +753,99 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             var enabledCount = GetEnabledProviders().Count;
             GUILayout.Label($"当前可用服务：{enabledCount}/6（未填写凭据的服务不会加入调度）", dimStyle);
         }
+    }
+
+    private void DrawReferenceFinder()
+    {
+        DrawSectionTitle("查找本地化引用", new Color32(137, 102, 215, 255));
+        using (new EditorGUILayout.VerticalScope(cardStyle))
+        {
+            GUILayout.Label("输入 String/Asset Table Key，反查 Prefab、场景、ScriptableObject 和脚本中的引用。", dimStyle);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label("Key", dimStyle, GUILayout.Width(28));
+                referenceQuery = EditorGUILayout.TextField(referenceQuery,
+                    GUI.skin.FindStyle("ToolbarSeachTextField") ?? EditorStyles.toolbarSearchField);
+                using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(referenceQuery)))
+                    if (GUILayout.Button("查找并定位", primaryButtonStyle, GUILayout.Width(105), GUILayout.Height(22)))
+                        FindLocalizationReferences();
+                if (GUILayout.Button("清空", flatButtonStyle, GUILayout.Width(48)))
+                {
+                    referenceQuery = string.Empty;
+                    referenceHits.Clear();
+                }
+            }
+
+            foreach (var hit in referenceHits)
+            {
+                using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                {
+                    GUILayout.Label($"{hit.assetPath}:{hit.lineNumber}\n{hit.preview}", dimStyle);
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("定位", flatButtonStyle, GUILayout.Width(52), GUILayout.Height(20)))
+                        LocateAsset(hit.assetPath);
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(referenceQuery) && referenceHits.Count == 0)
+                GUILayout.Label("尚无结果；点击“查找并定位”开始反查。", dimStyle);
+        }
+    }
+
+    private void FindLocalizationReferences()
+    {
+        referenceHits.Clear();
+        var key = referenceQuery.Trim();
+        var escapedKey = EscapeYamlUnicode(key);
+        var keyIds = new HashSet<long>();
+        foreach (var guid in AssetDatabase.FindAssets("t:SharedTableData"))
+        {
+            var shared = AssetDatabase.LoadAssetAtPath<SharedTableData>(AssetDatabase.GUIDToAssetPath(guid));
+            var entry = shared?.GetEntry(key);
+            if (entry != null) keyIds.Add(entry.Id);
+        }
+
+        var tablePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var typeFilter in new[] { "t:SharedTableData", "t:StringTable", "t:AssetTable" })
+            foreach (var guid in AssetDatabase.FindAssets(typeFilter))
+                tablePaths.Add(AssetDatabase.GUIDToAssetPath(guid));
+        var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { ".prefab", ".unity", ".asset", ".controller", ".anim", ".cs" };
+        foreach (var path in AssetDatabase.GetAllAssetPaths())
+        {
+            if (!path.StartsWith("Assets/", StringComparison.Ordinal) || tablePaths.Contains(path) ||
+                !extensions.Contains(Path.GetExtension(path))) continue;
+            string[] lines;
+            try { lines = File.ReadAllLines(path); }
+            catch { continue; }
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                var matchesKey = line.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf(escapedKey, StringComparison.OrdinalIgnoreCase) >= 0;
+                var matchesId = keyIds.Any(id => line.IndexOf(id.ToString(), StringComparison.Ordinal) >= 0);
+                if (!matchesKey && !matchesId) continue;
+                referenceHits.Add(new LocalizationReferenceHit
+                {
+                    assetPath = path,
+                    lineNumber = i + 1,
+                    preview = line.Trim()
+                });
+            }
+        }
+
+        status = referenceHits.Count == 0
+            ? $"未找到 Key 的使用位置：{key}"
+            : $"找到 {referenceHits.Count} 处引用：{key}";
+        if (referenceHits.Count > 0) LocateAsset(referenceHits[0].assetPath);
+        Repaint();
+    }
+
+    private static string EscapeYamlUnicode(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var character in value)
+            builder.Append(character > 127 ? $"\\u{(int)character:X4}" : character.ToString());
+        return builder.ToString();
     }
 
     private void DrawDynamicPreview()
@@ -1338,14 +1448,6 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         var setup = EditorSceneManager.GetSceneManagerSetup();
         try
         {
-            // Code-owned strings do not require an instantiated component to be discoverable.
-            // Include resolver/event sources from every selected script before inspecting its
-            // serialized instances across Prefabs and scenes.
-            var collection = LocalizationEditorSettings.GetStringTableCollection(DefaultCollection);
-            foreach (var script in scripts)
-            foreach (var candidate in ExtractDynamicSourceCandidates(script.text).Where(IsSourceResolverCandidate))
-                AddSourceResolverPreview(candidate, AssetDatabase.GetAssetPath(script), script.name, collection, bySource);
-
             var total = Mathf.Max(1, prefabPaths.Length + scenePaths.Length);
             for (var i = 0; i < prefabPaths.Length; i++)
             {
@@ -2200,32 +2302,12 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             }
         }
 
-        // A source-to-key entry does not need a scene object. This keeps script-asset analysis useful
-        // even when the selected caller is only used by an unopened scene or prefab.
-        foreach (var script in scripts)
-        foreach (var candidate in ExtractDynamicSourceCandidates(script.text).Where(IsSourceResolverCandidate))
-        {
-            var normalKey = MakeEntryKey(candidate.source);
-            var key = "dynamic." + normalKey.Substring(GeneratedPrefix.Length);
-            preview.Add(new DynamicPreviewItem
-            {
-                target = null,
-                sourceResolverOnly = true,
-                candidate = candidate,
-                targetPath = AssetDatabase.GetAssetPath(script),
-                scriptName = script.name,
-                entryKey = key,
-                receiverExists = false,
-                translationExists = HasCompleteTranslation(collection, key)
-            });
-        }
-
         preview = preview.Where(item => item.candidate != null && (item.sourceResolverOnly || item.target != null))
             .GroupBy(item => (item.sourceResolverOnly ? "resolver" : item.target.GetInstanceID().ToString()) + "|" + item.candidate.source)
             .Select(group => group.First()).ToList();
         if (preview.Count == 0)
         {
-            Debug.LogWarning("没有找到可接入的动态文本或 ShowTips 原文");
+            Debug.LogWarning("没有找到可接入的动态文本或原文转换条目");
             return;
         }
 
@@ -2359,22 +2441,6 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             }
         }
 
-        // Event-driven tips keep their existing Chinese arguments. TipsUI resolves these values to
-        // semantic keys at runtime, so analysis only needs to create/translate their table entries.
-        foreach (Match eventMatch in Regex.Matches(source ?? string.Empty,
-                     "EventTrigger\\s*<[^>]+>\\s*\\(\\s*EventType\\s*\\.\\s*ShowTips\\s*,\\s*(?:\\$)?\"((?:\\\\.|[^\"\\\\])*)\"",
-                     RegexOptions.Multiline))
-        {
-            var value = Regex.Unescape(eventMatch.Groups[1].Value);
-            if (ChineseRegex.IsMatch(RemoveProtectedTokens(value)))
-                result[value] = new DynamicSourceCandidate
-                {
-                    source = value,
-                    hans = value,
-                    origin = "ShowTips 事件原文"
-                };
-        }
-
         // Include members only for enums that can be tied to a value assigned through ToString().
         var toStringVariables = Regex.Matches(source ?? string.Empty, @"\.\s*text\s*=\s*([A-Za-z_]\w*)\s*\.\s*ToString\s*\(\s*\)")
             .Cast<Match>().Select(match => match.Groups[1].Value).Distinct().ToList();
@@ -2408,8 +2474,33 @@ public sealed class LocalizationPipelineWindow : EditorWindow
 
     private static bool IsSourceResolverCandidate(DynamicSourceCandidate candidate) =>
         candidate != null && candidate.origin != null &&
-        (candidate.origin.IndexOf("ShowTips 事件原文", StringComparison.Ordinal) >= 0 ||
-         candidate.origin.IndexOf("原文转换器:", StringComparison.Ordinal) >= 0);
+        candidate.origin.IndexOf("原文转换器:", StringComparison.Ordinal) >= 0;
+
+    public static void PreviewExternalSourceTexts(IEnumerable<string> sourceTexts, string origin)
+    {
+        var pipeline = Resources.FindObjectsOfTypeAll<LocalizationPipelineWindow>().FirstOrDefault() ??
+                       GetWindow<LocalizationPipelineWindow>("本地化工具");
+        var collection = LocalizationEditorSettings.GetStringTableCollection(DefaultCollection);
+        var bySource = new Dictionary<string, DynamicPreviewItem>(StringComparer.Ordinal);
+        foreach (var source in sourceTexts ?? Enumerable.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(source) || !ChineseRegex.IsMatch(RemoveProtectedTokens(source))) continue;
+            var candidate = new DynamicSourceCandidate
+            {
+                source = source,
+                hans = source,
+                origin = "原文转换器: " + (string.IsNullOrEmpty(origin) ? "项目扫描器" : origin)
+            };
+            AddSourceResolverPreview(candidate, origin, origin, collection, bySource);
+        }
+        pipeline.dynamicPreviewItems = bySource.Values.OrderBy(item => item.candidate.source).ToList();
+        pipeline.showDynamicPreview = true;
+        var occurrences = pipeline.dynamicPreviewItems.Sum(item => item.occurrenceCount);
+        pipeline.status = $"项目原文扫描完成：{occurrences} 处，去重后 {pipeline.dynamicPreviewItems.Count} 条待确认";
+        pipeline.Show();
+        pipeline.Focus();
+        pipeline.Repaint();
+    }
 
     private static IEnumerable<DynamicSourceCandidate> ExtractInspectorStringCandidates(MonoBehaviour behaviour)
     {
@@ -2618,7 +2709,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             {
                 traditional = await TranslateTemplateAsync(source, "zh-TW", forceTraditional);
                 if (TokenSignature(source) != TokenSignature(traditional))
-                    throw new InvalidDataException("繁中译文的富文本标签或占位符不一致");
+                    throw new InvalidDataException("繁中译文的富文本标签、占位符或保留符号不一致");
                 SetEntry(traditionalTable, shared.Id, traditional);
                 EditorUtility.SetDirty(traditionalTable);
             }
@@ -2630,7 +2721,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             {
                 english = await TranslateTemplateAsync(source, "en", forceEnglish);
                 if (TokenSignature(source) != TokenSignature(english))
-                    throw new InvalidDataException("英文译文的富文本标签或占位符不一致");
+                    throw new InvalidDataException("英文译文的富文本标签、占位符或保留符号不一致");
                 if (NeedsEnglishTranslation(source, english))
                     throw new InvalidDataException("翻译服务返回的英文仍与中文原文相同");
                 SetEntry(englishTable, shared.Id, english);
@@ -2828,12 +2919,14 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     private static bool NeedsEnglishTranslation(string source, string translation)
     {
         if (string.IsNullOrWhiteSpace(translation)) return true;
+        if (TokenSignature(source) != TokenSignature(translation)) return true;
         return HasTranslatableChineseContent(source) && TranslationEqualsSource(source, translation);
     }
 
     private static bool NeedsTraditionalTranslation(string source, string translation, bool englishNeedsTranslation)
     {
         if (string.IsNullOrWhiteSpace(translation)) return true;
+        if (TokenSignature(source) != TokenSignature(translation)) return true;
         // Simplified and Traditional Chinese can legitimately be identical. Treat equality as
         // missing only while English is also missing/untranslated; this catches the common case
         // where all three table values were copied from the source without repeatedly replacing
@@ -2866,6 +2959,22 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             if (targetLocale == "en")
             {
                 translation = "Settings";
+                return true;
+            }
+        }
+
+        // “关卡”在游戏 UI 中表示可游玩的 level，而不是 mission/task。
+        // 固定常用菜单文案，避免翻译记忆保留 Choose Mission 一类旧译文。
+        if (text == "选择关卡")
+        {
+            if (targetLocale == "zh-TW")
+            {
+                translation = "選擇關卡";
+                return true;
+            }
+            if (targetLocale == "en")
+            {
+                translation = "Select Level";
                 return true;
             }
         }
@@ -3237,7 +3346,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     {
         var source = TokenSignature(record.sourceText);
         if (source != TokenSignature(record.traditional) || source != TokenSignature(record.english))
-            throw new InvalidDataException($"富文本或占位符不一致：{record.entryKey}");
+            throw new InvalidDataException($"富文本、占位符或保留符号不一致：{record.entryKey}");
     }
 
     private static string TokenSignature(string value) => string.Join("|", ProtectedTokenRegex.Matches(value ?? string.Empty).Cast<Match>().Select(m => m.Value));

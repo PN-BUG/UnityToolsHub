@@ -188,15 +188,17 @@ public class FolderRulePostprocessor : AssetPostprocessor
             changed = true;
         }
 
-        // UI 贴图额外参数
+        // Sprite Mode 对所有目标类型为 Sprite 的贴图生效，避免非 UI 路径保留旧的 Multiple。
+        if (targetType == TextureImporterType.Sprite &&
+            importer.spriteImportMode != config.textureUiSpriteMode)
+        {
+            importer.spriteImportMode = config.textureUiSpriteMode;
+            changed = true;
+        }
+
+        // 其余 UI 贴图额外参数
         if (isUi)
         {
-            if (importer.spriteImportMode != config.textureUiSpriteMode)
-            {
-                importer.spriteImportMode = config.textureUiSpriteMode;
-                changed = true;
-            }
-
             if (importer.mipmapEnabled != config.textureUiMipmapEnabled)
             {
                 importer.mipmapEnabled = config.textureUiMipmapEnabled;
