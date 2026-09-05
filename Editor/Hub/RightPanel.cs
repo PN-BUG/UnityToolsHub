@@ -20,6 +20,9 @@ public partial class UnityToolsHub
     private static GUIStyle _cachedBtnFlatSmallCenter;
     private static GUIStyle _cachedHintStyle;
     private static GUIStyle _cachedDimLabel;
+    private static GUIStyle _cachedCategoryIconCenter;
+    private static GUIStyle _cachedDashboardButtonLabel;
+    private static GUIStyle _cachedDashboardLinkLabel;
     private static readonly GUIContent _cachedContent = new GUIContent();
 
     private static GUIStyle CachedTooltipStyle
@@ -38,6 +41,28 @@ public partial class UnityToolsHub
             normal = { textColor = Theme.ClrText }
         });
 
+    private static GUIStyle CachedCategoryIconCenter
+        => _cachedCategoryIconCenter ?? (_cachedCategoryIconCenter = new GUIStyle(Styles.CatCardIcon)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 16,
+            normal = { textColor = Color.white }
+        });
+
+    private static GUIStyle CachedDashboardButtonLabel
+        => _cachedDashboardButtonLabel ?? (_cachedDashboardButtonLabel = new GUIStyle(Styles.MiniLabelBoldCenter)
+        {
+            normal = { textColor = Color.white }
+        });
+
+    private static GUIStyle CachedDashboardLinkLabel
+        => _cachedDashboardLinkLabel ?? (_cachedDashboardLinkLabel = new GUIStyle(EditorStyles.miniLabel)
+        {
+            fontSize = 10,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = Theme.ClrTextDim }
+        });
+
     [UnityEditor.InitializeOnLoadMethod]
     private static void RegisterRightPanelCleanup()
     {
@@ -49,6 +74,9 @@ public partial class UnityToolsHub
             _cachedBtnFlatSmallCenter = null;
             _cachedHintStyle = null;
             _cachedDimLabel = null;
+            _cachedCategoryIconCenter = null;
+            _cachedDashboardButtonLabel = null;
+            _cachedDashboardLinkLabel = null;
         };
     }
 
@@ -83,10 +111,12 @@ public partial class UnityToolsHub
                 DrawHiddenManagerPanel();
             else if (_showCreateForm)
                 DrawCreateOrAddToolPanel();
-            else if (_selectedTool == null)
-                DrawWelcomePanel();
-            else
+            else if (_selectedTool != null)
                 DrawToolDetailPanel(_selectedTool);
+            else if (_selectedCategory != null)
+                DrawCategoryPanel(_selectedCategory);
+            else
+                DrawWelcomePanel();
 
             EditorGUILayout.EndScrollView();
         }
@@ -313,114 +343,221 @@ public partial class UnityToolsHub
         var area = new Rect(0, 0, position.width - LeftPanelWidth - SplitterWidth, position.height);
 
         // ── 渐变装饰条（更宽，带光泽过渡）──────────────────
-        var gradRect = new Rect(area.x, area.y, area.width, 5);
-        Drawing.DrawGradientRect(gradRect, new Color(0.345f, 0.569f, 0.910f), new Color(0.400f, 0.529f, 0.729f));
 
         // ── 主内容 ──────────────────────────────────────
-        float centerY = area.height * 0.22f;
+        EditorGUILayout.Space(22);
 
-        // 标题
-        var titleRect = new Rect(area.x + RightPadding, centerY, area.width - RightPadding * 2, 42);
-        GUI.Label(titleRect,
-            "<color=#5891E8>Unity</color><color=#F2F2F9>ToolsHub</color>",
-            Styles.WelcomeTitle);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.BeginVertical();
+        string accentHex = ColorUtility.ToHtmlStringRGB(Theme.ClrAccent);
+        string titleHex = ColorUtility.ToHtmlStringRGB(Theme.ClrTextBright);
+        GUILayout.Label($"<color=#{accentHex}>Unity</color><color=#{titleHex}>ToolsHub</color>", Styles.RightTitle);
+        GUILayout.Space(3);
+        GUILayout.Label("集中搜索、启动和管理项目编辑器工具", Styles.RightSubtitle);
+        EditorGUILayout.EndVertical();
+        GUILayout.FlexibleSpace();
+        DrawDashboardActionButton("＋ 添加工具", () =>
+        {
+            _showCreateForm = true;
+            _selectedCategory = null;
+            _rightScroll = Vector2.zero;
+        }, true);
+        GUILayout.Space(8);
+        DrawDashboardActionButton("设置", () =>
+        {
+            _showHiddenManager = true;
+            _selectedCategory = null;
+            _rightScroll = Vector2.zero;
+        }, false);
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
 
-        // 副标题
-        var subRect = new Rect(area.x + RightPadding, centerY + 48, area.width - RightPadding * 2, 22);
-        GUI.Label(subRect, "游戏开发工具集 · 一站式编辑器扩展管理", Styles.WelcomeSub);
-
-        EditorGUILayout.Space(centerY + 82);
+        EditorGUILayout.Space(22);
 
         // ── 统计卡片 ──────────────────────────────────────
         int totalTools = _totalToolCount;
         int totalCategories = _categories.Count;
 
+        float statsWidth = Mathf.Max(108f, (area.width - RightPadding * 2 - 20f) / 3f);
         EditorGUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-
-        DrawStatCard("工具总数", totalTools.ToString(), Theme.ClrAccent,
-            GUILayout.Width(110), GUILayout.Height(64));
-        GUILayout.Space(20);
-        DrawStatCard("分类数", totalCategories.ToString(), Palette.Success,
-            GUILayout.Width(110), GUILayout.Height(64));
-        GUILayout.Space(20);
-        DrawStatCard("快捷键", "Ctrl+Shift+E", Palette.Warning,
-            GUILayout.Width(150), GUILayout.Height(64));
-
-        GUILayout.FlexibleSpace();
+        GUILayout.Space(RightPadding);
+        DrawStatCard("可用工具", totalTools.ToString(),
+            GUILayout.Width(statsWidth), GUILayout.Height(58));
+        GUILayout.Space(10);
+        DrawStatCard("工具分类", totalCategories.ToString(),
+            GUILayout.Width(statsWidth), GUILayout.Height(58));
+        GUILayout.Space(10);
+        DrawStatCard("呼出面板", "Ctrl+Shift+E",
+            GUILayout.Width(statsWidth), GUILayout.Height(58));
+        GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
 
-        EditorGUILayout.Space(36);
+        EditorGUILayout.Space(18);
 
         // ── 提示 ──────────────────────────────────────────
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        GUILayout.Label("← 从左侧选择一个工具开始使用", Styles.WelcomeSub);
-        GUILayout.FlexibleSpace();
-        EditorGUILayout.EndHorizontal();
-
         // ── 仓库链接 ──────────────────────────────────────
-        EditorGUILayout.Space(12);
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        var repoStyle = new GUIStyle(EditorStyles.miniLabel)
-        {
-            richText = true,
-            fontSize = 11,
-            normal = { textColor = Theme.ClrTextDim },
-            hover = { textColor = Theme.ClrAccent }
-        };
-        var repoRect = GUILayoutUtility.GetRect(new GUIContent("📦 GitHub 仓库"), repoStyle);
-        bool repoHover = repoRect.Contains(Event.current.mousePosition);
-        if (repoHover)
-        {
-            repoStyle.normal.textColor = Theme.ClrAccent;
-            EditorGUI.DrawRect(new Rect(repoRect.x, repoRect.yMax - 1, repoRect.width, 1), Theme.ClrAccent);
-        }
-        GUI.Label(repoRect, "📦 GitHub 仓库", repoStyle);
-        if (repoHover && Event.current.type == EventType.MouseDown && Event.current.button == 0)
-        {
-            Application.OpenURL("https://github.com/PN-BUG/UnityToolsHub");
-            Event.current.Use();
-        }
-        GUILayout.FlexibleSpace();
-        EditorGUILayout.EndHorizontal();
 
         // ── 分类概览 ──────────────────────────────────────
-        EditorGUILayout.Space(28);
+        var recentTools = GetDashboardTools(true, 4);
+        var mostUsedTools = GetDashboardTools(false, 4);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        float quickColumnWidth = Mathf.Max(180f, (area.width - RightPadding * 2 - 12f) * 0.5f);
+        DrawDashboardToolSection("最近使用", "按最后打开时间", recentTools,
+            GUILayout.Width(quickColumnWidth));
+        GUILayout.Space(12);
+        DrawDashboardToolSection("常用工具", "按累计使用次数", mostUsedTools,
+            GUILayout.Width(quickColumnWidth));
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(18);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        GUILayout.Label("浏览分类", Styles.SectionHeader);
+        GUILayout.FlexibleSpace();
+        GUILayout.Label("点击分类查看全部工具", Styles.RightSubtitle);
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(8);
         DrawCategoryOverview();
+        EditorGUILayout.Space(20);
     }
 
-    private void DrawStatCard(string label, string value, Color accent, params GUILayoutOption[] options)
+    private void DrawDashboardActionButton(string label, Action onClick, bool primary)
+    {
+        var content = new GUIContent(label);
+        float width = Mathf.Max(68f, Styles.BtnPrimary.CalcSize(content).x + 18f);
+        var rect = GUILayoutUtility.GetRect(width, 30f, GUILayout.Width(width), GUILayout.Height(30f));
+        bool hover = rect.Contains(Event.current.mousePosition);
+        Color color = primary
+            ? (hover ? Theme.ClrBtnHover : Theme.ClrBtnNormal)
+            : (hover ? Theme.ClrItemHover : Theme.ClrCardBg);
+        Drawing.DrawRoundedRect(rect, color, 5f);
+        if (!primary) DrawBorderRect(rect, Theme.ClrDivider);
+        GUI.Label(rect, content, CachedDashboardButtonLabel);
+        if (GUI.Button(rect, GUIContent.none, GUIStyle.none)) onClick?.Invoke();
+    }
+
+    private List<ToolEntry> GetDashboardTools(bool recent, int count)
+    {
+        var available = _categories
+            .Where(category => !_hiddenItems.IsCategoryHidden(category.name))
+            .SelectMany(category => category.tools)
+            .Where(tool => tool != null && !string.IsNullOrEmpty(tool.typeName) &&
+                           !_hiddenItems.IsToolHidden(tool.typeName) &&
+                           _usageStats.GetToolCount(tool.typeName) > 0)
+            .GroupBy(tool => tool.typeName)
+            .Select(group => group.First());
+
+        return (recent
+                ? available.OrderByDescending(tool => _usageStats.GetToolLastUsed(tool.typeName))
+                : available.OrderByDescending(tool => _usageStats.GetToolCount(tool.typeName))
+                    .ThenByDescending(tool => _usageStats.GetToolLastUsed(tool.typeName)))
+            .Take(count)
+            .ToList();
+    }
+
+    private void DrawDashboardToolSection(
+        string title, string subtitle, List<ToolEntry> tools, params GUILayoutOption[] options)
+    {
+        var groupRect = EditorGUILayout.BeginVertical(options);
+        Drawing.DrawRoundedRect(groupRect,
+            new Color(Theme.ClrCardBg.r, Theme.ClrCardBg.g, Theme.ClrCardBg.b, 0.72f), 7f);
+
+        GUILayout.Space(10);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(12);
+        EditorGUILayout.BeginVertical();
+        GUILayout.Label(title, Styles.SectionHeader);
+        GUILayout.Label(subtitle, Styles.RightSubtitle);
+        EditorGUILayout.EndVertical();
+        GUILayout.FlexibleSpace();
+        GUILayout.Space(8);
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(7);
+
+        if (tools.Count == 0)
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(12);
+            GUILayout.Label("打开过的工具会出现在这里", Styles.EmptyHint, GUILayout.Height(38));
+            GUILayout.Space(8);
+            EditorGUILayout.EndHorizontal();
+        }
+        else
+        {
+            foreach (var tool in tools)
+                DrawDashboardToolRow(tool);
+        }
+
+        GUILayout.Space(8);
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawDashboardToolRow(ToolEntry tool)
+    {
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(7);
+        var rect = GUILayoutUtility.GetRect(0, 42f, GUILayout.ExpandWidth(true));
+        GUILayout.Space(7);
+        EditorGUILayout.EndHorizontal();
+
+        bool hover = rect.Contains(Event.current.mousePosition);
+        if (hover) EditorGUI.DrawRect(rect, Theme.ClrHover);
+
+        GUI.Label(new Rect(rect.x + 12, rect.y + 4, rect.width - 74, 19), tool.name, Styles.CatCardName);
+        string meta = $"{tool.category}  ·  {_usageStats.GetToolCount(tool.typeName)} 次";
+        GUI.Label(new Rect(rect.x + 12, rect.y + 22, rect.width - 74, 16), meta, Styles.CatCardCount);
+
+        var openRect = new Rect(rect.xMax - 52, rect.y + 8, 44, 26);
+        bool openHover = openRect.Contains(Event.current.mousePosition);
+        if (openHover) Drawing.DrawRoundedRect(openRect, Theme.ClrHover, 4f);
+        CachedDashboardLinkLabel.normal.textColor = openHover ? Theme.ClrTextBright : Theme.ClrTextDim;
+        GUI.Label(openRect, "打开  ›", CachedDashboardLinkLabel);
+        if (GUI.Button(openRect, GUIContent.none, GUIStyle.none))
+        {
+            RecordToolUsage(tool);
+            OpenToolWindow(tool.typeName);
+            return;
+        }
+
+        if (hover && Event.current.type == EventType.MouseDown && Event.current.button == 0)
+        {
+            _selectedTool = tool;
+            _selectedCategory = _categories.FirstOrDefault(category => category.tools.Contains(tool));
+            _rightScroll = Vector2.zero;
+            Event.current.Use();
+        }
+    }
+
+    private void DrawStatCard(string label, string value, params GUILayoutOption[] options)
     {
         var rect = GUILayoutUtility.GetRect(0, 64, options);
         // 圆角背景
         Drawing.DrawRoundedRect(rect, Theme.ClrCardBg, 8f);
-        // 顶部色条
-        var barRect = new Rect(rect.x + 10, rect.y + 3, rect.width - 20, 3);
-        EditorGUI.DrawRect(barRect, accent);
-
         // 数值 — 长文本用更小字号
         bool isLongText = value.Length > 5;
         Styles.StatNum.fontSize = isLongText ? 15 : 22;
-        Styles.StatNum.normal.textColor = accent;
-        var numRect = new Rect(rect.x + 4, rect.y + 12, rect.width - 8, 30);
+        Styles.StatNum.normal.textColor = Theme.ClrTextBright;
+        var numRect = new Rect(rect.x + 4, rect.y + 7, rect.width - 8, 28);
         GUI.Label(numRect, value, Styles.StatNum);
         // 恢复字号
         Styles.StatNum.fontSize = 22;
         // 标签
-        var lblRect = new Rect(rect.x, rect.y + 42, rect.width, 16);
+        var lblRect = new Rect(rect.x, rect.y + 34, rect.width, 16);
         GUI.Label(lblRect, label, Styles.StatLabel);
     }
 
     private void DrawCategoryOverview()
     {
         var areaWidth = position.width - LeftPanelWidth - SplitterWidth - RightPadding * 2;
-        float cardW = Mathf.Min(170, (areaWidth - 12 * 3) / 4);
-        float cardH = 52;
-        float spacing = 12;
+        float cardH = 48;
+        float spacing = 10;
 
-        int cols = Mathf.Max(1, Mathf.FloorToInt((areaWidth + spacing) / (cardW + spacing)));
+        int cols = Mathf.Clamp(Mathf.FloorToInt((areaWidth + spacing) / 210f), 1, 3);
+        float cardW = (areaWidth - spacing * (cols - 1)) / cols;
         int col = 0;
 
         EditorGUILayout.BeginHorizontal();
@@ -428,6 +565,8 @@ public partial class UnityToolsHub
 
         foreach (var cat in _categories)
         {
+            if (_hiddenItems.IsCategoryHidden(cat.name)) continue;
+
             if (col >= cols)
             {
                 col = 0;
@@ -441,24 +580,18 @@ public partial class UnityToolsHub
             bool hover = rect.Contains(Event.current.mousePosition);
 
             // 圆角背景
-            Drawing.DrawRoundedRect(rect, hover ? Palette.ItemHover : Theme.ClrCardBg, 6f);
-
-            // 左侧色条
-            var barRect = new Rect(rect.x + 6, rect.y + 8, 3, rect.height - 16);
-            EditorGUI.DrawRect(barRect, cat.accent);
-
-            // 图标
-            var iconRect = new Rect(rect.x + 14, rect.y + 7, 20, 22);
-            Styles.CatCardIcon.normal.textColor = cat.accent;
-            GUI.Label(iconRect, cat.icon, Styles.CatCardIcon);
+            Drawing.DrawRoundedRect(rect, hover ? Theme.ClrItemHover : Theme.ClrCardBg, 6f);
 
             // 名称
-            var nameRect = new Rect(rect.x + 34, rect.y + 7, rect.width - 40, 18);
+            var nameRect = new Rect(rect.x + 14, rect.y + 7, rect.width - 42, 18);
             GUI.Label(nameRect, cat.name, Styles.CatCardName);
 
             // 数量
-            var countRect = new Rect(rect.x + 34, rect.y + 27, rect.width - 40, 14);
-            GUI.Label(countRect, $"{cat.tools.Count} 个工具", Styles.CatCardCount);
+            var countRect = new Rect(rect.x + 14, rect.y + 26, rect.width - 42, 14);
+            int visibleCount = cat.tools.Count(tool => !_hiddenItems.IsToolHidden(tool.typeName));
+            GUI.Label(countRect, $"{visibleCount} 个工具", Styles.CatCardCount);
+            CachedDashboardLinkLabel.normal.textColor = hover ? Theme.ClrText : Theme.ClrTextDim;
+            GUI.Label(new Rect(rect.xMax - 25, rect.y + 13, 14, 20), "›", CachedDashboardLinkLabel);
 
             // 点击选中分类
             if (hover && Event.current.type == EventType.MouseDown && Event.current.button == 0)
@@ -469,6 +602,7 @@ public partial class UnityToolsHub
                 _showAddToolPanel = false;
                 _showThirdPartyManager = false;
                 _showHiddenManager = false;
+                _rightScroll = Vector2.zero;
                 Event.current.Use();
             }
 
@@ -484,17 +618,145 @@ public partial class UnityToolsHub
 
         EditorGUILayout.EndHorizontal();
     }
+
+    private void DrawCategoryPanel(CategoryNode category)
+    {
+        if (category == null)
+        {
+            _selectedCategory = null;
+            return;
+        }
+
+        float areaWidth = position.width - LeftPanelWidth - SplitterWidth;
+        Color accent = category.accent;
+        Drawing.DrawGradientRect(new Rect(0, 0, areaWidth, 4), accent,
+            new Color(Mathf.Min(1f, accent.r + 0.14f), Mathf.Min(1f, accent.g + 0.14f),
+                Mathf.Min(1f, accent.b + 0.14f), 1f));
+
+        EditorGUILayout.Space(18);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        if (GUILayout.Button("← 总览", Styles.BackButton, GUILayout.Width(52)))
+        {
+            _selectedCategory = null;
+            _rightScroll = Vector2.zero;
+            EditorGUILayout.EndHorizontal();
+            return;
+        }
+        GUILayout.Space(10);
+
+        var iconRect = GUILayoutUtility.GetRect(30, 30, GUILayout.Width(30));
+        Drawing.DrawRoundedRect(iconRect,
+            new Color(accent.r, accent.g, accent.b, 0.18f), 5f);
+        var previousGuiColor = GUI.color;
+        GUI.color = accent;
+        GUI.Label(iconRect, category.icon, CachedCategoryIconCenter);
+        GUI.color = previousGuiColor;
+
+        GUILayout.Space(8);
+        EditorGUILayout.BeginVertical();
+        GUILayout.Label(category.name, Styles.RightTitle);
+        int visibleCount = category.tools.Count(tool => !_hiddenItems.IsToolHidden(tool.typeName));
+        GUILayout.Label($"{visibleCount} 个可用工具 · 点击查看详情，也可直接打开", Styles.RightSubtitle);
+        EditorGUILayout.EndVertical();
+        GUILayout.FlexibleSpace();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.Space(18);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        GUILayout.Label("分类工具", Styles.SectionHeader);
+        GUILayout.FlexibleSpace();
+        GUILayout.Label("右键左侧列表可管理分类", Styles.RightSubtitle);
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(6);
+
+        var visibleTools = category.tools
+            .Where(tool => !_hiddenItems.IsToolHidden(tool.typeName))
+            .ToList();
+        if (visibleTools.Count == 0)
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(RightPadding);
+            EditorGUILayout.HelpBox("这个分类当前没有可显示的工具。", MessageType.Info);
+            GUILayout.Space(RightPadding);
+            EditorGUILayout.EndHorizontal();
+        }
+        else
+        {
+            foreach (var tool in visibleTools)
+                DrawCategoryToolRow(category, tool);
+        }
+
+        EditorGUILayout.Space(20);
+    }
+
+    private void DrawCategoryToolRow(CategoryNode category, ToolEntry tool)
+    {
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        var rect = GUILayoutUtility.GetRect(0, 62f, GUILayout.ExpandWidth(true));
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+
+        bool hover = rect.Contains(Event.current.mousePosition);
+        Drawing.DrawRoundedRect(rect, hover ? Theme.ClrItemHover : Theme.ClrCardBg, 6f);
+        EditorGUI.DrawRect(new Rect(rect.x, rect.y, 3f, rect.height), category.accent);
+
+        string icon = string.IsNullOrEmpty(tool.icon) ? category.icon : tool.icon;
+        var iconRect = new Rect(rect.x + 12, rect.y + 14, 32, 32);
+        Drawing.DrawRoundedRect(iconRect,
+            new Color(category.accent.r, category.accent.g, category.accent.b, 0.15f), 4f);
+        var previousGuiColor = GUI.color;
+        GUI.color = category.accent;
+        GUI.Label(iconRect, icon, CachedCategoryIconCenter);
+        GUI.color = previousGuiColor;
+
+        GUI.Label(new Rect(rect.x + 54, rect.y + 8, rect.width - 126, 20), tool.name, Styles.CatCardName);
+        string description = string.IsNullOrWhiteSpace(tool.description) ? "暂无功能说明" : tool.description;
+        GUI.Label(new Rect(rect.x + 54, rect.y + 29, rect.width - 126, 17), description, Styles.CatCardCount);
+
+        var shortcut = GetEffectiveShortcut(tool.typeName);
+        string usageText = _usageStats.GetToolCount(tool.typeName) > 0
+            ? $"已使用 {_usageStats.GetToolCount(tool.typeName)} 次"
+            : "尚未使用";
+        GUI.Label(new Rect(rect.x + 54, rect.y + 45, rect.width - 126, 13),
+            shortcut.IsValid ? $"{usageText}  ·  {shortcut}" : usageText, Styles.CatCardCount);
+
+        var openRect = new Rect(rect.xMax - 60, rect.y + 17, 48, 28);
+        bool openHover = openRect.Contains(Event.current.mousePosition);
+        Drawing.DrawRoundedRect(openRect, openHover ? Theme.ClrBtnHover : Theme.ClrBtnNormal, 4f);
+        GUI.Label(openRect, "打开", CachedDashboardButtonLabel);
+        if (GUI.Button(openRect, GUIContent.none, GUIStyle.none))
+        {
+            RecordToolUsage(tool);
+            OpenToolWindow(tool.typeName);
+            return;
+        }
+
+        if (hover && Event.current.type == EventType.MouseDown && Event.current.button == 0)
+        {
+            _selectedTool = tool;
+            _selectedCategory = category;
+            _rightScroll = Vector2.zero;
+            Event.current.Use();
+        }
+
+        EditorGUILayout.Space(7);
+    }
     #endregion
 
     #region 隐藏项管理面板
     private void DrawHiddenManagerPanel()
     {
         var area = new Rect(0, 0, position.width - LeftPanelWidth - SplitterWidth, position.height);
-        Color accent = new Color(0.85f, 0.55f, 0.40f, 1f);
+        Color accent = Theme.ClrAccent;
 
         // ── 渐变装饰条 ──────────────────────────────────
         Drawing.DrawGradientRect(new Rect(0, 0, area.width, 4), accent,
-            new Color(0.95f, 0.65f, 0.50f, 1f));
+            Color.Lerp(accent, Color.white, 0.16f));
 
         EditorGUILayout.Space(16);
 
@@ -520,11 +782,15 @@ public partial class UnityToolsHub
         EditorGUILayout.Space(4);
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
-        GUILayout.Label("配置快捷列表、Unity 菜单入口、隐藏项与使用数据", Styles.RightSubtitle);
+        GUILayout.Label("调整主题、快捷列表、Unity 菜单入口与隐藏项", Styles.RightSubtitle);
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.Space(16);
+
+        DrawThemeSettings();
+
+        EditorGUILayout.Space(18);
 
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
@@ -683,12 +949,86 @@ public partial class UnityToolsHub
             "• “隐藏内置工具”只影响 Hub 列表显示，不会禁用或卸载工具。\n" +
             "• “隐藏第三方工具”不会改变第三方管理页中的启用状态。\n" +
             "• 在左侧列表的分类标题或工具项上右键，可快速隐藏/取消隐藏。\n" +
-            "• 隐藏的项不会显示在左侧列表中（搜索时仍可见）。\n" +
+            "• 隐藏的项不会显示在左侧列表或搜索结果中。\n" +
             "• 工具和分类按使用频率排序，使用越多越靠前。",
             MessageType.Info);
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.Space(8);
+    }
+
+    private void DrawThemeSettings()
+    {
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        var themeRect = EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        Drawing.DrawRoundedRect(themeRect, Theme.ClrCardBg, 7f);
+
+        GUILayout.Space(12);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(14);
+        EditorGUILayout.BeginVertical();
+
+        GUILayout.Label("外观与对比度", Styles.SectionHeader);
+        GUILayout.Space(4);
+
+        int currentPreset = Mathf.Clamp(_hubSettings.themePreset, 0, 3);
+        int nextPreset = EditorGUILayout.Popup("主题预设", currentPreset,
+            new[] { "默认深色", "高对比度", "柔和暖灰", "自定义" });
+        if (nextPreset != currentPreset)
+            ApplyThemePreset((HubThemePreset)nextPreset);
+
+        GUILayout.Space(8);
+        EditorGUI.BeginChangeCheck();
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        _hubSettings.themeBackground = EditorGUILayout.ColorField("窗口背景", _hubSettings.themeBackground);
+        _hubSettings.themeSidebar = EditorGUILayout.ColorField("左侧栏", _hubSettings.themeSidebar);
+        _hubSettings.themePanel = EditorGUILayout.ColorField("内容面板", _hubSettings.themePanel);
+        _hubSettings.themeCard = EditorGUILayout.ColorField("卡片背景", _hubSettings.themeCard);
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(18);
+        EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+        _hubSettings.themeAccent = EditorGUILayout.ColorField("强调色", _hubSettings.themeAccent);
+        _hubSettings.themeText = EditorGUILayout.ColorField("主文字", _hubSettings.themeText);
+        _hubSettings.themeMutedText = EditorGUILayout.ColorField("次要文字", _hubSettings.themeMutedText);
+        EditorGUILayout.EndVertical();
+        EditorGUILayout.EndHorizontal();
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            _hubSettings.themeBackground = Opaque(_hubSettings.themeBackground);
+            _hubSettings.themeSidebar = Opaque(_hubSettings.themeSidebar);
+            _hubSettings.themePanel = Opaque(_hubSettings.themePanel);
+            _hubSettings.themeCard = Opaque(_hubSettings.themeCard);
+            _hubSettings.themeAccent = Opaque(_hubSettings.themeAccent);
+            _hubSettings.themeText = Opaque(_hubSettings.themeText);
+            _hubSettings.themeMutedText = Opaque(_hubSettings.themeMutedText);
+            _hubSettings.themePreset = (int)HubThemePreset.Custom;
+            _hubSettings.themeInitialized = true;
+            ApplyCurrentTheme();
+            _themeStylesDirty = true;
+            SaveHubSettings();
+            Repaint();
+        }
+
+        GUILayout.Space(8);
+        float mainContrast = ThemeContrastRatio(_hubSettings.themeText, _hubSettings.themePanel);
+        float mutedContrast = ThemeContrastRatio(_hubSettings.themeMutedText, _hubSettings.themePanel);
+        string contrastText = $"文字对比度  主文字 {mainContrast:0.0}:1  ·  次要文字 {mutedContrast:0.0}:1";
+        if (mainContrast < 4.5f || mutedContrast < 3f)
+            EditorGUILayout.HelpBox(contrastText + "\n对比度偏低，建议提亮文字或压暗内容面板。", MessageType.Warning);
+        else
+            EditorGUILayout.HelpBox(contrastText, MessageType.Info);
+
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(14);
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(12);
+
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
     }
 
     /// <summary>绘制隐藏项行（名称 + 描述 + 恢复按钮）</summary>
@@ -881,7 +1221,7 @@ public partial class UnityToolsHub
         var cancelW = Mathf.Max(cancelSize.x + 24, 100);
         var cancelRect = GUILayoutUtility.GetRect(cancelW, 36, GUILayout.Width(cancelW), GUILayout.Height(36));
         bool cancelHover = cancelRect.Contains(Event.current.mousePosition);
-        Drawing.DrawRoundedRect(cancelRect, cancelHover ? Palette.ItemHover : Theme.ClrCardBg, 6f);
+        Drawing.DrawRoundedRect(cancelRect, cancelHover ? Theme.ClrItemHover : Theme.ClrCardBg, 6f);
         if (GUI.Button(cancelRect, cancelContent, Styles.BtnPrimary))
         {
             _showCreateForm = false;
@@ -2018,7 +2358,7 @@ public partial class UnityToolsHub
         var cancelW = Mathf.Max(cancelSize.x + 24, 100);
         var cancelRect = GUILayoutUtility.GetRect(cancelW, 36, GUILayout.Width(cancelW), GUILayout.Height(36));
         bool cancelHover = cancelRect.Contains(Event.current.mousePosition);
-        Drawing.DrawRoundedRect(cancelRect, cancelHover ? Palette.ItemHover : Theme.ClrCardBg, 6f);
+        Drawing.DrawRoundedRect(cancelRect, cancelHover ? Theme.ClrItemHover : Theme.ClrCardBg, 6f);
         if (GUI.Button(cancelRect, cancelContent, Styles.BtnPrimary))
         {
             _addToolSelectedIndex = -1;
@@ -2454,7 +2794,7 @@ public partial class UnityToolsHub
             var cancelW = Mathf.Max(cancelSize.x + 20, 80);
             var cancelRect = GUILayoutUtility.GetRect(cancelW, 28, GUILayout.Width(cancelW), GUILayout.Height(28));
             bool cancelHover = cancelRect.Contains(Event.current.mousePosition);
-            Drawing.DrawRoundedRect(cancelRect, cancelHover ? Palette.ItemHover : Theme.ClrCardBg, 4f);
+            Drawing.DrawRoundedRect(cancelRect, cancelHover ? Theme.ClrItemHover : Theme.ClrCardBg, 4f);
             if (GUI.Button(cancelRect, cancelContent, Styles.BtnPrimary))
             {
                 _showImportForm = false;
@@ -2729,7 +3069,7 @@ public partial class UnityToolsHub
         var uninstallW = Mathf.Max(uninstallSize.x + 24, 120);
         var uninstallRect = GUILayoutUtility.GetRect(uninstallW, 36, GUILayout.Width(uninstallW), GUILayout.Height(36));
         bool uninstallHover = uninstallRect.Contains(Event.current.mousePosition);
-        Drawing.DrawRoundedRect(uninstallRect, uninstallHover ? Palette.ItemHover : Theme.ClrCardBg, 6f);
+        Drawing.DrawRoundedRect(uninstallRect, uninstallHover ? Theme.ClrItemHover : Theme.ClrCardBg, 6f);
         if (GUI.Button(uninstallRect, uninstallContent, new GUIStyle(Styles.BtnPrimary)
         {
             normal = { textColor = Theme.ClrTextBright }

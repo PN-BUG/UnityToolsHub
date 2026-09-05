@@ -150,6 +150,17 @@ public partial class UnityToolsHub
         public int mostUsedToolsCount = 5;
         public List<string> unityMenuTools = new List<string>();
 
+        // 主题配置。themeInitialized 用于兼容没有这些字段的旧 EditorPrefs 数据。
+        public bool themeInitialized;
+        public int themePreset;
+        public Color themeBackground;
+        public Color themeSidebar;
+        public Color themePanel;
+        public Color themeCard;
+        public Color themeAccent;
+        public Color themeText;
+        public Color themeMutedText;
+
         public bool IsInUnityMenu(string typeName)
             => !string.IsNullOrEmpty(typeName) && unityMenuTools.Contains(typeName);
 

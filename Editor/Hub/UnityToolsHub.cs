@@ -106,6 +106,7 @@ public partial class UnityToolsHub : EditorWindow
     private UsageStats _usageStats = new UsageStats();
     private HiddenItems _hiddenItems = new HiddenItems();
     private HubSettings _hubSettings = new HubSettings();
+    private bool _themeStylesDirty = true;
     private bool _showHiddenManager;
     private Vector2 _hiddenMgrScroll;
     // ── 缓存索引（避免每帧 LINQ 遍历）───────────────
@@ -170,6 +171,7 @@ public partial class UnityToolsHub : EditorWindow
 
     // ── 排序模式 ────────────────────────────────────────
     private enum SortMode { ByName, ByRecent, ByMostUsed }
+    private enum HubThemePreset { Default, HighContrast, WarmGray, Custom }
     private SortMode _sortMode = SortMode.ByName;
     private const string SortModePrefsKey = "UnityToolsHub.SortMode";
     #endregion
@@ -366,13 +368,22 @@ public partial class UnityToolsHub : EditorWindow
     #region 主 GUI
     private void OnGUI()
     {
+        EnsureThemeSettings();
+        ApplyCurrentTheme();
         Styles.EnsureInit();
+        if (_themeStylesDirty)
+        {
+            Styles.RefreshTheme();
+            RefreshHubCachedStyleColors();
+            _themeStylesDirty = false;
+        }
 
         // 绘制整体背景
         EditorGUI.DrawRect(new Rect(0, 0, position.width, position.height), Theme.ClrBg);
 
         // ── 拖放处理（最简原生方案，无条件执行）────────
         HandleDragAndDrop();
+
 
         // ── 快捷键录制处理（优先于所有其他输入）────────
         if (_isRecordingShortcut)
@@ -402,6 +413,7 @@ public partial class UnityToolsHub : EditorWindow
         // ── 绘制拖动幽灵矩形（最后绘制，覆盖在最上层）──
         DrawDragGhost();
     }
+
     #endregion
 
     #region 使用频率与隐藏项管理
@@ -490,11 +502,114 @@ public partial class UnityToolsHub : EditorWindow
         }
         _hubSettings.recentToolsCount = Mathf.Clamp(_hubSettings.recentToolsCount, 1, 20);
         _hubSettings.mostUsedToolsCount = Mathf.Clamp(_hubSettings.mostUsedToolsCount, 1, 20);
+        EnsureThemeSettings();
+        ApplyCurrentTheme();
     }
 
     private void SaveHubSettings()
     {
         EditorPrefs.SetString(HubSettingsPrefsKey, JsonUtility.ToJson(_hubSettings));
+    }
+
+    private void EnsureThemeSettings()
+    {
+        if (_hubSettings.themeInitialized) return;
+        // 旧版配置首次升级默认使用高对比度，直接解决暗部层级不清的问题。
+        ApplyThemePreset(HubThemePreset.HighContrast);
+    }
+
+    private void ApplyThemePreset(HubThemePreset preset, bool save = true)
+    {
+        switch (preset)
+        {
+            case HubThemePreset.HighContrast:
+                _hubSettings.themeBackground = new Color(0.070f, 0.075f, 0.090f, 1f);
+                _hubSettings.themeSidebar = new Color(0.052f, 0.057f, 0.068f, 1f);
+                _hubSettings.themePanel = new Color(0.095f, 0.101f, 0.120f, 1f);
+                _hubSettings.themeCard = new Color(0.165f, 0.174f, 0.204f, 1f);
+                _hubSettings.themeAccent = new Color(0.365f, 0.620f, 1.000f, 1f);
+                _hubSettings.themeText = new Color(0.955f, 0.965f, 0.990f, 1f);
+                _hubSettings.themeMutedText = new Color(0.705f, 0.725f, 0.775f, 1f);
+                break;
+
+            case HubThemePreset.WarmGray:
+                _hubSettings.themeBackground = new Color(0.125f, 0.118f, 0.112f, 1f);
+                _hubSettings.themeSidebar = new Color(0.100f, 0.095f, 0.091f, 1f);
+                _hubSettings.themePanel = new Color(0.145f, 0.138f, 0.132f, 1f);
+                _hubSettings.themeCard = new Color(0.205f, 0.195f, 0.184f, 1f);
+                _hubSettings.themeAccent = new Color(0.820f, 0.585f, 0.330f, 1f);
+                _hubSettings.themeText = new Color(0.940f, 0.925f, 0.900f, 1f);
+                _hubSettings.themeMutedText = new Color(0.675f, 0.650f, 0.615f, 1f);
+                break;
+
+            case HubThemePreset.Default:
+                _hubSettings.themeBackground = Palette.Bg;
+                _hubSettings.themeSidebar = Palette.LeftBg;
+                _hubSettings.themePanel = Palette.RightBg;
+                _hubSettings.themeCard = Palette.CardBg;
+                _hubSettings.themeAccent = Palette.Accent;
+                _hubSettings.themeText = Palette.Text;
+                _hubSettings.themeMutedText = Palette.TextDim;
+                break;
+
+            case HubThemePreset.Custom:
+                break;
+        }
+
+        _hubSettings.themeInitialized = true;
+        _hubSettings.themePreset = (int)preset;
+        ApplyCurrentTheme();
+        _themeStylesDirty = true;
+        if (save) SaveHubSettings();
+        Repaint();
+    }
+
+    private void ApplyCurrentTheme()
+    {
+        if (!_hubSettings.themeInitialized) return;
+        Theme.ApplyHubPalette(
+            _hubSettings.themeBackground,
+            _hubSettings.themeSidebar,
+            _hubSettings.themePanel,
+            _hubSettings.themeCard,
+            _hubSettings.themeAccent,
+            _hubSettings.themeText,
+            _hubSettings.themeMutedText);
+    }
+
+    private static Color Opaque(Color color)
+    {
+        color.a = 1f;
+        return color;
+    }
+
+    private static float ThemeContrastRatio(Color foreground, Color background)
+    {
+        float l1 = RelativeLuminance(foreground);
+        float l2 = RelativeLuminance(background);
+        float lighter = Mathf.Max(l1, l2);
+        float darker = Mathf.Min(l1, l2);
+        return (lighter + 0.05f) / (darker + 0.05f);
+    }
+
+    private static float RelativeLuminance(Color color)
+    {
+        float Linear(float channel)
+            => channel <= 0.03928f ? channel / 12.92f : Mathf.Pow((channel + 0.055f) / 1.055f, 2.4f);
+        return 0.2126f * Linear(color.r) + 0.7152f * Linear(color.g) + 0.0722f * Linear(color.b);
+    }
+
+    private void RefreshHubCachedStyleColors()
+    {
+        if (_cachedSidebarBrand != null) _cachedSidebarBrand.normal.textColor = Theme.ClrTextBright;
+        if (_cachedSidebarMeta != null) _cachedSidebarMeta.normal.textColor = Theme.ClrTextDim;
+        if (_cachedSidebarCategory != null) _cachedSidebarCategory.normal.textColor = Theme.ClrText;
+        if (_cachedSidebarCount != null) _cachedSidebarCount.normal.textColor = Theme.ClrTextDim;
+        if (_cachedSidebarTool != null) _cachedSidebarTool.normal.textColor = Theme.ClrText;
+        if (_cachedSidebarToolSelected != null) _cachedSidebarToolSelected.normal.textColor = Theme.ClrTextBright;
+        if (_cachedCenterLabel != null) _cachedCenterLabel.normal.textColor = Theme.ClrText;
+        if (_cachedDimLabel != null) _cachedDimLabel.normal.textColor = Theme.ClrTextDim;
+        if (_cachedDashboardLinkLabel != null) _cachedDashboardLinkLabel.normal.textColor = Theme.ClrTextDim;
     }
 
     public static void OpenRegisteredTool(string typeName)

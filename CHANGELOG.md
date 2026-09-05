@@ -3,6 +3,8 @@ All notable changes to this package will be documented in this file.
 
 ## [Unreleased]
 
+- 重做重复文件清理交互：采用紧凑结果工具栏与折叠分组，文件行明确选择保留项，并用独立双栏窗口对比图片、文本及导入设置。
+- 新增“重复文件清理”：支持脚本、图片、音视频、模型等常用分类筛选；可按名称、SHA-256 内容或两者联合扫描，预览文件与导入设置差异，选择保留项后重定向 GUID/fileID 引用并将副本移到系统回收站。
 - 清理 UnityToolsHub.Editor 的未使用字段、继承隐藏和过时 API 编译警告，并修复拖拽区域高亮判断。
 - 将“管理隐藏项”升级为设置界面，新增最近使用/最常使用快捷列表及数量配置。
 - Unity 顶部 `UnityToolsHub` 菜单新增“最近使用”和“最常使用”原生二级工具列表。
