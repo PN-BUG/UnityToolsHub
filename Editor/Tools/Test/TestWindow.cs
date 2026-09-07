@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using Nodin;
 using UnityEditor;
@@ -34,6 +33,7 @@ public class TestWindow : EditorWindow
         public string DisplayName;
         public MonoBehaviour Target;
         public FieldInfo Field;
+        public bool IsReadOnly;
     }
 
     private class TestPropertyEntry
@@ -41,6 +41,15 @@ public class TestWindow : EditorWindow
         public string DisplayName;
         public MonoBehaviour Target;
         public PropertyInfo Property;
+        public bool IsReadOnly;
+        public bool HasSetter;
+    }
+
+    private class TestTypeMetadata
+    {
+        public MethodInfo[] Methods;
+        public FieldInfo[] Fields;
+        public PropertyInfo[] Properties;
     }
 
     private class TestGroup
@@ -50,6 +59,7 @@ public class TestWindow : EditorWindow
         public List<TestMethodEntry> Methods = new List<TestMethodEntry>();
         public List<TestFieldEntry> Fields = new List<TestFieldEntry>();
         public List<TestPropertyEntry> Properties = new List<TestPropertyEntry>();
+        public HashSet<MemberInfo> Members = new HashSet<MemberInfo>();
     }
 
     // ── 状态 ─────────────────────────────────────────────────
@@ -60,6 +70,8 @@ public class TestWindow : EditorWindow
     private Vector2 _scrollPosGroups;
     // 缓存参数值，避免刷新时丢失用户输入
     private Dictionary<string, object[]> _paramCache = new Dictionary<string, object[]>();
+    private static readonly Dictionary<Type, TestTypeMetadata> TypeMetadataCache = new Dictionary<Type, TestTypeMetadata>();
+    private static bool _typeMetadataInitialized;
 
     // ── 快捷键注册 ──────────────────────────────────────────
     [MenuItem("UnityToolsHub/测试窗口 %t")]   // Ctrl+T
@@ -104,6 +116,10 @@ public class TestWindow : EditorWindow
 
     private void OnHierarchyChanged()
     {
+        // Play Mode 中对象和层级可能频繁变化。自动全场景扫描会阻塞 Editor 主线程，
+        // 此时由工具栏“刷新”按钮显式更新即可。
+        if (EditorApplication.isPlaying) return;
+
         _isDirty = true;
         _dirtyTime = EditorApplication.timeSinceStartup;
     }
@@ -144,92 +160,146 @@ public class TestWindow : EditorWindow
         _groups.Clear();
         _foldouts.Clear();
 
-        // 找到场景中所有 MonoBehaviour
-        var allMonoBehaviours = FindObjectsOfType<MonoBehaviour>(true);
+        EnsureTypeMetadataCache();
+        var groupsByTarget = new Dictionary<int, TestGroup>();
 
-        foreach (var mb in allMonoBehaviours)
+        // 只查询实际声明了 [Test] 成员的组件类型，不再扫描场景中的全部 MonoBehaviour。
+        foreach (var pair in TypeMetadataCache)
         {
-            if (mb == null) continue;
-
-            var type = mb.GetType();
-            var methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-            var group = new TestGroup
+            var metadata = pair.Value;
+            foreach (var found in FindObjectsOfType(pair.Key, true))
             {
-                GroupName = ObjectNames.NicifyVariableName(type.Name),
-                GameObject = mb.gameObject
-            };
-
-            foreach (var method in methods)
-            {
-                var attr = method.GetCustomAttribute<TestAttribute>();
-                if (attr == null) continue;
-
-                var parameters = method.GetParameters();
-                var entry = new TestMethodEntry
+                if (found is not MonoBehaviour mb || mb == null) continue;
+                int targetKey = GetEntityKey(mb);
+                if (!groupsByTarget.TryGetValue(targetKey, out var group))
                 {
-                    DisplayName = attr.Name,
-                    Target = mb,
-                    Method = method,
-                    Parameters = parameters,
-                    ParameterValues = new object[parameters.Length]
-                };
-
-                // 尝试从缓存恢复参数值，否则使用默认值
-                string cacheKey = $"{GetEntityKey(mb)}_{method.Name}";
-                if (_paramCache.TryGetValue(cacheKey, out var cached) && cached.Length == parameters.Length)
-                {
-                    entry.ParameterValues = cached;
-                }
-                else
-                {
-                    for (int i = 0; i < parameters.Length; i++)
+                    group = new TestGroup
                     {
-                        entry.ParameterValues[i] = GetDefaultValue(parameters[i].ParameterType);
-                    }
+                        GroupName = ObjectNames.NicifyVariableName(mb.GetType().Name),
+                        GameObject = mb.gameObject
+                    };
+                    groupsByTarget.Add(targetKey, group);
                 }
 
-                group.Methods.Add(entry);
-            }
-
-            foreach (var field in fields)
-            {
-                var attr = field.GetCustomAttribute<TestAttribute>();
-                if (attr == null) continue;
-
-                group.Fields.Add(new TestFieldEntry
+                foreach (var method in metadata.Methods)
                 {
-                    DisplayName = attr.Name,
-                    Target = mb,
-                    Field = field
-                });
-            }
+                    if (!group.Members.Add(method)) continue;
+                    var attr = method.GetCustomAttribute<TestAttribute>();
 
-            foreach (var prop in properties)
-            {
-                var attr = prop.GetCustomAttribute<TestAttribute>();
-                if (attr == null) continue;
+                    var parameters = method.GetParameters();
+                    var entry = new TestMethodEntry
+                    {
+                        DisplayName = attr.Name,
+                        Target = mb,
+                        Method = method,
+                        Parameters = parameters,
+                        ParameterValues = new object[parameters.Length]
+                    };
 
-                // 跳过索引器
-                if (prop.GetIndexParameters().Length > 0) continue;
+                    string cacheKey = $"{targetKey}_{method.Name}";
+                    if (_paramCache.TryGetValue(cacheKey, out var cached) && cached.Length == parameters.Length)
+                        entry.ParameterValues = cached;
+                    else
+                    {
+                        for (int i = 0; i < parameters.Length; i++)
+                            entry.ParameterValues[i] = GetDefaultValue(parameters[i].ParameterType);
+                    }
 
-                group.Properties.Add(new TestPropertyEntry
+                    group.Methods.Add(entry);
+                }
+
+                foreach (var field in metadata.Fields)
                 {
-                    DisplayName = attr.Name,
-                    Target = mb,
-                    Property = prop
-                });
-            }
+                    if (!group.Members.Add(field)) continue;
+                    var attr = field.GetCustomAttribute<TestAttribute>();
+                    group.Fields.Add(new TestFieldEntry
+                    {
+                        DisplayName = attr.Name,
+                        Target = mb,
+                        Field = field,
+                        IsReadOnly = field.IsDefined(typeof(Nodin.ReadOnlyAttribute), true)
+                    });
+                }
 
-            // 只添加有内容的组
-            if (group.Methods.Count > 0 || group.Fields.Count > 0 || group.Properties.Count > 0)
-            {
-                _groups.Add(group);
-                _foldouts[group] = true;
+                foreach (var prop in metadata.Properties)
+                {
+                    if (!group.Members.Add(prop)) continue;
+                    var attr = prop.GetCustomAttribute<TestAttribute>();
+                    group.Properties.Add(new TestPropertyEntry
+                    {
+                        DisplayName = attr.Name,
+                        Target = mb,
+                        Property = prop,
+                        IsReadOnly = prop.IsDefined(typeof(Nodin.ReadOnlyAttribute), true),
+                        HasSetter = prop.GetSetMethod(true) != null
+                    });
+                }
             }
         }
+
+        foreach (var group in groupsByTarget.Values)
+        {
+            group.Methods.Sort((a, b) => GetInheritanceDepth(a.Method.DeclaringType).CompareTo(GetInheritanceDepth(b.Method.DeclaringType)));
+            group.Fields.Sort((a, b) => GetInheritanceDepth(a.Field.DeclaringType).CompareTo(GetInheritanceDepth(b.Field.DeclaringType)));
+            group.Properties.Sort((a, b) => GetInheritanceDepth(a.Property.DeclaringType).CompareTo(GetInheritanceDepth(b.Property.DeclaringType)));
+            _groups.Add(group);
+            _foldouts[group] = true;
+        }
+    }
+
+    private static void EnsureTypeMetadataCache()
+    {
+        if (_typeMetadataInitialized) return;
+        _typeMetadataInitialized = true;
+
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+        foreach (var method in TypeCache.GetMethodsWithAttribute<TestAttribute>())
+            AddMetadata(method.DeclaringType, method: method);
+
+        foreach (var field in TypeCache.GetFieldsWithAttribute<TestAttribute>())
+            AddMetadata(field.DeclaringType, field: field);
+
+        // TypeCache 没有属性查询接口；这里只按类型扫描一次，并缓存结果。
+        foreach (var type in TypeCache.GetTypesDerivedFrom<MonoBehaviour>())
+        {
+            foreach (var property in type.GetProperties(flags))
+                if (property.GetIndexParameters().Length == 0 && property.IsDefined(typeof(TestAttribute), true))
+                    AddMetadata(property.DeclaringType, property: property);
+        }
+
+        foreach (var metadata in TypeMetadataCache.Values)
+        {
+            metadata.Methods ??= Array.Empty<MethodInfo>();
+            metadata.Fields ??= Array.Empty<FieldInfo>();
+            metadata.Properties ??= Array.Empty<PropertyInfo>();
+        }
+    }
+
+    private static void AddMetadata(Type type, MethodInfo method = null, FieldInfo field = null, PropertyInfo property = null)
+    {
+        if (type == null || !typeof(MonoBehaviour).IsAssignableFrom(type)) return;
+        if (!TypeMetadataCache.TryGetValue(type, out var metadata))
+        {
+            metadata = new TestTypeMetadata();
+            TypeMetadataCache.Add(type, metadata);
+        }
+
+        if (method != null)
+            metadata.Methods = Append(metadata.Methods, method);
+        if (field != null)
+            metadata.Fields = Append(metadata.Fields, field);
+        if (property != null)
+            metadata.Properties = Append(metadata.Properties, property);
+    }
+
+    private static T[] Append<T>(T[] source, T value)
+    {
+        int count = source?.Length ?? 0;
+        var result = new T[count + 1];
+        if (count > 0) Array.Copy(source, result, count);
+        result[count] = value;
+        return result;
     }
 
     // ── GUI 绘制 ────────────────────────────────────────────
@@ -311,18 +381,17 @@ public class TestWindow : EditorWindow
     {
         if (string.IsNullOrEmpty(_searchFilter)) return true;
 
-        var filter = _searchFilter.ToLower();
-        if (group.GroupName.ToLower().Contains(filter)) return true;
-        if (group.GameObject != null && group.GameObject.name.ToLower().Contains(filter)) return true;
+        if (group.GroupName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        if (group.GameObject != null && group.GameObject.name.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
 
         foreach (var m in group.Methods)
-            if (m.DisplayName.ToLower().Contains(filter)) return true;
+            if (m.DisplayName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
 
         foreach (var f in group.Fields)
-            if (f.DisplayName.ToLower().Contains(filter)) return true;
+            if (f.DisplayName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
 
         foreach (var p in group.Properties)
-            if (p.DisplayName.ToLower().Contains(filter)) return true;
+            if (p.DisplayName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
 
         return false;
     }
@@ -345,31 +414,18 @@ public class TestWindow : EditorWindow
         {
             EditorGUI.indentLevel++;
 
-            // 按继承层级排序：基类成员在前，当前类成员在后
-            var sortedFields = group.Fields
-                .OrderBy(f => GetInheritanceDepth(f.Field.DeclaringType))
-                .ToList();
-            var sortedProperties = group.Properties
-                .OrderBy(p => GetInheritanceDepth(p.Property.DeclaringType))
-                .ToList();
-            var sortedMethods = group.Methods
-                .OrderBy(m => GetInheritanceDepth(m.Method.DeclaringType))
-                .ToList();
-
-            // 先绘制字段（按继承顺序）
-            foreach (var entry in sortedFields)
+            // 成员在元数据缓存创建时已经按继承顺序排序。
+            foreach (var entry in group.Fields)
             {
                 DrawFieldEntry(entry);
             }
 
-            // 绘制属性（按继承顺序）
-            foreach (var entry in sortedProperties)
+            foreach (var entry in group.Properties)
             {
                 DrawPropertyEntry(entry);
             }
 
-            // 再绘制方法按钮（按继承顺序）
-            foreach (var entry in sortedMethods)
+            foreach (var entry in group.Methods)
             {
                 DrawMethodEntry(entry);
             }
@@ -384,16 +440,13 @@ public class TestWindow : EditorWindow
     {
         if (entry.Target == null) return;
 
-        // 检查 [ReadOnly] 特性
-        bool isReadOnly = entry.Field.GetCustomAttribute<Nodin.ReadOnlyAttribute>() != null;
-
         EditorGUILayout.BeginHorizontal();
 
         // 显示标签
         EditorGUILayout.PrefixLabel(entry.DisplayName);
 
         // 只读字段禁用编辑
-        EditorGUI.BeginDisabledGroup(isReadOnly);
+        EditorGUI.BeginDisabledGroup(entry.IsReadOnly);
 
         // 获取当前值
         var value = entry.Field.GetValue(entry.Target);
@@ -473,18 +526,13 @@ public class TestWindow : EditorWindow
 
         var prop = entry.Property;
 
-        // 检查 [ReadOnly] 特性
-        bool isReadOnly = prop.GetCustomAttribute<Nodin.ReadOnlyAttribute>() != null;
-        // 检查是否有 setter
-        bool hasSetter = prop.GetSetMethod(true) != null;
-
         EditorGUILayout.BeginHorizontal();
 
         // 显示标签
         EditorGUILayout.PrefixLabel(entry.DisplayName);
 
         // 只读字段或无 setter 禁用编辑
-        EditorGUI.BeginDisabledGroup(isReadOnly || !hasSetter);
+        EditorGUI.BeginDisabledGroup(entry.IsReadOnly || !entry.HasSetter);
 
         // 获取当前值
         object value = null;
@@ -553,7 +601,7 @@ public class TestWindow : EditorWindow
             EditorGUILayout.LabelField(value?.ToString() ?? "null");
         }
 
-        if (changed && EditorGUI.EndChangeCheck() && hasSetter)
+        if (changed && EditorGUI.EndChangeCheck() && entry.HasSetter)
         {
             Undo.RecordObject(entry.Target, $"[Test] 修改 {entry.DisplayName}");
             prop.SetValue(entry.Target, newValue);
