@@ -1,0 +1,16 @@
+{
+    "name": "UnityToolsHub.JoystickIcons.Runtime",
+    "rootNamespace": "UnityToolsHub.JoystickIcons",
+    "references": [
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

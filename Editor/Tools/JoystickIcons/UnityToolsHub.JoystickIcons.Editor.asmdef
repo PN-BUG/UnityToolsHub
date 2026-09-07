@@ -1,0 +1,19 @@
+{
+    "name": "UnityToolsHub.JoystickIcons.Editor",
+    "rootNamespace": "UnityToolsHub.JoystickIcons.Editor",
+    "references": [
+        "UnityToolsHub.SDK",
+        "UnityToolsHub.JoystickIcons.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
