@@ -7,6 +7,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Localization;
 using UnityEngine.UI;
+using UnityToolsHub.JoystickIcons;
 
 /// <summary>
 /// Receives a localized template, resolves platform input placeholders, and writes it to a UI text component.
@@ -31,17 +32,53 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
     private Dictionary<string, string> activeTemplateValues;
     private string expectedDisplay;
     private string lastObservedSourceText;
+    private string latestLocalizedTemplate;
+    private string requestedSourceText;
+    private string platformReplacementColor;
+    private int sourceRevision;
+    private bool hasRequestedSource;
+    private bool isAwaitingLocalizedValue;
 
     private static readonly Regex TemplateTokenRegex = new Regex(@"\{[^{}]+\}", RegexOptions.Compiled);
 
     public async void ApplyLocalizedText(string localizedTemplate)
     {
+        var revision = sourceRevision;
+        var template = localizedTemplate ?? string.Empty;
         ResolveTargets();
-        var resolvedTemplate = await ApplyTemplateValuesAsync(localizedTemplate ?? string.Empty);
-        var value = PlatformStringReplace.Replace(resolvedTemplate, HasJoystick());
+        var resolvedTemplate = await ApplyTemplateValuesAsync(template);
+        if (revision != sourceRevision || this == null || !isActiveAndEnabled)
+        {
+            return;
+        }
+
+        latestLocalizedTemplate = template;
+        var value = ApplyPlatformReplacement(resolvedTemplate);
+        isAwaitingLocalizedValue = false;
         expectedDisplay = value;
         if (legacyText != null) legacyText.text = value;
         if (tmpText != null) tmpText.text = value;
+    }
+
+    /// <summary>
+    /// Selects a new business source before localization. This prevents an older asynchronous
+    /// localization callback from overwriting a newer input-device-specific prompt.
+    /// </summary>
+    public void ApplySourceText(string source, string replacementColor = null)
+    {
+        ResolveTargets();
+        requestedSourceText = source ?? string.Empty;
+        platformReplacementColor = replacementColor;
+        hasRequestedSource = true;
+        sourceRevision++;
+        latestLocalizedTemplate = string.Empty;
+        lastObservedSourceText = requestedSourceText;
+        isAwaitingLocalizedValue = true;
+        ObserveDynamicSource(requestedSourceText);
+        if (activeDynamicBinding == null)
+        {
+            ApplyLocalizedText(requestedSourceText);
+        }
     }
 
     public void Configure(Text text)
@@ -95,14 +132,27 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
 
     private void OnEnable()
     {
+        JoystickIconDeviceEvents.ActiveDeviceChanged += OnJoystickDeviceChanged;
+        JoystickIconDeviceEvents.ActiveInputMethodChanged += OnInputMethodChanged;
         ResolveTargets();
-        var source = ReadText();
+        var source = hasRequestedSource ? requestedSourceText : ReadText();
+        sourceRevision++;
         CaptureOriginalSource(source);
         lastObservedSourceText = source;
+        isAwaitingLocalizedValue = true;
         ObserveDynamicSource(source);
+        if (activeDynamicBinding == null)
+        {
+            ApplyLocalizedText(source);
+        }
     }
 
-    private void OnDisable() => ReleaseDynamicBinding();
+    private void OnDisable()
+    {
+        JoystickIconDeviceEvents.ActiveDeviceChanged -= OnJoystickDeviceChanged;
+        JoystickIconDeviceEvents.ActiveInputMethodChanged -= OnInputMethodChanged;
+        ReleaseDynamicBinding();
+    }
 
     private void OnDestroy()
     {
@@ -112,10 +162,11 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (dynamicBindings.Count == 0) return;
+        if (dynamicBindings.Count == 0 || isAwaitingLocalizedValue) return;
         var value = ReadText();
         if (value != expectedDisplay)
         {
+            sourceRevision++;
             lastObservedSourceText = value;
             ObserveDynamicSource(value);
         }
@@ -164,6 +215,37 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
             activeDynamicBinding.localized.StringChanged -= ApplyLocalizedText;
         activeDynamicBinding = null;
         activeTemplateValues = null;
+    }
+
+    private void OnJoystickDeviceChanged(string _)
+    {
+        if (isActiveAndEnabled && !string.IsNullOrEmpty(latestLocalizedTemplate))
+        {
+            ApplyLocalizedText(latestLocalizedTemplate);
+        }
+    }
+
+    private void OnInputMethodChanged(bool _)
+    {
+        if (isActiveAndEnabled && !string.IsNullOrEmpty(latestLocalizedTemplate))
+        {
+            ApplyLocalizedText(latestLocalizedTemplate);
+        }
+    }
+
+    private string ApplyPlatformReplacement(string resolvedTemplate)
+    {
+        var hasJoystick = HasJoystick();
+        if (tmpText != null)
+        {
+            return string.IsNullOrWhiteSpace(platformReplacementColor)
+                ? PlatformStringReplace.Replace(tmpText, resolvedTemplate, hasJoystick)
+                : PlatformStringReplace.Replace(tmpText, resolvedTemplate, hasJoystick, platformReplacementColor);
+        }
+
+        return string.IsNullOrWhiteSpace(platformReplacementColor)
+            ? PlatformStringReplace.Replace(resolvedTemplate, hasJoystick)
+            : PlatformStringReplace.Replace(resolvedTemplate, hasJoystick, platformReplacementColor);
     }
 
     private async System.Threading.Tasks.Task<string> ApplyTemplateValuesAsync(string template)

@@ -3,7 +3,8 @@
     "rootNamespace": "UnityToolsHub.JoystickIcons.Editor",
     "references": [
         "UnityToolsHub.SDK",
-        "UnityToolsHub.JoystickIcons.Runtime"
+        "UnityToolsHub.JoystickIcons.Runtime",
+        "UnityToolsHub.Localization.Runtime"
     ],
     "includePlatforms": [
         "Editor"

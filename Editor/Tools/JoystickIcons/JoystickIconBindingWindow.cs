@@ -25,6 +25,18 @@ public sealed class JoystickIconBindingWindow : EditorWindow
         "View", "Menu"
     };
 
+    private static readonly string[] CommonButtonLabels =
+    {
+        "South（下方主键）", "East（右侧主键）", "West（左侧主键）", "North（上方主键）",
+        "Left Shoulder（左肩键）", "Right Shoulder（右肩键）",
+        "Left Trigger（左扳机）", "Right Trigger（右扳机）",
+        "Left Stick（左摇杆）", "Left Stick Press（按下左摇杆）",
+        "Right Stick（右摇杆）", "Right Stick Press（按下右摇杆）",
+        "D-pad（十字键）", "D-pad Up（十字键上）", "D-pad Down（十字键下）",
+        "D-pad Left（十字键左）", "D-pad Right（十字键右）",
+        "View（返回/视图键）", "Menu（菜单键）"
+    };
+
     private JoystickIconDatabase database;
     private SerializedObject serializedDatabase;
     private Vector2 profileScrollPosition;
@@ -214,6 +226,23 @@ public sealed class JoystickIconBindingWindow : EditorWindow
                 EditorGUIUtility.PingObject(database);
             }
         }
+        if (GUILayout.Button("文字替换配置", EditorStyles.toolbarButton, GUILayout.Width(88f)))
+        {
+            var replaceDatabase = AssetDatabase.LoadAssetAtPath<PlatformStringReplaceDatabase>(
+                "Assets/Resources/PlatformStringReplaceDatabase.asset");
+            if (replaceDatabase != null)
+            {
+                Selection.activeObject = replaceDatabase;
+                EditorGUIUtility.PingObject(replaceDatabase);
+            }
+            else
+            {
+                EditorUtility.DisplayDialog(
+                    "手柄图标绑定",
+                    "找不到 Assets/Resources/PlatformStringReplaceDatabase.asset。",
+                    "确定");
+            }
+        }
         EditorGUILayout.EndHorizontal();
     }
 
@@ -383,7 +412,7 @@ public sealed class JoystickIconBindingWindow : EditorWindow
         }
         if (GUILayout.Button("＋  添加按钮", GUILayout.Width(88f), GUILayout.Height(24f)))
         {
-            AddBinding(bindings, "NewButton");
+            AddBinding(bindings, FindFirstAvailableButtonId(bindings));
         }
         EditorGUILayout.EndHorizontal();
 
@@ -413,8 +442,13 @@ public sealed class JoystickIconBindingWindow : EditorWindow
         {
             var binding = bindings.GetArrayElementAtIndex(i);
             var buttonId = binding.FindPropertyRelative("buttonId");
+            var normalizedButtonId = JoystickIconDatabase.NormalizeButtonId(buttonId.stringValue);
+            if (!string.Equals(buttonId.stringValue, normalizedButtonId, StringComparison.Ordinal))
+            {
+                buttonId.stringValue = normalizedButtonId;
+            }
             if (!string.IsNullOrWhiteSpace(bindingSearch) &&
-                buttonId.stringValue.IndexOf(bindingSearch, StringComparison.OrdinalIgnoreCase) < 0)
+                normalizedButtonId.IndexOf(bindingSearch, StringComparison.OrdinalIgnoreCase) < 0)
             {
                 continue;
             }
@@ -427,7 +461,7 @@ public sealed class JoystickIconBindingWindow : EditorWindow
                 : (visibleCount % 2 == 0 ? RowColor : new Color(RowColor.r, RowColor.g, RowColor.b, 0.45f));
             EditorGUI.DrawRect(rowRect, rowBackground);
 
-            if (duplicateIds.Contains(buttonId.stringValue))
+            if (duplicateIds.Contains(normalizedButtonId))
             {
                 EditorGUI.DrawRect(new Rect(rowRect.x, rowRect.y, 3f, rowRect.height), new Color(1f, 0.55f, 0.2f));
             }
@@ -442,11 +476,11 @@ public sealed class JoystickIconBindingWindow : EditorWindow
             GUI.Label(indexRect, (i + 1).ToString("00"), profileCountStyle);
 
             var previousColor = GUI.color;
-            if (duplicateIds.Contains(buttonId.stringValue))
+            if (duplicateIds.Contains(normalizedButtonId))
             {
                 GUI.color = new Color(1f, 0.72f, 0.45f);
             }
-            EditorGUI.PropertyField(buttonRect, buttonId, GUIContent.none);
+            DrawButtonIdPopup(buttonRect, buttonId);
             GUI.color = previousColor;
 
             var icon = binding.FindPropertyRelative("icon");
@@ -539,13 +573,13 @@ public sealed class JoystickIconBindingWindow : EditorWindow
         GUILayout.Space(6f);
         EditorGUILayout.BeginVertical();
         GUILayout.Label("设备名称", EditorStyles.miniLabel);
-        previewDeviceName = EditorGUILayout.TextField(previewDeviceName, GUILayout.MinWidth(190f));
+        previewDeviceName = DrawPreviewDeviceNamePopup(previewDeviceName, GUILayout.MinWidth(190f));
         EditorGUILayout.EndVertical();
 
         GUILayout.Space(5f);
         EditorGUILayout.BeginVertical(GUILayout.Width(150f));
         GUILayout.Label("按钮 ID", EditorStyles.miniLabel);
-        previewButtonId = EditorGUILayout.TextField(previewButtonId, GUILayout.Width(150f));
+        previewButtonId = DrawButtonIdPopup(previewButtonId, GUILayout.Width(150f));
         EditorGUILayout.EndVertical();
 
         var deviceType = database.IdentifyDevice(previewDeviceName);
@@ -573,6 +607,63 @@ public sealed class JoystickIconBindingWindow : EditorWindow
         EditorGUILayout.EndVertical();
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.EndVertical();
+    }
+
+    private string DrawPreviewDeviceNamePopup(string currentDeviceName, params GUILayoutOption[] options)
+    {
+        var labels = new List<string>();
+        var deviceNames = new List<string>();
+        var selectedIndex = 0;
+        var currentType = database.IdentifyDevice(currentDeviceName);
+
+        for (var i = 0; i < database.Profiles.Count; i++)
+        {
+            var profile = database.Profiles[i];
+            if (profile == null)
+            {
+                continue;
+            }
+
+            var sampleDeviceName = GetPreviewDeviceName(profile);
+            var displayName = string.IsNullOrWhiteSpace(profile.DisplayName)
+                ? profile.DeviceType.ToString()
+                : profile.DisplayName;
+            labels.Add($"{displayName}（{sampleDeviceName}）");
+            deviceNames.Add(sampleDeviceName);
+            if (profile.DeviceType == currentType)
+            {
+                selectedIndex = deviceNames.Count - 1;
+            }
+        }
+
+        if (deviceNames.Count == 0)
+        {
+            return currentDeviceName;
+        }
+
+        selectedIndex = EditorGUILayout.Popup(selectedIndex, labels.ToArray(), options);
+        return deviceNames[Mathf.Clamp(selectedIndex, 0, deviceNames.Count - 1)];
+    }
+
+    private static string GetPreviewDeviceName(JoystickIconProfile profile)
+    {
+        if (profile.DeviceType == JoystickDeviceType.Generic)
+        {
+            return "Generic Gamepad";
+        }
+
+        for (var i = 0; i < profile.DeviceNameKeywords.Count; i++)
+        {
+            var keyword = profile.DeviceNameKeywords[i];
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                return keyword;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(profile.DisplayName)
+            ? profile.DeviceType.ToString()
+            : profile.DisplayName;
     }
 
     private static void AddMissingProfiles(SerializedProperty profiles)
@@ -632,6 +723,82 @@ public sealed class JoystickIconBindingWindow : EditorWindow
         var binding = bindings.GetArrayElementAtIndex(bindings.arraySize - 1);
         binding.FindPropertyRelative("buttonId").stringValue = buttonId;
         binding.FindPropertyRelative("icon").objectReferenceValue = null;
+    }
+
+    private static string FindFirstAvailableButtonId(SerializedProperty bindings)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < bindings.arraySize; i++)
+        {
+            existing.Add(JoystickIconDatabase.NormalizeButtonId(
+                bindings.GetArrayElementAtIndex(i).FindPropertyRelative("buttonId").stringValue));
+        }
+
+        for (var i = 0; i < CommonButtonIds.Length; i++)
+        {
+            if (!existing.Contains(CommonButtonIds[i]))
+            {
+                return CommonButtonIds[i];
+            }
+        }
+
+        return CommonButtonIds[0];
+    }
+
+    private static void DrawButtonIdPopup(Rect rect, SerializedProperty buttonId)
+    {
+        buttonId.stringValue = DrawButtonIdPopup(buttonId.stringValue, rect);
+    }
+
+    private static string DrawButtonIdPopup(string currentButtonId, params GUILayoutOption[] options)
+    {
+        currentButtonId = JoystickIconDatabase.NormalizeButtonId(currentButtonId);
+        var selectedIndex = FindButtonIdIndex(currentButtonId);
+        if (selectedIndex >= 0)
+        {
+            return CommonButtonIds[EditorGUILayout.Popup(selectedIndex, CommonButtonLabels, options)];
+        }
+
+        var labels = BuildButtonLabelsWithCurrent(currentButtonId);
+        selectedIndex = EditorGUILayout.Popup(labels.Length - 1, labels, options);
+        return selectedIndex < CommonButtonIds.Length ? CommonButtonIds[selectedIndex] : currentButtonId;
+    }
+
+    private static string DrawButtonIdPopup(string currentButtonId, Rect rect)
+    {
+        currentButtonId = JoystickIconDatabase.NormalizeButtonId(currentButtonId);
+        var selectedIndex = FindButtonIdIndex(currentButtonId);
+        if (selectedIndex >= 0)
+        {
+            return CommonButtonIds[EditorGUI.Popup(rect, selectedIndex, CommonButtonLabels)];
+        }
+
+        var labels = BuildButtonLabelsWithCurrent(currentButtonId);
+        selectedIndex = EditorGUI.Popup(rect, labels.Length - 1, labels);
+        return selectedIndex < CommonButtonIds.Length ? CommonButtonIds[selectedIndex] : currentButtonId;
+    }
+
+    private static int FindButtonIdIndex(string buttonId)
+    {
+        for (var i = 0; i < CommonButtonIds.Length; i++)
+        {
+            if (string.Equals(CommonButtonIds[i], buttonId, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string[] BuildButtonLabelsWithCurrent(string currentButtonId)
+    {
+        var labels = new string[CommonButtonLabels.Length + 1];
+        Array.Copy(CommonButtonLabels, labels, CommonButtonLabels.Length);
+        labels[labels.Length - 1] = string.IsNullOrWhiteSpace(currentButtonId)
+            ? "未设置（请选择）"
+            : $"未收录：{currentButtonId}";
+        return labels;
     }
 
     private static string GetDefaultDisplayName(JoystickDeviceType type)

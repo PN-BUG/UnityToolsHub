@@ -5,7 +5,8 @@
         "Unity.Localization",
         "Unity.ResourceManager",
         "Unity.TextMeshPro",
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "UnityToolsHub.JoystickIcons.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
