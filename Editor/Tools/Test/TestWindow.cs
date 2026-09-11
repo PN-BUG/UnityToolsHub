@@ -252,7 +252,7 @@ public class TestWindow : EditorWindow
         if (_typeMetadataInitialized) return;
         _typeMetadataInitialized = true;
 
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
         foreach (var method in TypeCache.GetMethodsWithAttribute<TestAttribute>())
             AddMetadata(method.DeclaringType, method: method);
@@ -260,7 +260,8 @@ public class TestWindow : EditorWindow
         foreach (var field in TypeCache.GetFieldsWithAttribute<TestAttribute>())
             AddMetadata(field.DeclaringType, field: field);
 
-        // TypeCache 没有属性查询接口；这里只按类型扫描一次，并缓存结果。
+        // TypeCache 没有属性查询接口；这里只扫描各类型自身声明的属性。
+        // 继承属性会由声明它的基类收集，避免基类和派生类各收集一次而重复显示。
         foreach (var type in TypeCache.GetTypesDerivedFrom<MonoBehaviour>())
         {
             foreach (var property in type.GetProperties(flags))
