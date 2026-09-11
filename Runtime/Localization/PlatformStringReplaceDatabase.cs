@@ -24,6 +24,8 @@ public sealed class PlatformStringReplacement
     [SerializeField] private string tmpIconSeparator = "/";
     [Tooltip("TMP 文本使用的直接 Sprite 图标，适用于键鼠或移动端按钮。")]
     [SerializeField] private Sprite tmpIconSprite;
+    [Tooltip("TMP 内联图标相对于正文的缩放。")]
+    [SerializeField] private float tmpIconScale = 1f;
     [SerializeField] private string tmpIconPrefix;
     [SerializeField] private string tmpIconSuffix;
 
@@ -32,6 +34,7 @@ public sealed class PlatformStringReplacement
     public IReadOnlyList<string> TmpIconButtonIds => tmpIconButtonIds;
     public string TmpIconSeparator => tmpIconSeparator;
     public Sprite TmpIconSprite => tmpIconSprite;
+    public float TmpIconScale => tmpIconScale > 0f ? tmpIconScale : 1f;
     public string TmpIconPrefix => tmpIconPrefix;
     public string TmpIconSuffix => tmpIconSuffix;
 }
