@@ -1,3 +1,7 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 
@@ -51,6 +55,14 @@ public class LogManagerPanel : ToolEditorWindow
 
         EditorGUILayout.Space(4);
 
+        if (!GameLoggerAdapter.IsAvailable)
+        {
+            EditorGUILayout.HelpBox(
+                "当前项目未提供兼容的 GameLogger。日志管理功能已禁用，但不会影响 UnityToolsHub 的其他工具。",
+                MessageType.Info);
+            return;
+        }
+
         DrawGlobalSettings();
 
         EditorGUILayout.Space(4);
@@ -74,13 +86,12 @@ public class LogManagerPanel : ToolEditorWindow
 
         BeginGroupBox("日志等级");
         {
-            var newLevel = (GameLogger.Level)EditorGUILayout.EnumPopup(
-                "过滤等级", GameLogger.LogLevel);
+            Enum currentLevel = GameLoggerAdapter.LogLevel;
+            Enum newLevel = EditorGUILayout.EnumPopup("过滤等级", currentLevel);
 
-            if (newLevel != GameLogger.LogLevel)
+            if (!Equals(newLevel, currentLevel))
             {
-                GameLogger.LogLevel = newLevel;
-                GameLogger.SaveLogLevel();
+                GameLoggerAdapter.SetLogLevel(newLevel);
             }
 
             EditorGUILayout.Space(2);
@@ -93,11 +104,11 @@ public class LogManagerPanel : ToolEditorWindow
 
     private void DrawChannelManagement()
     {
-        var channels = GameLogger.GetChannelNames();
+        var channels = GameLoggerAdapter.GetChannelNames();
         int totalCount = channels.Count;
         int enabledCount = 0;
         foreach (var ch in channels)
-            if (GameLogger.IsChannelEnabled(ch)) enabledCount++;
+            if (GameLoggerAdapter.IsChannelEnabled(ch)) enabledCount++;
 
         DrawSection($"通道管理 ({enabledCount}/{totalCount} 启用)", ClrCatTeal);
 
@@ -135,7 +146,7 @@ public class LogManagerPanel : ToolEditorWindow
 
     private void DrawChannelRow(string channel, int index)
     {
-        bool enabled = GameLogger.IsChannelEnabled(channel);
+        bool enabled = GameLoggerAdapter.IsChannelEnabled(channel);
         bool newEnabled = enabled;
 
         // 交替背景色
@@ -177,7 +188,7 @@ public class LogManagerPanel : ToolEditorWindow
         newEnabled = GUI.Toggle(toggleRect, enabled, "");
 
         if (newEnabled != enabled)
-            GameLogger.SetChannelEnabled(channel, newEnabled);
+            GameLoggerAdapter.SetChannelEnabled(channel, newEnabled);
 
         // 消费鼠标事件防止穿透
         if (Event.current.type == EventType.MouseDown && rect.Contains(Event.current.mousePosition))
@@ -225,8 +236,8 @@ public class LogManagerPanel : ToolEditorWindow
         {
             if (DrawSuccessButton("全部启用", GUILayout.Width(90)))
             {
-                foreach (var ch in GameLogger.GetChannelNames())
-                    GameLogger.SetChannelEnabled(ch, true);
+                foreach (var ch in GameLoggerAdapter.GetChannelNames())
+                    GameLoggerAdapter.SetChannelEnabled(ch, true);
                 Repaint();
             }
 
@@ -234,8 +245,8 @@ public class LogManagerPanel : ToolEditorWindow
 
             if (DrawDangerButton("全部禁用", GUILayout.Width(90)))
             {
-                foreach (var ch in GameLogger.GetChannelNames())
-                    GameLogger.SetChannelEnabled(ch, false);
+                foreach (var ch in GameLoggerAdapter.GetChannelNames())
+                    GameLoggerAdapter.SetChannelEnabled(ch, false);
                 Repaint();
             }
 
@@ -253,13 +264,92 @@ public class LogManagerPanel : ToolEditorWindow
 
     protected override void DrawStatusBarContent()
     {
-        var channels = GameLogger.GetChannelNames();
+        if (!GameLoggerAdapter.IsAvailable)
+        {
+            DrawStatusText("📋 GameLogger 不可用", ClrTextDim);
+            return;
+        }
+
+        var channels = GameLoggerAdapter.GetChannelNames();
         int enabledCount = 0;
         foreach (var ch in channels)
-            if (GameLogger.IsChannelEnabled(ch)) enabledCount++;
+            if (GameLoggerAdapter.IsChannelEnabled(ch)) enabledCount++;
 
         DrawStatusText($"📊 {enabledCount}/{channels.Count} 通道启用", ClrAccent);
         DrawStatusText("  ·  ", ClrTextDim);
-        DrawStatusText($"等级: {GameLogger.LogLevel}", ClrTextDim);
+        DrawStatusText($"等级: {GameLoggerAdapter.LogLevel}", ClrTextDim);
+    }
+}
+
+/// <summary>
+/// 通过反射连接项目可选的 GameLogger，避免 UnityToolsHub 对特定 UnityFramework 版本产生编译期依赖。
+/// </summary>
+internal static class GameLoggerAdapter
+{
+    private const BindingFlags StaticPublic = BindingFlags.Public | BindingFlags.Static;
+
+    private static readonly Type LoggerType = FindLoggerType();
+    private static readonly PropertyInfo LogLevelProperty = LoggerType?.GetProperty("LogLevel", StaticPublic);
+    private static readonly MethodInfo SaveLogLevelMethod = LoggerType?.GetMethod("SaveLogLevel", StaticPublic);
+    private static readonly MethodInfo GetChannelNamesMethod = LoggerType?.GetMethod("GetChannelNames", StaticPublic);
+    private static readonly MethodInfo IsChannelEnabledMethod = LoggerType?.GetMethod(
+        "IsChannelEnabled", StaticPublic, null, new[] { typeof(string) }, null);
+    private static readonly MethodInfo SetChannelEnabledMethod = LoggerType?.GetMethod(
+        "SetChannelEnabled", StaticPublic, null, new[] { typeof(string), typeof(bool) }, null);
+
+    internal static bool IsAvailable =>
+        LogLevelProperty != null &&
+        LogLevelProperty.PropertyType.IsEnum &&
+        GetChannelNamesMethod != null &&
+        IsChannelEnabledMethod != null &&
+        SetChannelEnabledMethod != null;
+
+    internal static Enum LogLevel => LogLevelProperty?.GetValue(null, null) as Enum;
+
+    internal static void SetLogLevel(Enum level)
+    {
+        if (!IsAvailable || level == null || level.GetType() != LogLevelProperty.PropertyType) return;
+        LogLevelProperty.SetValue(null, level, null);
+        SaveLogLevelMethod?.Invoke(null, null);
+    }
+
+    internal static List<string> GetChannelNames()
+    {
+        var channels = new List<string>();
+        if (!IsAvailable || !(GetChannelNamesMethod.Invoke(null, null) is IEnumerable values)) return channels;
+
+        foreach (object value in values)
+        {
+            if (value is string channel) channels.Add(channel);
+        }
+
+        return channels;
+    }
+
+    internal static bool IsChannelEnabled(string channel)
+    {
+        return IsAvailable &&
+               IsChannelEnabledMethod.Invoke(null, new object[] { channel }) is bool enabled &&
+               enabled;
+    }
+
+    internal static void SetChannelEnabled(string channel, bool enabled)
+    {
+        if (!IsAvailable) return;
+        SetChannelEnabledMethod.Invoke(null, new object[] { channel, enabled });
+    }
+
+    private static Type FindLoggerType()
+    {
+        Type type = Type.GetType("GameLogger, UnityFramework", false);
+        if (type != null) return type;
+
+        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            type = assembly.GetType("GameLogger", false);
+            if (type != null) return type;
+        }
+
+        return null;
     }
 }

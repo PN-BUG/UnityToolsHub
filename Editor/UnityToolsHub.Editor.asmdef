@@ -6,7 +6,6 @@
         "UnityToolsHub.SDK",
         "Nodin.Runtime",
         "Nodin.Editor",
-        "UnityFramework",
         "Unity.Localization",
         "Unity.Localization.Editor",
         "Unity.TextMeshPro",
