@@ -8,12 +8,14 @@ using UnityEngine;
 using UnityEngine.Video;
 
 [ToolInfo("视频首帧导出", "媒体工具",
-    Description = "把文件夹下所有视频导出第一帧 PNG（文件名与视频一致）。\n\n支持自定义输出分辨率，适合生成视频缩略图。",
+    Description = "把文件夹或拖入视频的第一帧导出为 PNG（文件名与视频一致）。\n\n支持自定义输出分辨率，适合生成视频缩略图。",
     Icon = "🎬", Tags = new[] { "视频", "PNG导出" })]
 public class VideoFirstFrameExporter : EditorWindow
 {
     private DefaultAsset inputFolder;
     private DefaultAsset outputFolder;
+    private readonly List<string> droppedVideoPaths = new();
+    private Vector2 droppedVideosScrollPosition;
 
     private int targetWidth = 256;
     private int targetHeight = 256;
@@ -22,15 +24,19 @@ public class VideoFirstFrameExporter : EditorWindow
     public static void Open()
     {
         var w = GetWindow<VideoFirstFrameExporter>("Video First Frame");
-        w.minSize = new Vector2(420, 140);
+        w.minSize = new Vector2(420, 260);
     }
 
     private void OnGUI()
     {
-        EditorGUILayout.LabelField("把文件夹下所有视频导出第一帧 PNG（文件名与视频一致）", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("把文件夹或拖入视频的第一帧导出为 PNG（文件名与视频一致）", EditorStyles.boldLabel);
 
         inputFolder = (DefaultAsset)EditorGUILayout.ObjectField("Input Folder", inputFolder, typeof(DefaultAsset), false);
         outputFolder = (DefaultAsset)EditorGUILayout.ObjectField("Output Folder", outputFolder, typeof(DefaultAsset), false);
+
+        EditorGUILayout.Space(5);
+        DrawVideoDropArea();
+        DrawDroppedVideoList();
 
         EditorGUILayout.Space(5);
 
@@ -41,20 +47,20 @@ public class VideoFirstFrameExporter : EditorWindow
         EditorGUILayout.Space(8);
       
 
-        using (new EditorGUI.DisabledScope(inputFolder == null || outputFolder == null))
+        using (new EditorGUI.DisabledScope((inputFolder == null && droppedVideoPaths.Count == 0) || outputFolder == null))
         {
             if (GUILayout.Button("Export"))
             {
-                string inPath = AssetDatabase.GetAssetPath(inputFolder);
                 string outPath = AssetDatabase.GetAssetPath(outputFolder);
+                string inPath = inputFolder != null ? AssetDatabase.GetAssetPath(inputFolder) : null;
 
-                if (!AssetDatabase.IsValidFolder(inPath) || !AssetDatabase.IsValidFolder(outPath))
+                if ((inputFolder != null && !AssetDatabase.IsValidFolder(inPath)) || !AssetDatabase.IsValidFolder(outPath))
                 {
-                    Debug.LogError("Input/Output 必须是 Project 里的文件夹（Assets/...）。");
+                    Debug.LogError("Input/Output 文件夹必须位于当前 Project 中（Assets/...）。");
                     return;
                 }
 
-                ExportAll(inPath, outPath, targetWidth, targetHeight);
+                ExportAll(inPath, droppedVideoPaths, outPath, targetWidth, targetHeight);
             }
         }
 
@@ -63,16 +69,131 @@ public class VideoFirstFrameExporter : EditorWindow
             MessageType.Info);
     }
 
-    private static void ExportAll(string inputFolderPath, string outputFolderPath, int width, int height)
+    private void DrawVideoDropArea()
     {
-        // 找到所有视频资源
-        var guids = AssetDatabase.FindAssets("", new[] { inputFolderPath });
+        Rect dropArea = GUILayoutUtility.GetRect(0f, 54f, GUILayout.ExpandWidth(true));
+        GUI.Box(dropArea, "拖动视频到这里\n支持 MP4 / MOV / WEBM / AVI / M4V", EditorStyles.helpBox);
+
+        Event currentEvent = Event.current;
+        if (!dropArea.Contains(currentEvent.mousePosition) ||
+            (currentEvent.type != EventType.DragUpdated && currentEvent.type != EventType.DragPerform))
+        {
+            return;
+        }
+
+        List<string> draggedVideoPaths = GetDraggedVideoPaths();
+        bool containsVideo = draggedVideoPaths.Count > 0;
+        DragAndDrop.visualMode = containsVideo ? DragAndDropVisualMode.Copy : DragAndDropVisualMode.Rejected;
+
+        if (currentEvent.type == EventType.DragPerform && containsVideo)
+        {
+            DragAndDrop.AcceptDrag();
+            AddDroppedVideos(draggedVideoPaths);
+            Repaint();
+        }
+
+        currentEvent.Use();
+    }
+
+    private void DrawDroppedVideoList()
+    {
+        if (droppedVideoPaths.Count == 0)
+        {
+            return;
+        }
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField($"已添加视频 ({droppedVideoPaths.Count})", EditorStyles.boldLabel);
+        if (GUILayout.Button("清空", GUILayout.Width(52f)))
+        {
+            droppedVideoPaths.Clear();
+        }
+        EditorGUILayout.EndHorizontal();
+
+        droppedVideosScrollPosition = EditorGUILayout.BeginScrollView(
+            droppedVideosScrollPosition,
+            GUILayout.MinHeight(36f),
+            GUILayout.MaxHeight(120f));
+
+        for (int i = droppedVideoPaths.Count - 1; i >= 0; i--)
+        {
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(new GUIContent(Path.GetFileName(droppedVideoPaths[i]), droppedVideoPaths[i]));
+            if (GUILayout.Button("移除", GUILayout.Width(52f)))
+            {
+                droppedVideoPaths.RemoveAt(i);
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.EndScrollView();
+    }
+
+    private static List<string> GetDraggedVideoPaths()
+    {
+        var paths = new List<string>();
+
+        foreach (string path in DragAndDrop.paths)
+        {
+            if (IsVideoAsset(path))
+            {
+                paths.Add(path);
+            }
+        }
+
+        foreach (UnityEngine.Object draggedObject in DragAndDrop.objectReferences)
+        {
+            string assetPath = AssetDatabase.GetAssetPath(draggedObject);
+            if (IsVideoAsset(assetPath) && !paths.Contains(assetPath))
+            {
+                paths.Add(assetPath);
+            }
+        }
+
+        return paths;
+    }
+
+    private void AddDroppedVideos(IEnumerable<string> paths)
+    {
+        foreach (string path in paths)
+        {
+            if (droppedVideoPaths.Exists(existingPath =>
+                    string.Equals(existingPath, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            droppedVideoPaths.Add(path);
+        }
+    }
+
+    private static void ExportAll(
+        string inputFolderPath,
+        IEnumerable<string> explicitlyAddedPaths,
+        string outputFolderPath,
+        int width,
+        int height)
+    {
         var videoPaths = new List<string>();
 
-        foreach (var g in guids)
+        if (!string.IsNullOrEmpty(inputFolderPath))
         {
-            string p = AssetDatabase.GUIDToAssetPath(g);
-            if (IsVideoAsset(p)) videoPaths.Add(p);
+            // 找到文件夹内的所有视频资源
+            var guids = AssetDatabase.FindAssets("", new[] { inputFolderPath });
+            foreach (var g in guids)
+            {
+                string p = AssetDatabase.GUIDToAssetPath(g);
+                if (IsVideoAsset(p)) videoPaths.Add(p);
+            }
+        }
+
+        foreach (string path in explicitlyAddedPaths)
+        {
+            if (IsVideoAsset(path) && !videoPaths.Exists(existingPath =>
+                    string.Equals(existingPath, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                videoPaths.Add(path);
+            }
         }
 
         if (videoPaths.Count == 0)

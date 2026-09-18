@@ -17,9 +17,40 @@ public static class PlatformStringReplace
         public string CharacterName;
     }
 
-    private static readonly Dictionary<int, RuntimeSpriteAsset> RuntimeSpriteAssets =
-        new Dictionary<int, RuntimeSpriteAsset>();
-    private static readonly HashSet<int> FailedRuntimeSpriteAssets = new HashSet<int>();
+    private readonly struct RuntimeSpriteAssetKey : IEquatable<RuntimeSpriteAssetKey>
+    {
+        public readonly int SpriteInstanceId;
+        public readonly float Scale;
+
+        public RuntimeSpriteAssetKey(int spriteInstanceId, float scale)
+        {
+            SpriteInstanceId = spriteInstanceId;
+            Scale = scale;
+        }
+
+        public bool Equals(RuntimeSpriteAssetKey other)
+        {
+            return SpriteInstanceId == other.SpriteInstanceId && Scale.Equals(other.Scale);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is RuntimeSpriteAssetKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (SpriteInstanceId * 397) ^ Scale.GetHashCode();
+            }
+        }
+    }
+
+    private static readonly Dictionary<RuntimeSpriteAssetKey, RuntimeSpriteAsset> RuntimeSpriteAssets =
+        new Dictionary<RuntimeSpriteAssetKey, RuntimeSpriteAsset>();
+    private static readonly HashSet<RuntimeSpriteAssetKey> FailedRuntimeSpriteAssets =
+        new HashSet<RuntimeSpriteAssetKey>();
     private static readonly Dictionary<int, TMP_SpriteAsset> OriginalTargetSpriteAssets =
         new Dictionary<int, TMP_SpriteAsset>();
     private static readonly HashSet<TMP_SpriteAsset> ExternalSpriteAssets = new HashSet<TMP_SpriteAsset>();
@@ -185,7 +216,9 @@ public static class PlatformStringReplace
 
         if (replacement.TmpIconSprite != null)
         {
-            var directRuntimeAsset = GetOrCreateRuntimeSpriteAsset(replacement.TmpIconSprite);
+            var directRuntimeAsset = GetOrCreateRuntimeSpriteAsset(
+                replacement.TmpIconSprite,
+                replacement.TmpIconScale);
             if (directRuntimeAsset == null)
             {
                 return false;
@@ -218,7 +251,7 @@ public static class PlatformStringReplace
                 return false;
             }
 
-            var runtimeAsset = GetOrCreateRuntimeSpriteAsset(sprite);
+            var runtimeAsset = GetOrCreateRuntimeSpriteAsset(sprite, 1f);
             if (runtimeAsset == null)
             {
                 return false;
@@ -240,15 +273,17 @@ public static class PlatformStringReplace
         return builder.Length > 0;
     }
 
-    private static RuntimeSpriteAsset GetOrCreateRuntimeSpriteAsset(Sprite sprite)
+    private static RuntimeSpriteAsset GetOrCreateRuntimeSpriteAsset(Sprite sprite, float scale)
     {
         var instanceId = sprite.GetInstanceID();
-        if (RuntimeSpriteAssets.TryGetValue(instanceId, out var cached) && cached.Asset != null)
+        scale = scale > 0f ? scale : 1f;
+        var cacheKey = new RuntimeSpriteAssetKey(instanceId, scale);
+        if (RuntimeSpriteAssets.TryGetValue(cacheKey, out var cached) && cached.Asset != null)
         {
             return cached;
         }
 
-        if (FailedRuntimeSpriteAssets.Contains(instanceId))
+        if (FailedRuntimeSpriteAssets.Contains(cacheKey))
         {
             return null;
         }
@@ -259,7 +294,7 @@ public static class PlatformStringReplace
             return null;
         }
 
-        var characterName = $"UTH_Joystick_{instanceId}";
+        var characterName = $"UTH_Joystick_{instanceId}_{scale.GetHashCode()}";
         TMP_SpriteAsset spriteAsset = null;
         Material material = null;
         try
@@ -293,7 +328,7 @@ public static class PlatformStringReplace
             var character = new TMP_SpriteCharacter(0xFFFE, spriteAsset, glyph)
             {
                 name = characterName,
-                scale = 1f
+                scale = scale
             };
             spriteAsset.spriteGlyphTable.Add(glyph);
             spriteAsset.spriteCharacterTable.Add(character);
@@ -312,13 +347,13 @@ public static class PlatformStringReplace
                 Asset = spriteAsset,
                 CharacterName = characterName
             };
-            RuntimeSpriteAssets[instanceId] = result;
+            RuntimeSpriteAssets[cacheKey] = result;
             RefreshRuntimeFallbacks();
             return result;
         }
         catch (Exception exception)
         {
-            FailedRuntimeSpriteAssets.Add(instanceId);
+            FailedRuntimeSpriteAssets.Add(cacheKey);
             Debug.LogWarning(
                 $"PlatformStringReplace: 无法为图标 '{sprite.name}' 创建 TMP SpriteAsset，已回退为文字。{exception.Message}",
                 sprite);
