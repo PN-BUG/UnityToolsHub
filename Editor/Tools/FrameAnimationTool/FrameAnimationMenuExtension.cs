@@ -170,6 +170,14 @@ public static class FrameAnimationMenuExtension
         AssetDatabase.CreateAsset(clip, savePath);
         AssetDatabase.SaveAssets();
 
+        RuntimeAnimatorController controller = null;
+        if (settings.createController)
+        {
+            string ctrlPath = Path.ChangeExtension(savePath, null) + "Controller.controller";
+            controller = UnityEditor.Animations.AnimatorController
+                .CreateAnimatorControllerAtPathWithClip(ctrlPath, clip);
+        }
+
         // 挂载到目标物体
         if (targetGo != null)
         {
@@ -179,14 +187,11 @@ public static class FrameAnimationMenuExtension
             var animator = targetGo.GetComponent<Animator>();
             if (animator == null) animator = targetGo.AddComponent<Animator>();
 
-            if (settings.createController)
-            {
-                string ctrlPath = savePath.Replace(".anim", "Controller.controller");
-                var ctrl = UnityEditor.Animations.AnimatorController
-                    .CreateAnimatorControllerAtPathWithClip(ctrlPath, clip);
-                animator.runtimeAnimatorController = ctrl;
-            }
+            if (controller != null)
+                animator.runtimeAnimatorController = controller;
         }
+
+        AssetDatabase.SaveAssets();
 
         EditorUtility.FocusProjectWindow();
         Selection.activeObject = AssetDatabase.LoadAssetAtPath<AnimationClip>(savePath);
@@ -203,17 +208,30 @@ public static class FrameAnimationMenuExtension
     private static List<Sprite> CollectSpritesFromSelection()
     {
         var sprites = new List<Sprite>();
+        var addedSprites = new HashSet<Sprite>();
         foreach (var obj in Selection.objects)
         {
             var s = obj as Sprite;
-            if (s != null) { sprites.Add(s); continue; }
+            if (s != null)
+            {
+                if (addedSprites.Add(s)) sprites.Add(s);
+                continue;
+            }
 
             var tex = obj as Texture2D;
             if (tex != null)
             {
                 string path = AssetDatabase.GetAssetPath(tex);
-                var loaded = AssetDatabase.LoadAssetAtPath<Sprite>(path);
-                if (loaded != null) sprites.Add(loaded);
+                var loadedSprites = AssetDatabase.LoadAllAssetsAtPath(path)
+                    .OfType<Sprite>()
+                    .ToList();
+
+                // Multiple 模式的子 Sprite 是同一路径下的子资源，需要全部展开为动画帧。
+                loadedSprites.Sort((a, b) => NaturalCompare(a.name, b.name));
+                foreach (var loadedSprite in loadedSprites)
+                {
+                    if (addedSprites.Add(loadedSprite)) sprites.Add(loadedSprite);
+                }
             }
         }
         return sprites;
