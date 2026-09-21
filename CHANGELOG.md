@@ -16,6 +16,7 @@ All notable changes to this package will be documented in this file.
 - 顶部工具菜单改为运行时动态注册，不再向项目或包目录生成任何文件。
 - 工具详情新增 Unity 菜单栏显示开关，可生成 `UnityToolsHub/工具` 下的项目级入口。
 ### Added
+- “GameObject/本地化/自动挂载并绑定”支持 `SpriteRenderer`，可通过 `ProjectAssets` Asset Table 随语言切换 Sprite。
 - 第三方 Git/本地 UPM 包无侵入接入：自动发现包内 `EditorWindow`，无需修改第三方源码
 - 自动识别 `Packages/manifest.json` 中已经安装的 Git 包
 - 自动识别作为直接依赖安装的 Local/Embedded 包，包括 `file:` 与 Git submodule 包

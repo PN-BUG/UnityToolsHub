@@ -307,7 +307,8 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         var targets = Selection.gameObjects.Distinct().ToArray();
         var textCount = 0;
         var imageCount = 0;
-        var skippedImages = 0;
+        var spriteRendererCount = 0;
+        var skippedSprites = 0;
         var failedTranslations = 0;
         StringTableCollection stringCollection = null;
         AssetTableCollection assetCollection = null;
@@ -335,31 +336,34 @@ public sealed class LocalizationPipelineWindow : EditorWindow
                 textCount++;
             }
 
-            foreach (var image in target.GetComponents<Image>())
+            foreach (var spriteTarget in GetLocalizableSpriteComponents(target))
             {
-                if (image.sprite == null || string.IsNullOrEmpty(AssetDatabase.GetAssetPath(image.sprite)))
+                var sprite = GetSprite(spriteTarget);
+                if (sprite == null || string.IsNullOrEmpty(AssetDatabase.GetAssetPath(sprite)))
                 {
-                    skippedImages++;
+                    skippedSprites++;
                     continue;
                 }
                 assetCollection ??= GetOrCreateDefaultAssetCollection();
-                var key = EnsureDefaultSpriteEntry(assetCollection, image.sprite);
-                ConfigureImageLocalization(image, key, assetCollection);
-                imageCount++;
+                var key = EnsureDefaultSpriteEntry(assetCollection, sprite);
+                ConfigureSpriteLocalization(spriteTarget, key, assetCollection);
+                if (spriteTarget is Image) imageCount++;
+                else spriteRendererCount++;
             }
             EditorUtility.SetDirty(target);
         }
 
         AssetDatabase.SaveAssets();
-        var message = $"本地化绑定完成：文本 {textCount} 个，图片 {imageCount} 个";
-        if (skippedImages > 0) message += $"，跳过无 Sprite 的图片 {skippedImages} 个";
+        var message = $"本地化绑定完成：文本 {textCount} 个，Image {imageCount} 个，SpriteRenderer {spriteRendererCount} 个";
+        if (skippedSprites > 0) message += $"，跳过无有效 Sprite 资源的图片组件 {skippedSprites} 个";
         if (failedTranslations > 0) message += $"，翻译失败 {failedTranslations} 条（绑定已保留，可稍后重试）";
         Debug.Log(message);
     }
 
     [MenuItem("GameObject/本地化/自动挂载并绑定", true)]
     private static bool ValidateBindSelectedObjectsFromContextMenu() =>
-        Selection.gameObjects.Any(target => GetLocalizableTextComponents(target).Any() || target.GetComponent<Image>() != null);
+        Selection.gameObjects.Any(target =>
+            GetLocalizableTextComponents(target).Any() || GetLocalizableSpriteComponents(target).Any());
 
     [MenuItem("GameObject/本地化/移除本地化组件", false, 26)]
     private static void RemoveLocalizationFromSelectedObjects()
@@ -2480,15 +2484,20 @@ public sealed class LocalizationPipelineWindow : EditorWindow
             PrefabUtility.RecordPrefabInstancePropertyModifications(spacing);
     }
 
-    private static void ConfigureImageLocalization(Image image, string entryKey, AssetTableCollection collection)
+    private static void ConfigureSpriteLocalization(Component spriteTarget, string entryKey,
+        AssetTableCollection collection)
     {
-        var localizer = image.GetComponents<LocalizeSpriteEvent>().FirstOrDefault(item => HasPersistentTarget(item, image));
+        if (!(spriteTarget is Image) && !(spriteTarget is SpriteRenderer))
+            throw new ArgumentException("仅支持 Image 或 SpriteRenderer。", nameof(spriteTarget));
+
+        var localizer = spriteTarget.GetComponents<LocalizeSpriteEvent>()
+            .FirstOrDefault(item => HasPersistentTarget(item, spriteTarget));
         if (localizer == null)
         {
-            localizer = Undo.AddComponent<LocalizeSpriteEvent>(image.gameObject);
-            var setter = image.GetType().GetProperty("sprite")?.GetSetMethod();
-            if (setter == null) throw new MissingMethodException(image.GetType().FullName, "set_sprite");
-            var listener = Delegate.CreateDelegate(typeof(UnityAction<Sprite>), image, setter) as UnityAction<Sprite>;
+            localizer = Undo.AddComponent<LocalizeSpriteEvent>(spriteTarget.gameObject);
+            var setter = spriteTarget.GetType().GetProperty("sprite")?.GetSetMethod();
+            if (setter == null) throw new MissingMethodException(spriteTarget.GetType().FullName, "set_sprite");
+            var listener = Delegate.CreateDelegate(typeof(UnityAction<Sprite>), spriteTarget, setter) as UnityAction<Sprite>;
             UnityEventTools.AddPersistentListener(localizer.OnUpdateAsset, listener);
             localizer.OnUpdateAsset.SetPersistentListenerState(localizer.OnUpdateAsset.GetPersistentEventCount() - 1, UnityEventCallState.EditorAndRuntime);
         }
@@ -2496,7 +2505,7 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         localizer.AssetReference.TableReference = collection.TableCollectionNameReference;
         localizer.AssetReference.TableEntryReference = entryKey;
         EditorUtility.SetDirty(localizer);
-        if (PrefabUtility.IsPartOfPrefabInstance(image))
+        if (PrefabUtility.IsPartOfPrefabInstance(spriteTarget))
             PrefabUtility.RecordPrefabInstancePropertyModifications(localizer);
     }
 
@@ -2507,10 +2516,10 @@ public sealed class LocalizationPipelineWindow : EditorWindow
         return false;
     }
 
-    private static bool HasPersistentTarget(LocalizeSpriteEvent localizer, Image image)
+    private static bool HasPersistentTarget(LocalizeSpriteEvent localizer, UnityEngine.Object spriteTarget)
     {
         for (var i = 0; i < localizer.OnUpdateAsset.GetPersistentEventCount(); i++)
-            if (localizer.OnUpdateAsset.GetPersistentTarget(i) == image) return true;
+            if (localizer.OnUpdateAsset.GetPersistentTarget(i) == spriteTarget) return true;
         return false;
     }
 
@@ -2518,6 +2527,19 @@ public sealed class LocalizationPipelineWindow : EditorWindow
     {
         foreach (var text in target.GetComponents<Text>()) yield return text;
         foreach (var text in target.GetComponents<TMP_Text>()) yield return text;
+    }
+
+    private static IEnumerable<Component> GetLocalizableSpriteComponents(GameObject target)
+    {
+        foreach (var image in target.GetComponents<Image>()) yield return image;
+        foreach (var spriteRenderer in target.GetComponents<SpriteRenderer>()) yield return spriteRenderer;
+    }
+
+    private static Sprite GetSprite(Component spriteTarget)
+    {
+        if (spriteTarget is Image image) return image.sprite;
+        if (spriteTarget is SpriteRenderer spriteRenderer) return spriteRenderer.sprite;
+        return null;
     }
 
     private static StringTableCollection GetOrCreateDefaultStringCollection()
