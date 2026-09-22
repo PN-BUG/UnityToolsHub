@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Localization;
+using UnityEngine.Localization.Components;
 using UnityEngine.UI;
 using UnityToolsHub.JoystickIcons;
 
@@ -36,6 +37,7 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
     private string requestedSourceText;
     private string platformReplacementColor;
     private int sourceRevision;
+    private int localizationRequestRevision;
     private bool hasRequestedSource;
     private bool isAwaitingLocalizedValue;
 
@@ -43,11 +45,14 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
 
     public async void ApplyLocalizedText(string localizedTemplate)
     {
-        var revision = sourceRevision;
+        var sourceVersion = sourceRevision;
+        // Startup locale selection and user switching can overlap. Only the newest request may write.
+        var requestVersion = ++localizationRequestRevision;
         var template = localizedTemplate ?? string.Empty;
         ResolveTargets();
         var resolvedTemplate = await ApplyTemplateValuesAsync(template);
-        if (revision != sourceRevision || this == null || !isActiveAndEnabled)
+        // An inactive panel still needs its text updated before it becomes visible again.
+        if (this == null || sourceVersion != sourceRevision || requestVersion != localizationRequestRevision)
         {
             return;
         }
@@ -135,7 +140,14 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
         JoystickIconDeviceEvents.ActiveDeviceChanged += OnJoystickDeviceChanged;
         JoystickIconDeviceEvents.ActiveInputMethodChanged += OnInputMethodChanged;
         ResolveTargets();
-        var source = hasRequestedSource ? requestedSourceText : ReadText();
+        // A Prefab instance may serialize a translated display value in TMP_Text. Treating that
+        // value as the source here can overwrite a localization callback that already ran during
+        // scene activation. The captured source is stable and is the correct startup fallback.
+        var source = hasRequestedSource
+            ? requestedSourceText
+            : !string.IsNullOrEmpty(originalSourceText)
+                ? originalSourceText
+                : ReadText();
         sourceRevision++;
         CaptureOriginalSource(source);
         lastObservedSourceText = source;
@@ -144,6 +156,15 @@ public sealed class LocalizedTextReceiver : MonoBehaviour
         if (activeDynamicBinding == null)
         {
             ApplyLocalizedText(source);
+
+            // LocalizeStringEvent can be enabled before this receiver and publish its first value
+            // immediately from a cached table. Refresh after applying the fallback so the selected
+            // locale always gets the final write, independent of component enable order.
+            var localizer = GetComponent<LocalizeStringEvent>();
+            if (localizer != null && localizer.isActiveAndEnabled)
+            {
+                localizer.RefreshString();
+            }
         }
     }
 
