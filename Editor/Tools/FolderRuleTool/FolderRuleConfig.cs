@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
@@ -26,6 +27,19 @@ public enum FileNameCharacterOptions
     RequireLowercaseLetterStart = 1 << 1,
     AllowDigits = 1 << 2,
     AllowUnderscores = 1 << 3
+}
+
+[Flags]
+public enum FileNameCleanupOptions
+{
+    [InspectorName("无")]
+    None = 0,
+    [InspectorName("删除空格")]
+    RemoveSpaces = 1 << 0,
+    [InspectorName("删除换行")]
+    RemoveLineBreaks = 1 << 1,
+    [InspectorName("删除不可见字符")]
+    RemoveInvisibleCharacters = 1 << 2
 }
 
 [Serializable]
@@ -82,6 +96,12 @@ public class AddressableExtensionRule
 [CreateAssetMenu(fileName = "FolderRuleConfig", menuName = "UnityToolsHub/文件夹规则配置", order = 200)]
 public class FolderRuleConfig : ScriptableObject, ISerializationCallbackReceiver
 {
+    /// <summary>
+    /// 当此配置为新资源成功创建 Addressable 条目后触发。
+    /// 编辑器扩展可订阅该事件执行与具体业务相关的增量维护。
+    /// </summary>
+    public static event Action<FolderRuleConfig, string> AssetAdded;
+
     // ══════════════════════════════════════════════════════════
     //  基础配置
     // ══════════════════════════════════════════════════════════
@@ -147,6 +167,11 @@ public class FolderRuleConfig : ScriptableObject, ISerializationCallbackReceiver
     [ShowIf("@fileNameRuleType & FileNameRuleType.CharacterOptions")]
     [LabelText("允许字符")]
     public FileNameCharacterOptions characterOptions = (FileNameCharacterOptions)15;
+
+    [ToggleGroup("文件命名规范")]
+    [LabelText("删除字符")]
+    [Tooltip("选中的字符会被视为命名违规；一键修复时会直接从文件名中删除")]
+    public FileNameCleanupOptions fileNameCleanupOptions = FileNameCleanupOptions.None;
 
     [ToggleGroup("文件命名规范")]
     [ShowIf("@fileNameRuleType & FileNameRuleType.Regex")]
@@ -324,6 +349,24 @@ public class FolderRuleConfig : ScriptableObject, ISerializationCallbackReceiver
         return false;
     }
 
+    internal static void NotifyAssetAdded(FolderRuleConfig config, string assetPath)
+    {
+        var handlers = AssetAdded;
+        if (handlers == null) return;
+
+        foreach (Action<FolderRuleConfig, string> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(config, assetPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+        }
+    }
+
     /// <summary>根据当前配置验证不含扩展名的文件名。</summary>
     public bool IsFileNameValid(string fileName, out string expectedRule)
     {
@@ -331,6 +374,7 @@ public class FolderRuleConfig : ScriptableObject, ISerializationCallbackReceiver
         if (string.IsNullOrEmpty(fileName)) return true;
 
         expectedRule = GetNamingDescription();
+        if (!string.Equals(fileName, ApplyFileNameCleanup(fileName), StringComparison.Ordinal)) return false;
         if (fileNameRuleType == FileNameRuleType.None) return true;
 
         if (IsRuleEnabled(FileNameRuleType.Prefix) &&
@@ -348,6 +392,62 @@ public class FolderRuleConfig : ScriptableObject, ISerializationCallbackReceiver
             return false;
 
         return true;
+    }
+
+    /// <summary>根据配置删除文件名中的空格、换行和不可见字符。</summary>
+    public string ApplyFileNameCleanup(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName) || fileNameCleanupOptions == FileNameCleanupOptions.None)
+            return fileName;
+
+        var result = new System.Text.StringBuilder(fileName.Length);
+        foreach (char character in fileName)
+        {
+            if (!ShouldRemoveCharacter(character)) result.Append(character);
+        }
+        return result.ToString();
+    }
+
+    /// <summary>生成供“一键修复”使用的文件名，不含扩展名。</summary>
+    public string BuildAutoFixedFileName(string fileName)
+    {
+        string fixedName = ApplyFileNameCleanup(fileName);
+        if (!string.IsNullOrEmpty(fixedName) && IsFileNameValid(fixedName, out _)) return fixedName;
+
+        // 保留旧版的一键修复行为：无法只靠删除选定字符修复时，再尝试小写下划线格式。
+        fixedName = fixedName.ToLowerInvariant()
+            .Replace(" ", "_")
+            .Replace("-", "_");
+        fixedName = Regex.Replace(fixedName, @"[^a-z0-9_]", "");
+
+        if (fixedName.Length > 0 && char.IsDigit(fixedName[0])) fixedName = "n" + fixedName;
+        return string.IsNullOrEmpty(fixedName) ? "unnamed" : fixedName;
+    }
+
+    private bool ShouldRemoveCharacter(char character)
+    {
+        if (HasCleanupOption(FileNameCleanupOptions.RemoveSpaces) &&
+            CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.SpaceSeparator)
+            return true;
+
+        if (HasCleanupOption(FileNameCleanupOptions.RemoveLineBreaks) && IsLineBreak(character))
+            return true;
+
+        if (HasCleanupOption(FileNameCleanupOptions.RemoveInvisibleCharacters) &&
+            !IsLineBreak(character))
+        {
+            UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(character);
+            if (category == UnicodeCategory.Control || category == UnicodeCategory.Format)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsLineBreak(char character)
+    {
+        return character == '\r' || character == '\n' || character == '\u0085' ||
+               character == '\u2028' || character == '\u2029';
     }
 
     private string BuildCharacterOptionsRegex()
@@ -379,6 +479,11 @@ public class FolderRuleConfig : ScriptableObject, ISerializationCallbackReceiver
         return (characterOptions & option) == option;
     }
 
+    private bool HasCleanupOption(FileNameCleanupOptions option)
+    {
+        return (fileNameCleanupOptions & option) == option;
+    }
+
     private bool IsRuleEnabled(FileNameRuleType rule)
     {
         return (fileNameRuleType & rule) == rule;
@@ -393,6 +498,9 @@ public class FolderRuleConfig : ScriptableObject, ISerializationCallbackReceiver
         if (IsRuleEnabled(FileNameRuleType.Suffix)) descriptions.Add($"后缀「{fileNameSuffix}」");
         if (IsRuleEnabled(FileNameRuleType.Template)) descriptions.Add($"模板「{fileNameTemplate}」");
         if (IsRuleEnabled(FileNameRuleType.CharacterOptions)) descriptions.Add(GetCharacterOptionsDescription());
+        if (HasCleanupOption(FileNameCleanupOptions.RemoveSpaces)) descriptions.Add("删除空格");
+        if (HasCleanupOption(FileNameCleanupOptions.RemoveLineBreaks)) descriptions.Add("删除换行");
+        if (HasCleanupOption(FileNameCleanupOptions.RemoveInvisibleCharacters)) descriptions.Add("删除不可见字符");
         return descriptions.Count > 0 ? string.Join("；", descriptions) : "未选择检查方式";
     }
 

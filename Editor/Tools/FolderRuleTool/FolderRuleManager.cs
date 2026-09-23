@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
@@ -1272,38 +1271,21 @@ public class FolderRuleManager : EditorWindow
         string ext = Path.GetExtension(assetPath);
         string dir = Path.GetDirectoryName(assetPath)?.Replace('\\', '/') ?? "";
 
-        // 尝试转换为小写+下划线格式
-        string fixedName = fileName.ToLowerInvariant()
-            .Replace(" ", "_")
-            .Replace("-", "_");
-
-        // 移除不合法字符
-        fixedName = Regex.Replace(fixedName, @"[^a-z0-9_]", "");
-
-        // 确保以字母开头
-        if (fixedName.Length > 0 && char.IsDigit(fixedName[0]))
-            fixedName = "n" + fixedName;
-
-        if (string.IsNullOrEmpty(fixedName)) fixedName = "unnamed";
+        string fixedName = v.config.BuildAutoFixedFileName(fileName);
 
         // 检查是否已符合规范
         try
         {
-            if (Regex.IsMatch(fixedName, v.config.fileNamePattern))
+            if (v.config.IsFileNameValid(fixedName, out _))
             {
                 string newPath = dir + "/" + fixedName + ext;
                 if (newPath != assetPath)
                 {
-                    string result = AssetDatabase.RenameAsset(assetPath, fixedName + ext);
+                    string result = AssetDatabase.RenameAsset(assetPath, fixedName);
                     if (!string.IsNullOrEmpty(result))
                     {
-                        // RenameAsset 可能不包含扩展名
-                        result = AssetDatabase.RenameAsset(assetPath, fixedName);
-                        if (!string.IsNullOrEmpty(result))
-                        {
-                            Debug.LogWarning($"[FolderRuleManager] 重命名失败: {result}");
-                            return false;
-                        }
+                        Debug.LogWarning($"[FolderRuleManager] 重命名失败: {result}");
+                        return false;
                     }
                     AssetDatabase.SaveAssets();
                     return true;

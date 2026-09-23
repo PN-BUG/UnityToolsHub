@@ -16,6 +16,7 @@
 - ✅ **预设系统**（保存/加载规则模板，含刷新设置）
 - ✅ **忽略列表**（拖拽资源或文件夹，不受规则影响）
 - ✅ **逐配置自动扫描**（每个配置独立开关和间隔）
+- ✅ **新增资源回调**（成功创建 Addressable 条目后通知业务扩展）
 
 ---
 
@@ -115,8 +116,19 @@ scanInterval = 30f                  // 扫描间隔（秒，最小 5）
 enableNamingRule = true                                         // 启用命名检查
 fileNamePattern = "^[a-z][a-z0-9_]*$"                          // 正则表达式
 namingDescription = "文件名须为小写字母开头，仅含小写字母、数字、下划线"  // 违规提示
+fileNameCleanupOptions = RemoveSpaces | RemoveLineBreaks | RemoveInvisibleCharacters // 删除指定字符
 namingIgnoreExtensions = ".meta,.cs,.asmdef"                    // 忽略的扩展名
 ```
+
+**删除字符选项：**
+
+| 选项 | 说明 |
+|------|------|
+| `RemoveSpaces` | 删除普通、全角及其他 Unicode 空格 |
+| `RemoveLineBreaks` | 删除 CR、LF 及 Unicode 行/段分隔符 |
+| `RemoveInvisibleCharacters` | 删除制表符、零宽字符等控制/格式字符（不含换行） |
+
+选中的字符会在扫描时被判定为命名违规，并在“一键修复”时直接从文件名中删除。三个选项默认关闭，已有配置行为保持不变。
 
 **常用正则示例：**
 
@@ -154,6 +166,13 @@ addressableTargetExtensions = ".png,.jpg,.prefab,.asset"  // 生效扩展名
 | `{name}` | `hero_idle` |
 | `{folder}/{path}` | `sprites/characters/hero_idle` |
 | `assets/{folder}/{name}` | `assets/sprites/hero_idle` |
+
+**音频枚举联动：**
+
+- 新导入的 `AudioClip` 成功创建 Addressable 条目后，会触发 `FolderRuleConfig.AssetAdded`。
+- Addressable 分组为 `Audio-BGM` 时追加到 `BGMClipId`，分组为 `Audio-SFX` 时追加到 `SFXClipId`。
+- 多个音频会在导入结束后去重、排序并批量追加，只新增缺失成员，不重排现有枚举值。
+- `SceneAudioConfiguration` 无需引用 FolderRuleConfig，也无需再负责 Addressable 维护。
 
 ### 🖼️ 贴图导入规则
 
@@ -263,6 +282,7 @@ textureTargetExtensions = ".png,.jpg,.jpeg,.tga,.psd"  // 生效扩展名
 │ 命名检查 → 控制台警告（不自动修改）       │
 │ Addressable → 自动创建条目（含命名/标签） │
 │ 贴图规则 → 自动修正导入设置并 Reimport    │
+│ 新增回调 → 通知业务扩展执行增量维护       │
 └─────────────────────────────────────────┘
 ```
 
@@ -324,7 +344,7 @@ textureTargetExtensions = ".png,.jpg,.jpeg,.tga,.psd"  // 生效扩展名
 
 ## ⚠️ 注意事项
 
-1. **命名修复**：自动修复仅尝试将文件名转为小写+下划线格式，复杂情况需手动重命名
+1. **命名修复**：自动修复会先删除配置中选中的空格、换行或不可见字符；若仍不符合规则，再尝试转为小写+下划线格式，复杂情况需手动重命名
 2. **Addressable**：需要项目已初始化 Addressable 系统（`Window` → `Asset Management` → `Addressables`）
 3. **贴图规则**：修改后会自动 `SaveAndReimport`，可能触发资源重新导入
 4. **配置冲突**：同一文件夹有多个配置时，所有匹配的规则都会生效

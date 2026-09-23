@@ -37,6 +37,9 @@ public class FolderRulePreset : ScriptableObject
 
     public FileNameCharacterOptions characterOptions = (FileNameCharacterOptions)15;
 
+    [Tooltip("一键修复时需要从文件名中删除的字符")]
+    public FileNameCleanupOptions fileNameCleanupOptions = FileNameCleanupOptions.None;
+
     [Tooltip("文件名正则表达式")]
     public string fileNamePattern = "^[a-z][a-z0-9_]*$";
 
@@ -113,6 +116,7 @@ public class FolderRulePreset : ScriptableObject
         enableNamingRule = config.enableNamingRule;
         fileNameRuleType = config.fileNameRuleType;
         characterOptions = config.characterOptions;
+        fileNameCleanupOptions = config.fileNameCleanupOptions;
         fileNamePattern = config.fileNamePattern;
         namingDescription = config.namingDescription;
         namingIgnoreExtensions = config.namingIgnoreExtensions;
@@ -143,6 +147,7 @@ public class FolderRulePreset : ScriptableObject
         config.enableNamingRule = enableNamingRule;
         config.fileNameRuleType = fileNameRuleType;
         config.characterOptions = characterOptions;
+        config.fileNameCleanupOptions = fileNameCleanupOptions;
         config.fileNamePattern = fileNamePattern;
         config.namingDescription = namingDescription;
         config.namingIgnoreExtensions = namingIgnoreExtensions;

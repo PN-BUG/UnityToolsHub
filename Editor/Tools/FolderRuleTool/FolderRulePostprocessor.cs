@@ -31,6 +31,7 @@ public class FolderRulePostprocessor : AssetPostprocessor
         var allChanged = new List<string>();
         if (importedAssets != null) allChanged.AddRange(importedAssets);
         if (movedAssets != null) allChanged.AddRange(movedAssets);
+        var importedPaths = new HashSet<string>(importedAssets ?? Array.Empty<string>(), StringComparer.Ordinal);
 
         if (allChanged.Count == 0) return;
 
@@ -57,7 +58,11 @@ public class FolderRulePostprocessor : AssetPostprocessor
                 if (config.enableAddressable)
                 {
                     if (TryApplyAddressable(config, assetPath))
+                    {
                         anyAddressableChange = true;
+                        if (importedPaths.Contains(assetPath))
+                            FolderRuleConfig.NotifyAssetAdded(config, assetPath);
+                    }
                 }
 
                 // 贴图导入设置
