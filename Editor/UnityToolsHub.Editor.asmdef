@@ -7,11 +7,8 @@
         "UnityToolsHub.Testing.Runtime",
         "Nodin.Runtime",
         "Nodin.Editor",
-        "Unity.Localization",
-        "Unity.Localization.Editor",
         "Unity.TextMeshPro",
-        "UnityEngine.UI",
-        "UnityFramework.Localization"
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"

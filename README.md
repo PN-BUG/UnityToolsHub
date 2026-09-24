@@ -7,7 +7,7 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 
 ## 功能特性
 
-- **自动发现**：扫描所有程序集中带有 `[ToolInfo]` 特性的 `EditorWindow` 类，Priority 在发现时缓存避免排序时反射
+- **自动发现**：扫描所有程序集中带有 `[ToolInfo]` 特性的 `EditorWindow`；框架本地化与手柄图标窗口在程序集存在时通过类型查找加入列表
 - **分类管理**：按功能分类展示工具，支持自定义分类图标和颜色
 - **文件夹式分类**：支持拖拽工具切换分类、拖拽分类排序、新建/重命名/删除自定义分类
 - **快速搜索**：支持关键字搜索和标签过滤
@@ -183,7 +183,7 @@ SDK 的完整示例见 `SDK~/README.md`。
 | 项目打包 | 构建工具 | 项目批量打包 |
 | 测试窗口 | 调试工具 | 聚合展示场景中标记了 [Test] 的方法和字段 |
 
-> **注意**：所有工具均通过 `[ToolInfo]` 特性自动注册，无需手动维护此列表。
+框架中的“本地化流水线”和“手柄图标绑定”已分别移至 `Assets/UnityFramework/Editor/LocalizationTools` 与 `Assets/UnityFramework/Editor/JoystickIcons`。Hub 仅在对应窗口类型已加载时显示入口；它们各自保留菜单，不依赖 Hub SDK。Hub 自带窗口主要通过 `[ToolInfo]` 注册，另有少量跨程序集入口由 Hub 显式发现。
 
 ## Unity 主工具栏按钮
 
@@ -214,6 +214,7 @@ UnityToolsHub/
 ├── CHANGELOG.md
 ├── LICENSE
 ├── README.md
+├── SDK~/                       # 可单独发布的 UnityToolAttribute 元数据包
 └── Editor/
     ├── Hub/                        # Hub 核心面板
     │   ├── UnityToolsHub.cs        # 主窗口（状态管理、生命周期、使用频率/隐藏项管理、分类管理）
@@ -222,8 +223,7 @@ UnityToolsHub/
     │   ├── RightPanel.cs           # 右侧详情面板（欢迎页/详情/创建表单/隐藏项管理/第三方工具管理）
     │   ├── DataStructures.cs       # 数据结构（ToolEntry、FolderConfig、UsageStats、HiddenItems、ThirdPartyToolRegistry）
     │   ├── ShortcutBinding.cs      # 快捷键绑定结构体（解析/序列化/Event 转换）
-    │   ├── ShortcutManager.cs      # 快捷键管理（录制、导航、冲突检测）
-    │   └── ToolEditorWindow.cs     # 工具编辑器基类（统一深色主题、绘图工具方法，委托 Nodin Styles/Palette）
+    │   └── ShortcutManager.cs      # 快捷键管理（录制、导航、冲突检测）
     ├── InsidersTest/               # 内部测试工具
     │   ├── CryptoUtility.cs        # 加密工具
     │   ├── JsonViewer.cs           # JSON 查看器
@@ -250,7 +250,10 @@ UnityToolsHub/
     ├── Setup/                      # 自动配置（独立程序集，不引用 Nodin）
     │   ├── UnityToolsHub.Setup.asmdef
     │   └── NodinSetup.cs           # [InitializeOnLoad] 自动写入 manifest.json
-    ├── ToolInfoAttribute.cs        # 工具信息特性定义
+    ├── SDK/
+    │   └── ToolInfoAttribute.cs    # Editor-only 的工具信息特性
+    ├── ToolWindowBase/
+    │   └── ToolEditorWindow.cs     # 工具编辑器基类（委托 Nodin Styles/Palette）
     ├── UnityPathUtility.cs         # 路径工具
     ├── CreateLegacyUIMenu.cs       # Unity 版本兼容辅助
     ├── UnityFrameworkHomeWindow.cs # 框架主页窗口
@@ -315,21 +318,20 @@ public static class MyPluginDetector
 | 属性 | 值 |
 |------|-----|
 | 包名 | `com.zko.unitytoolshub` |
-| 版本 | 1.4.0 |
+| 版本 | 1.3.0（以 `package.json` 为准） |
 | Unity 版本 | 2021.3+ |
 | 仓库地址 | https://github.com/PN-BUG/UnityToolsHub.git |
 
 ## 依赖关系
 
-```
-UnityToolsHub
-  └── Nodin (com.zko.nodin) — 自动安装，无需手动配置
-```
+主程序集 `UnityToolsHub.Editor` 依赖 `UnityToolsHub.SDK`、`UnityToolsHub.ToolWindowBase.Editor`、`UnityToolsHub.Testing.Runtime`、Nodin、TextMeshPro 和 Unity UI。`UnityToolsHub.Testing.Runtime` 位于框架的 `Runtime/ToolAttributes`，供项目运行时脚本和 Hub 测试窗口共同引用。
+
+仅复制 `Assets/UnityFramework/Editor/UnityToolsHub` 目录**不能保证完整 Hub 编译**：测试窗口缺少 `UnityToolsHub.Testing.Runtime`，Toolbar 与 FolderRuleTool 的 asmdef 仍引用 `UnityFramework`。本地化、手柄图标程序集已移出 Hub，Hub 通过类型查找可选显示其窗口，不再直接引用它们。若要发布独立 Hub 包，需要先拆分或移除上述框架相关程序集，并在干净项目中验证。`SDK~/` 是单独的元数据包，不受这些主程序依赖影响。
 
 Nodin 依赖通过 `Editor/Setup/NodinSetup.cs` 自动处理：
 - 首次加载时自动将 `com.zko.nodin` 写入 `manifest.json`
 - Unity 自动解析并下载 Nodin 包
-- 独立 asmdef（`UnityToolsHub.Setup`），不引用 Nodin，确保即使 Nodin 未安装也能编译
+- 独立 asmdef（`UnityToolsHub.Setup`）不引用 Nodin，使安装逻辑在 Nodin 尚未就绪时仍可加载；Hub 主程序集仍需等待依赖解析完成
 
 Nodin 包同时提供 `Editor/EditorCore/` 模块（`Palette`、`Theme`、`Styles`、`Drawing`），为 Hub 和各工具窗口提供统一的深色主题配色、GUIStyle 缓存、纹理与绘图工具。`ToolEditorWindow` 基类委托 `Styles.EnsureInit()` 和 `Palette.MakeTex()`，避免重复的样式与纹理管理。
 

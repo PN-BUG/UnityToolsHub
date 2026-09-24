@@ -243,6 +243,20 @@ public partial class UnityToolsHub
     private void AddSpecialTools()
     {
         // ── 跨程序集工具（无法使用 [ToolInfo] 特性的 Editor 子文件夹工具）──
+        if (FindType("JoystickIconBindingWindow") != null)
+        {
+            AddCrossAssemblyTool("手柄图标绑定", "UI工具",
+                "配置不同手柄的设备名匹配规则，以及按钮 ID 对应的 Sprite。配置保存在独立的 ScriptableObject 中。",
+                "JoystickIconBindingWindow", "🎮", new[] { "手柄", "Joystick", "Gamepad", "按钮", "图标", "Sprite" });
+        }
+
+        if (FindType("LocalizationPipelineWindow") != null)
+        {
+            AddCrossAssemblyTool("本地化流水线", "文本工具",
+                "扫描 Text/TMP 文本，翻译并生成 Unity Localization String Tables，自动挂载本地化组件。支持 Prefab 优先、场景 Override、组合文本和占位符保护。",
+                "LocalizationPipelineWindow", "文", new[] { "Localization", "本地化", "翻译", "Text", "TMP", "Prefab" });
+        }
+
         AddCrossAssemblyTool("数据工具", "数据管理",
             "清理数据工具：可选择清空控制台日志、PersistentData 目录、PlayerPrefs。\n\n支持 GamingDataSO 配置管理，一键重置运行时数据。",
             "DataToolsWindow", "☰", new[] { "清理", "PlayerPrefs", "SO配置" });
