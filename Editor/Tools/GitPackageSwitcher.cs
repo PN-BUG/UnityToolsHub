@@ -906,8 +906,7 @@ public class GitPackageSwitcher : ToolEditorWindow
             {
                 EditorGUILayout.BeginHorizontal();
                 {
-                    if (!string.IsNullOrEmpty(pkg.gitUrl)
-                        && BtnWarn("Git 更新", GUILayout.Width(96), GUILayout.Height(26)))
+                    if (BtnWarn("Git 更新", GUILayout.Width(96), GUILayout.Height(26)))
                         PullFromGit(pkg);
 
                     if (BtnPrimary("打开目录", GUILayout.Width(96), GUILayout.Height(26)))
@@ -1102,7 +1101,8 @@ public class GitPackageSwitcher : ToolEditorWindow
                     // Fallback: 从 .git/config 读取远程 URL
                     if (string.IsNullOrEmpty(info.gitUrl))
                     {
-                        info.gitUrl = TryReadGitConfig(GetPackageDirectory(info));
+                        string localDir = GetPackageDirectory(info);
+                        info.gitUrl = TryReadGitConfig(info.isAsset ? FindGitWorkingDirectory(localDir) : localDir);
                     }
 
                     // Fallback: 从元数据文件读取
@@ -1207,7 +1207,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                         isLocal = true,
                         isAsset = true,
                         isSelected = false,
-                        gitUrl = TryReadGitConfig(dir),
+                        gitUrl = TryReadGitConfig(FindGitWorkingDirectory(dir)),
                     };
                     if (!string.IsNullOrEmpty(info.gitUrl))
                         ParseGitUrl(info.gitUrl, info);
@@ -1357,7 +1357,7 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         if (_isProcessing) return;
 
-        if (string.IsNullOrEmpty(pkg.gitUrl))
+        if (!pkg.isAsset && string.IsNullOrEmpty(pkg.gitUrl))
         {
             ShowStatus($"{pkg.packageName} 没有记录 Git URL，无法拉取", MessageType.Warning);
             return;
@@ -1370,13 +1370,19 @@ public class GitPackageSwitcher : ToolEditorWindow
             return;
         }
 
-        // 检查是否是 git 仓库
-        string gitDir = Path.Combine(localPath, ".git");
-        if (!Directory.Exists(gitDir) && !File.Exists(gitDir))
+        string gitWorkingDirectory = FindGitWorkingDirectory(localPath);
+        if (string.IsNullOrEmpty(gitWorkingDirectory))
         {
-            ShowStatus($"{pkg.localFolder} 不是 Git 仓库，无法拉取更新", MessageType.Warning);
+            ShowStatus($"{pkg.packageName} 所在目录没有 Git 仓库，无法拉取更新", MessageType.Warning);
             return;
         }
+
+        // 嵌套包与上层包可能共用一个仓库，拉取会更新整个仓库。
+        if (pkg.isAsset && !string.Equals(localPath, gitWorkingDirectory, StringComparison.OrdinalIgnoreCase)
+            && !EditorUtility.DisplayDialog("确认更新 Git 仓库",
+                $"{pkg.packageName} 位于上层 Git 仓库中。\n\n更新将拉取整个仓库：\n{gitWorkingDirectory}",
+                "更新", "取消"))
+            return;
 
         _isProcessing = true;
 
@@ -1385,7 +1391,7 @@ public class GitPackageSwitcher : ToolEditorWindow
             ShowStatus($"正在拉取 {pkg.packageName} 最新代码...", MessageType.Info);
             Repaint();
 
-            if (RunGitCommand("pull", localPath))
+            if (RunGitCommand("pull", gitWorkingDirectory))
             {
                 ShowStatus($"✅ {pkg.packageName} 已更新到最新版本", MessageType.Info);
             }
@@ -1413,6 +1419,21 @@ public class GitPackageSwitcher : ToolEditorWindow
     private string GetPackageDirectory(PackageInfo pkg)
     {
         return Path.Combine(_projectRoot, GetPackageRelativePath(pkg));
+    }
+
+    private string FindGitWorkingDirectory(string directory)
+    {
+        string projectRoot = Path.GetFullPath(_projectRoot).TrimEnd(Path.DirectorySeparatorChar);
+        string current = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
+        while (current.StartsWith(projectRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(current, projectRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            string marker = Path.Combine(current, ".git");
+            if (Directory.Exists(marker) || File.Exists(marker)) return current;
+            if (string.Equals(current, projectRoot, StringComparison.OrdinalIgnoreCase)) break;
+            current = Path.GetDirectoryName(current);
+        }
+        return null;
     }
 
     private void OpenPackageDirectory(PackageInfo pkg)
@@ -1712,6 +1733,7 @@ public class GitPackageSwitcher : ToolEditorWindow
     /// <summary>从 .git/config 读取远程 URL</summary>
     private static string TryReadGitConfig(string localDir)
     {
+        if (string.IsNullOrEmpty(localDir)) return null;
         try
         {
             string gitMarker = Path.Combine(localDir, ".git");
