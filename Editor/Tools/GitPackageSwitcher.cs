@@ -45,6 +45,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         public bool isLocal;
         public bool isGit;
         public bool isSelected;
+        public bool isAsset;
         public string branch;
         public string subPath;
     }
@@ -400,12 +401,10 @@ public class GitPackageSwitcher : ToolEditorWindow
 
         try
         {
-            // 扫描目录下所有包含 package.json 的子目录
-            foreach (var subDir in Directory.GetDirectories(directoryPath))
+            // 包可能直接位于所选目录，也可能嵌套在 Assets 的多级子目录中。
+            foreach (var packageJsonPath in Directory.GetFiles(directoryPath, "package.json", SearchOption.AllDirectories))
             {
-                string packageJsonPath = Path.Combine(subDir, "package.json");
-                if (!File.Exists(packageJsonPath)) continue;
-
+                string subDir = Path.GetDirectoryName(packageJsonPath);
                 string folderName = Path.GetFileName(subDir);
                 var pkg = new ScannedPackage
                 {
@@ -879,8 +878,8 @@ public class GitPackageSwitcher : ToolEditorWindow
 
                     if (pkg.isLocal)
                     {
-                        string localPath = Path.Combine("Packages", pkg.localFolder);
-                        bool exists = Directory.Exists(Path.Combine(_projectRoot, "Packages", pkg.localFolder));
+                        string localPath = GetPackageRelativePath(pkg);
+                        bool exists = Directory.Exists(GetPackageDirectory(pkg));
                         string status = exists ? "目录存在" : "目录缺失";
                         GUILayout.Label(new GUIContent($"本地路径  {localPath}  ·  {status}", localPath), _metaStyle, GUILayout.MinWidth(0));
                     }
@@ -934,6 +933,18 @@ public class GitPackageSwitcher : ToolEditorWindow
                 if (BtnDanger("从 manifest 移除", GUILayout.Width(196), GUILayout.Height(24)))
                     RemoveFromManifest(pkg);
             }
+            else if (pkg.isAsset)
+            {
+                EditorGUILayout.BeginHorizontal();
+                {
+                    if (BtnWarn("Git 更新", GUILayout.Width(96), GUILayout.Height(26)))
+                        PullFromGit(pkg);
+
+                    if (BtnPrimary("打开目录", GUILayout.Width(96), GUILayout.Height(26)))
+                        OpenPackageDirectory(pkg);
+                }
+                EditorGUILayout.EndHorizontal();
+            }
             else if (pkg.isLocal)
             {
                 EditorGUILayout.BeginHorizontal();
@@ -953,13 +964,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                 EditorGUILayout.BeginHorizontal();
                 {
                     if (BtnPrimary("打开目录", GUILayout.Width(96), GUILayout.Height(24)))
-                    {
-                        string localPath = Path.Combine(_projectRoot, "Packages", pkg.localFolder);
-                        if (Directory.Exists(localPath))
-                            EditorUtility.RevealInFinder(localPath);
-                        else
-                            ShowStatus($"目录不存在: {localPath}", MessageType.Warning);
-                    }
+                        OpenPackageDirectory(pkg);
 
                     GUILayout.Space(4);
 
@@ -1125,18 +1130,20 @@ public class GitPackageSwitcher : ToolEditorWindow
                 {
                     // 已经是本地引用
                     info.isLocal = true;
-                    info.localFolder = ParseLocalFolder(value);
+                    string filePath = value.Substring(5).Replace('\\', '/');
+                    info.isAsset = filePath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase);
+                    info.localFolder = info.isAsset ? filePath : ParseLocalFolder(value);
                     info.gitUrl = TryFindGitUrlFromLock(pkgName);
 
                     // Fallback: 从 .git/config 读取远程 URL
                     if (string.IsNullOrEmpty(info.gitUrl))
                     {
-                        string localDir = Path.Combine(_projectRoot, "Packages", info.localFolder);
-                        info.gitUrl = TryReadGitConfig(localDir);
+                        string localDir = GetPackageDirectory(info);
+                        info.gitUrl = TryReadGitConfig(info.isAsset ? FindGitWorkingDirectory(localDir) : localDir);
                     }
 
                     // Fallback: 从元数据文件读取
-                    if (string.IsNullOrEmpty(info.gitUrl))
+                    if (string.IsNullOrEmpty(info.gitUrl) && !info.isAsset)
                         info.gitUrl = TryReadGitMeta(info.localFolder);
 
                     if (!string.IsNullOrEmpty(info.gitUrl))
@@ -1204,6 +1211,43 @@ public class GitPackageSwitcher : ToolEditorWindow
                             ParseGitUrl(info.gitUrl, info);
                     }
 
+                    _packages.Add(info);
+                }
+            }
+
+            // Assets 下的包不在 UPM manifest 或 Packages 目录中。
+            string assetsDir = Path.Combine(_projectRoot, "Assets");
+            if (Directory.Exists(assetsDir))
+            {
+                foreach (var pjPath in Directory.GetFiles(assetsDir, "package.json", SearchOption.AllDirectories))
+                {
+                    string dir = Path.GetDirectoryName(pjPath);
+                    if (_packages.Any(p => p.isAsset &&
+                        string.Equals(GetPackageDirectory(p), dir, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    string pkgName = Path.GetFileName(dir);
+                    try
+                    {
+                        string pj = File.ReadAllText(pjPath);
+                        var nameMatch = Regex.Match(pj, "\"name\"\\s*:\\s*\"([^\"]+)\"");
+                        if (nameMatch.Success) pkgName = nameMatch.Groups[1].Value;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"读取包信息失败: {pjPath} · {ex.Message}");
+                    }
+
+                    var info = new PackageInfo
+                    {
+                        packageName = pkgName,
+                        localFolder = GetRelativePath(_projectRoot, dir),
+                        isLocal = true,
+                        isAsset = true,
+                        isSelected = false,
+                        gitUrl = TryReadGitConfig(FindGitWorkingDirectory(dir)),
+                    };
+                    if (!string.IsNullOrEmpty(info.gitUrl))
+                        ParseGitUrl(info.gitUrl, info);
                     _packages.Add(info);
                 }
             }
@@ -1350,26 +1394,32 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         if (_isProcessing) return;
 
-        if (string.IsNullOrEmpty(pkg.gitUrl))
+        if (!pkg.isAsset && string.IsNullOrEmpty(pkg.gitUrl))
         {
             ShowStatus($"{pkg.packageName} 没有记录 Git URL，无法拉取", MessageType.Warning);
             return;
         }
 
-        string localPath = Path.Combine(_projectRoot, "Packages", pkg.localFolder);
+        string localPath = GetPackageDirectory(pkg);
         if (!Directory.Exists(localPath))
         {
             ShowStatus($"本地目录不存在: {localPath}", MessageType.Warning);
             return;
         }
 
-        // 检查是否是 git 仓库
-        string gitDir = Path.Combine(localPath, ".git");
-        if (!Directory.Exists(gitDir))
+        string gitWorkingDirectory = FindGitWorkingDirectory(localPath);
+        if (string.IsNullOrEmpty(gitWorkingDirectory))
         {
-            ShowStatus($"{pkg.localFolder} 不是 Git 仓库，无法拉取更新", MessageType.Warning);
+            ShowStatus($"{pkg.packageName} 所在目录没有 Git 仓库，无法拉取更新", MessageType.Warning);
             return;
         }
+
+        // 嵌套包与上层包可能共用一个仓库，拉取会更新整个仓库。
+        if (pkg.isAsset && !string.Equals(localPath, gitWorkingDirectory, StringComparison.OrdinalIgnoreCase)
+            && !EditorUtility.DisplayDialog("确认更新 Git 仓库",
+                $"{pkg.packageName} 位于上层 Git 仓库中。\n\n更新将拉取整个仓库：\n{gitWorkingDirectory}",
+                "更新", "取消"))
+            return;
 
         _isProcessing = true;
 
@@ -1378,7 +1428,7 @@ public class GitPackageSwitcher : ToolEditorWindow
             ShowStatus($"正在拉取 {pkg.packageName} 最新代码...", MessageType.Info);
             Repaint();
 
-            if (RunGitCommand("pull", localPath))
+            if (RunGitCommand("pull", gitWorkingDirectory))
             {
                 ShowStatus($"✅ {pkg.packageName} 已更新到最新版本", MessageType.Info);
             }
@@ -1396,6 +1446,40 @@ public class GitPackageSwitcher : ToolEditorWindow
         {
             _isProcessing = false;
         }
+    }
+
+    private string GetPackageRelativePath(PackageInfo pkg)
+    {
+        return pkg.isAsset ? pkg.localFolder : Path.Combine("Packages", pkg.localFolder);
+    }
+
+    private string GetPackageDirectory(PackageInfo pkg)
+    {
+        return Path.Combine(_projectRoot, GetPackageRelativePath(pkg));
+    }
+
+    private string FindGitWorkingDirectory(string directory)
+    {
+        string projectRoot = Path.GetFullPath(_projectRoot).TrimEnd(Path.DirectorySeparatorChar);
+        string current = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
+        while (current.StartsWith(projectRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(current, projectRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            string marker = Path.Combine(current, ".git");
+            if (Directory.Exists(marker) || File.Exists(marker)) return current;
+            if (string.Equals(current, projectRoot, StringComparison.OrdinalIgnoreCase)) break;
+            current = Path.GetDirectoryName(current);
+        }
+        return null;
+    }
+
+    private void OpenPackageDirectory(PackageInfo pkg)
+    {
+        string path = GetPackageDirectory(pkg);
+        if (Directory.Exists(path))
+            EditorUtility.RevealInFinder(path);
+        else
+            ShowStatus($"目录不存在: {path}", MessageType.Warning);
     }
 
     /// <summary>让 UPM 重新解析 Git 依赖；不直接修改只读的 PackageCache。</summary>
@@ -1546,7 +1630,7 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         foreach (var pkg in packages)
         {
-            if (pkg.isLocal)
+            if (pkg.isLocal && !pkg.isAsset)
                 SwitchToGit(pkg);
         }
     }
@@ -1555,7 +1639,7 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         foreach (var pkg in packages)
         {
-            if (pkg.isLocal)
+            if (pkg.isLocal && !string.IsNullOrEmpty(pkg.gitUrl))
                 PullFromGit(pkg);
         }
     }
@@ -1686,11 +1770,19 @@ public class GitPackageSwitcher : ToolEditorWindow
     /// <summary>从 .git/config 读取远程 URL</summary>
     private static string TryReadGitConfig(string localDir)
     {
-        string gitConfig = Path.Combine(localDir, ".git", "config");
-        if (!File.Exists(gitConfig)) return null;
-
+        if (string.IsNullOrEmpty(localDir)) return null;
         try
         {
+            string gitMarker = Path.Combine(localDir, ".git");
+            string gitConfig = Path.Combine(gitMarker, "config");
+            if (File.Exists(gitMarker))
+            {
+                var match = Regex.Match(File.ReadAllText(gitMarker), @"^gitdir:\s*(.+)$", RegexOptions.Multiline);
+                if (match.Success)
+                    gitConfig = Path.Combine(Path.GetFullPath(Path.Combine(localDir, match.Groups[1].Value.Trim())), "config");
+            }
+            if (!File.Exists(gitConfig)) return null;
+
             string cfg = File.ReadAllText(gitConfig);
             var urlMatch = Regex.Match(cfg, "url\\s*=\\s*(.+)");
             if (urlMatch.Success)

@@ -4,14 +4,11 @@
     "references": [
         "UnityToolsHub.ToolWindowBase.Editor",
         "UnityToolsHub.SDK",
+        "UnityToolsHub.Testing.Runtime",
         "Nodin.Runtime",
         "Nodin.Editor",
-        "UnityFramework",
-        "Unity.Localization",
-        "Unity.Localization.Editor",
         "Unity.TextMeshPro",
-        "UnityEngine.UI",
-        "UnityToolsHub.Localization.Runtime"
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"

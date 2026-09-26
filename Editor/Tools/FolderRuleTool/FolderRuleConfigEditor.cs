@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using Nodin.Editor;
@@ -496,8 +495,7 @@ public class FolderRuleConfigEditor : NodinEditor
             switch (v.ruleType)
             {
                 case "命名":
-                    // 命名违规无法自动修复，仅提示
-                    Debug.LogWarning($"[FolderRule] 命名违规需手动重命名: {v.assetPath}");
+                    FixNaming(config, v.assetPath);
                     break;
 
                 case "Addressable":
@@ -513,6 +511,28 @@ public class FolderRuleConfigEditor : NodinEditor
         {
             Debug.LogError($"[FolderRule] 修复失败 ({v.assetPath}): {ex.Message}");
         }
+    }
+
+    private static void FixNaming(FolderRuleConfig config, string assetPath)
+    {
+        string fileName = Path.GetFileNameWithoutExtension(assetPath);
+        string fixedName = config.BuildAutoFixedFileName(fileName);
+        if (!config.IsFileNameValid(fixedName, out _))
+        {
+            Debug.LogWarning($"[FolderRule] 无法自动修复命名: {assetPath}（建议手动重命名）");
+            return;
+        }
+
+        if (string.Equals(fileName, fixedName, StringComparison.Ordinal)) return;
+
+        string result = AssetDatabase.RenameAsset(assetPath, fixedName);
+        if (!string.IsNullOrEmpty(result))
+        {
+            Debug.LogWarning($"[FolderRule] 重命名失败: {result}");
+            return;
+        }
+
+        AssetDatabase.SaveAssets();
     }
 
     // ── Addressable 应用 ────────────────────────────────────

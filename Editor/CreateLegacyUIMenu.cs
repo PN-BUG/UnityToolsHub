@@ -116,18 +116,16 @@ public static class CreateLegacyUIMenu
 #endif
     }
 
+#if UNITY_2023_1_OR_NEWER
     /// <summary>
-    /// 兼容版本的 FindObjectOfType（可指定查找模式）
+    /// 兼容版本的 FindObjectOfType（可指定查找模式）。
+    /// FindObjectsInactive 在旧版 Unity 中不存在，因此整个重载必须参与条件编译。
     /// </summary>
     public static T FindAnyObject<T>(FindObjectsInactive findObjectsInactive) where T : Object
     {
-#if UNITY_2023_1_OR_NEWER
         return Object.FindAnyObjectByType<T>(findObjectsInactive);
-#else
-                        // 旧版 Unity 不支持 FindObjectsInactive 参数，忽略该参数
-                        return Object.FindObjectOfType<T>();
-#endif
     }
+#endif
 
     /// <summary>
     /// 兼容版本的 Physics2D.OverlapPointNonAlloc

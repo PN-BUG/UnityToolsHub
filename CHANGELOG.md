@@ -3,9 +3,10 @@ All notable changes to this package will be documented in this file.
 
 ## [Unreleased]
 
-- 工具发现使用 Unity `TypeCache` 获取 `[ToolInfo]` 窗口，避免重复遍历所有程序集类型。
-- 工具类型去重改为 HashSet 索引，避免 SDK/外部工具注册时重复线性扫描。
-- 第三方工具元数据仅在实际变化时写入 EditorPrefs，减少 Hub 打开和刷新时的磁盘写入。
+### Fixed
+- Unity 2021.3 编译兼容：仅在 Unity 2023.1+ 编译使用 `FindObjectsInactive` 的查找重载，避免 Hub 编译失败并阻断 Nodin 自动配置。
+- `LogManagerPanel` 改为反射连接可选的 `GameLogger`；旧版 UnityFramework 或未安装 GameLogger 时 Hub 仍可编译，面板会显示功能不可用提示。
+
 - 重做重复文件清理交互：采用紧凑结果工具栏与折叠分组，文件行明确选择保留项，并用独立双栏窗口对比图片、文本及导入设置。
 - 新增“重复文件清理”：支持脚本、图片、音视频、模型等常用分类筛选；可按名称、SHA-256 内容或两者联合扫描，预览文件与导入设置差异，选择保留项后重定向 GUID/fileID 引用并将副本移到系统回收站。
 - 清理 UnityToolsHub.Editor 的未使用字段、继承隐藏和过时 API 编译警告，并修复拖拽区域高亮判断。
@@ -15,6 +16,7 @@ All notable changes to this package will be documented in this file.
 - 顶部工具菜单改为运行时动态注册，不再向项目或包目录生成任何文件。
 - 工具详情新增 Unity 菜单栏显示开关，可生成 `UnityToolsHub/工具` 下的项目级入口。
 ### Added
+- “GameObject/本地化/自动挂载并绑定”支持 `SpriteRenderer`，可通过 `ProjectAssets` Asset Table 随语言切换 Sprite。
 - 第三方 Git/本地 UPM 包无侵入接入：自动发现包内 `EditorWindow`，无需修改第三方源码
 - 自动识别 `Packages/manifest.json` 中已经安装的 Git 包
 - 自动识别作为直接依赖安装的 Local/Embedded 包，包括 `file:` 与 Git submodule 包
