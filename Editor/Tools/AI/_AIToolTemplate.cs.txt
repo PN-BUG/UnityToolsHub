@@ -1,0 +1,27 @@
+#if UNITY_EDITOR
+using UnityEditor;
+using UnityEngine;
+
+// 复制为 AIDescriptiveToolWindow.cs；替换类名、名称、描述及业务逻辑。
+// 核心逻辑提供公开静态入口，避免依赖当前窗口状态，便于 AI 通过编辑器自动化复用。
+[ToolInfo("待命名AI工具", "AI工具",
+    Description = "请填写：用途；输入范围；输出；是否修改对象/资产；如何撤销。",
+    Icon = "⚙", Tags = new[] { "AI", "请替换为功能关键词" })]
+public class AIDescriptiveToolWindow : ToolEditorWindow
+{
+    protected override string ToolTitle => "待命名AI工具";
+
+    protected override void DrawToolContent()
+    {
+        DrawToolHelpBox("请先实现工具逻辑，并在 README.md 登记调用入口与副作用。");
+        // 在此收集明确的输入，再调用公开静态方法；不要在 OnGUI 中自动修改对象。
+    }
+
+    // 示例只读入口。替换为实际、可重复调用的业务逻辑。
+    // 修改 Unity 对象时使用 Undo，并按需标记 dirty；扫描与实际修改应分开。
+    public static string DescribeTargets(Object[] targets)
+    {
+        return $"输入对象数量：{(targets == null ? 0 : targets.Length)}";
+    }
+}
+#endif

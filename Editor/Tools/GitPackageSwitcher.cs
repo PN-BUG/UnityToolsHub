@@ -6,6 +6,8 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
+using Newtonsoft.Json.Linq;
+using UnityPackageCreator.Editor;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
@@ -444,7 +446,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("扫描失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
@@ -529,23 +531,19 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         if (string.IsNullOrEmpty(scanned.name)) return;
 
-        // 计算相对于项目根目录的路径
-        string relativePath = GetRelativePath(_projectRoot, scanned.folderPath);
-        string fileRef = $"file:{relativePath.Replace('\\', '/')}";
-
-        AddGitPackage(fileRef, scanned.name, scanned.folderName);
+        try
+        {
+            string fileRef = PackageReferenceUtility.PrepareLocalPackageReference(scanned.folderPath, _projectRoot);
+            AddGitPackage(fileRef, scanned.name, scanned.folderName);
+        }
+        catch (Exception ex) { ShowStatus(ex.Message, MessageType.Error); }
     }
 
     private static string GetRelativePath(string basePath, string fullPath)
     {
-        basePath = basePath.Replace('\\', '/').TrimEnd('/');
-        fullPath = fullPath.Replace('\\', '/').TrimEnd('/');
-
-        if (!basePath.EndsWith("/")) basePath += "/";
-        if (fullPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
-            return fullPath.Substring(basePath.Length);
-
-        return fullPath;
+        if (!PackageReferenceUtility.IsWithin(basePath, fullPath))
+            throw new ArgumentException("包位于项目外，请先通过本地导入复制到 LocalPackages。");
+        return PackageReferenceUtility.RelativePath(basePath, fullPath);
     }
 
     // ─── PackageCache 检测 ──────────────────────────────────────
@@ -615,7 +613,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                 // 附加信息
                 pkg.displayName = $"{pkg.displayName}  [{commitHash.Substring(0, Math.Min(8, commitHash.Length))}]" +
                     (hasGitDir ? " [有.git]" : "") +
-                    (!string.IsNullOrEmpty(gitUrl) ? "\n    " + gitUrl : "");
+                    (!string.IsNullOrEmpty(gitUrl) ? "\n    " + PackageReferenceUtility.Redact(gitUrl) : "");
 
                 _cachePackages.Add(pkg);
             }
@@ -625,7 +623,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("扫描 PackageCache 失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
@@ -652,7 +650,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         }
         catch (Exception ex)
         {
-            Debug.LogWarning($"读取 packages-lock.json 失败: {ex.Message}");
+            Debug.LogWarning(PackageReferenceUtility.Redact($"读取 packages-lock.json 失败: {ex.Message}"));
         }
 
         return result;
@@ -874,7 +872,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                     EditorGUILayout.EndHorizontal();
 
                     if (!string.IsNullOrEmpty(pkg.gitUrl))
-                        GUILayout.Label(new GUIContent(pkg.gitUrl, pkg.gitUrl), _metaStyle, GUILayout.MinWidth(0));
+                        GUILayout.Label(new GUIContent(PackageReferenceUtility.Redact(pkg.gitUrl), PackageReferenceUtility.Redact(pkg.gitUrl)), _metaStyle, GUILayout.MinWidth(0));
 
                     if (pkg.isLocal)
                     {
@@ -1130,9 +1128,9 @@ public class GitPackageSwitcher : ToolEditorWindow
                 {
                     // 已经是本地引用
                     info.isLocal = true;
-                    string filePath = value.Substring(5).Replace('\\', '/');
-                    info.isAsset = filePath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase);
-                    info.localFolder = info.isAsset ? filePath : ParseLocalFolder(value);
+                    string absolutePath = PackageReferenceUtility.ResolveLocalReference(value, _projectRoot);
+                    info.isAsset = PackageReferenceUtility.IsWithin(Application.dataPath, absolutePath);
+                    info.localFolder = info.isAsset ? GetRelativePath(_projectRoot, absolutePath) : ParseLocalFolder(value);
                     info.gitUrl = TryFindGitUrlFromLock(pkgName);
 
                     // Fallback: 从 .git/config 读取远程 URL
@@ -1234,7 +1232,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogWarning($"读取包信息失败: {pjPath} · {ex.Message}");
+                        Debug.LogWarning(PackageReferenceUtility.Redact($"读取包信息失败: {pjPath} · {ex.Message}"));
                     }
 
                     var info = new PackageInfo
@@ -1259,7 +1257,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("读取 manifest.json 失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
@@ -1267,12 +1265,15 @@ public class GitPackageSwitcher : ToolEditorWindow
     private void SwitchToLocal(PackageInfo pkg)
     {
         if (_isProcessing) return;
+        if (!CanUseGitUrl(pkg.gitUrl)) return;
         _isProcessing = true;
 
         try
         {
             string packagesDir = Path.Combine(_projectRoot, "Packages");
             string localPath = Path.Combine(packagesDir, pkg.localFolder);
+            if (!PackageReferenceUtility.IsWithin(_projectRoot, localPath))
+                throw new ArgumentException("本地包目录必须位于项目内。");
 
             // 1. 如果本地目录不存在，先 git clone
             if (!Directory.Exists(localPath))
@@ -1293,7 +1294,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                     cloneUrl = cloneUrl.Substring(0, hashIdx);
                 }
 
-                if (!RunGitCommand($"clone --depth 1 -b {branch} \"{cloneUrl}\" \"{localPath}\"", _projectRoot))
+                if (!RunGitCommand($"clone --depth 1 -b \"{branch}\" -- \"{cloneUrl}\" \"{localPath}\"", _projectRoot))
                 {
                     ShowStatus($"克隆失败: {pkg.packageName}，请检查网络和 Git 配置", MessageType.Error);
                     _isProcessing = false;
@@ -1337,7 +1338,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("切换失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
         finally
         {
@@ -1355,6 +1356,8 @@ public class GitPackageSwitcher : ToolEditorWindow
             ShowStatus($"{pkg.packageName} 没有记录 Git URL，无法切回", MessageType.Warning);
             return;
         }
+
+        if (!CanUseGitUrl(pkg.gitUrl)) return;
 
         _isProcessing = true;
 
@@ -1381,7 +1384,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("切换失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
         finally
         {
@@ -1440,7 +1443,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("拉取失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
         finally
         {
@@ -1491,6 +1494,8 @@ public class GitPackageSwitcher : ToolEditorWindow
             ShowStatus($"{pkg?.packageName} 没有 Git URL，无法更新", MessageType.Warning);
             return;
         }
+
+        if (!CanUseGitUrl(pkg.gitUrl)) return;
 
         _isProcessing = true;
         ShowStatus($"正在通过 UPM 更新 {pkg.packageName} ...", MessageType.Info);
@@ -1543,14 +1548,22 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus($"移除失败: {ex.Message}", MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
     /// <summary>删除本地包目录（清除只读属性后删除）</summary>
     private void DeleteLocalPackage(PackageInfo pkg)
     {
-        string localPath = Path.Combine(_projectRoot, "Packages", pkg.localFolder);
+        string localPath = Path.GetFullPath(GetPackageDirectory(pkg));
+        if (!PackageReferenceUtility.IsWithin(_projectRoot, localPath)
+            || PackageReferenceUtility.IsWithin(localPath, Path.Combine(_projectRoot, "Packages"))
+            || PackageReferenceUtility.IsWithin(localPath, Path.Combine(_projectRoot, "LocalPackages"))
+            || !File.Exists(Path.Combine(localPath, "package.json")))
+        {
+            ShowStatus("仅允许删除项目内的具体包目录，不能删除项目外路径或包容器目录。", MessageType.Error);
+            return;
+        }
 
         if (!Directory.Exists(localPath))
         {
@@ -1588,7 +1601,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus($"删除失败: {ex.Message}", MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
         finally
         {
@@ -1668,16 +1681,13 @@ public class GitPackageSwitcher : ToolEditorWindow
         // 添加到 manifest.json
         try
         {
+            if (IsLocalRef(gitUrl))
+                gitUrl = PackageReferenceUtility.PrepareLocalPackageReference(gitUrl, _projectRoot);
+            else
+                PackageReferenceUtility.ValidateGitUrl(gitUrl);
             string manifest = File.ReadAllText(_manifestPath);
-
-            // 在 dependencies 的 } 之前插入
-            int lastBrace = manifest.LastIndexOf('}');
-            if (lastBrace > 0)
-            {
-                string entry = $"    \"{packageName}\": \"{gitUrl}\",\n";
-                manifest = manifest.Insert(lastBrace, entry);
-                File.WriteAllText(_manifestPath, manifest);
-            }
+            manifest = ReplaceManifestEntry(manifest, packageName, gitUrl);
+            File.WriteAllText(_manifestPath, manifest);
 
             _newGitUrl = "";
             _newPackageName = "";
@@ -1690,7 +1700,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("添加失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
@@ -1759,12 +1769,8 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         // file:xxx 或 file:Packages/xxx
         string folder = value.Substring(5); // 去掉 "file:"
-        // 取最后一段
-        if (folder.Contains("/"))
-            folder = folder.Substring(folder.LastIndexOf('/') + 1);
-        if (folder.Contains("\\"))
-            folder = folder.Substring(folder.LastIndexOf('\\') + 1);
-        return folder;
+        // Preserve ../LocalPackages and nested paths; file: is relative to Packages.
+        return folder.Replace('\\', '/');
     }
 
     /// <summary>从 .git/config 读取远程 URL</summary>
@@ -1798,13 +1804,16 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         try
         {
+            PackageReferenceUtility.ValidateGitUrl(gitUrl);
             string metaPath = Path.Combine(_projectRoot, "Packages", localFolder, ".gitswitcher.json");
-            string json = $"{{\"gitUrl\":\"{gitUrl}\",\"branch\":\"{branch ?? "main"}\"}}";
+            if (!PackageReferenceUtility.IsWithin(_projectRoot, metaPath))
+                throw new ArgumentException("Git 元数据目录必须位于项目内。");
+            string json = new JObject { ["gitUrl"] = gitUrl, ["branch"] = branch ?? "main" }.ToString();
             File.WriteAllText(metaPath, json);
         }
         catch (Exception ex)
         {
-            Debug.LogWarning($"保存 Git 元数据失败: {ex.Message}");
+            Debug.LogWarning(PackageReferenceUtility.Redact($"保存 Git 元数据失败: {ex.Message}"));
         }
     }
 
@@ -1850,7 +1859,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         }
         catch (Exception ex)
         {
-            Debug.LogWarning($"读取 packages-lock.json 失败: {ex.Message}");
+            Debug.LogWarning(PackageReferenceUtility.Redact($"读取 packages-lock.json 失败: {ex.Message}"));
         }
 
         return null;
@@ -1859,10 +1868,11 @@ public class GitPackageSwitcher : ToolEditorWindow
     /// <summary>精确替换 manifest 中某个包的引用值</summary>
     private static string ReplaceManifestEntry(string manifest, string packageName, string newValue)
     {
-        // 匹配 "com.xxx.yyy": "任意内容"
-        string pattern = $"\"{Regex.Escape(packageName)}\"\\s*:\\s*\"[^\"]*\"";
-        string replacement = $"\"{packageName}\": \"{newValue}\"";
-        return Regex.Replace(manifest, pattern, replacement);
+        var json = JObject.Parse(manifest);
+        var dependencies = json["dependencies"] as JObject;
+        if (dependencies == null) throw new InvalidDataException("manifest.json 缺少 dependencies 对象。");
+        dependencies[packageName] = newValue;
+        return json.ToString(Newtonsoft.Json.Formatting.Indented);
     }
 
     /// <summary>解析 manifest.json（简单 JSON 解析，避免依赖）</summary>
@@ -1934,26 +1944,32 @@ public class GitPackageSwitcher : ToolEditorWindow
 
                 if (process.ExitCode != 0)
                 {
-                    Debug.LogError($"Git 命令失败: git {arguments}\n{stderr}");
+                    Debug.LogError(PackageReferenceUtility.Redact($"Git 操作失败:\n{stderr}"));
                     return false;
                 }
 
                 if (!string.IsNullOrEmpty(stdout))
-                    Debug.Log($"Git 输出: {stdout}");
+                    Debug.Log(PackageReferenceUtility.Redact($"Git 输出: {stdout}"));
 
                 return true;
             }
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Git 命令执行异常: {ex.Message}");
+            Debug.LogError(PackageReferenceUtility.Redact($"Git 命令执行异常: {ex.Message}"));
             return false;
         }
     }
 
     private void ShowStatus(string message, MessageType type = MessageType.Info)
     {
-        _statusMessage = message;
+        _statusMessage = PackageReferenceUtility.Redact(message);
         Repaint();
+    }
+
+    private bool CanUseGitUrl(string url)
+    {
+        try { PackageReferenceUtility.ValidateGitUrl(url); return true; }
+        catch (Exception ex) { ShowStatus(ex.Message, MessageType.Error); return false; }
     }
 }

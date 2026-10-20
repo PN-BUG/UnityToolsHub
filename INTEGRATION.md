@@ -57,7 +57,7 @@ https://github.com/example/unity-tools.git?path=/Packages/com.example.tool#v1.2.
 
 ### 本地包
 
-在第三方工具页选择“从本地导入”，指向包含 `package.json` 的目录。Hub 使用 UPM `file:` 依赖安装并自动发现窗口。
+在第三方工具页选择“从本地导入”，指向包含 `package.json` 的目录。项目外或缓存中的包会先复制到项目 `LocalPackages`，不会覆盖同名目录；Hub 使用相对于 `Packages` 的 `file:` 依赖安装并自动发现窗口。需要将包文件随项目纳入版本管理，避免迁移机器后依赖丢失。
 
 ### 当前边界
 

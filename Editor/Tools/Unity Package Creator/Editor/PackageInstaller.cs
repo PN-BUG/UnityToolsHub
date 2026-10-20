@@ -14,6 +14,7 @@ using UnityEditor.PackageManager;
 using UnityEditor;
 using UnityEngine;
 using System.IO;
+using System;
 
 namespace UnityPackageCreator.Editor
 {
@@ -21,8 +22,7 @@ namespace UnityPackageCreator.Editor
     {
         /// <summary>
         /// 从本地路径安装包
-        /// 1、可以通过本地文件夹安装包，格式file:pathtopackagefolder，如file:E:/UPMProject/UPM/com.zko.test
-        /// 2、从.tgz文件安装包，格式file:pathtopackage.tgz，如file:E:/UPMProject/UPM/com.zko.test.tgz
+        /// 项目外的文件夹或 .tgz 先复制到 LocalPackages，再以 Packages 相对路径安装。
         /// </summary>
         /// <param name="packagePath"></param>
         public static void InstallPackageFromDisk(string packagePath)
@@ -45,18 +45,26 @@ namespace UnityPackageCreator.Editor
             {
                 if (!packagePath.EndsWith(".tgz"))
                 {
-                    Debug.LogError($"{packagePath} file is not a valid Unity package.");
+                    Debug.LogError(PackageReferenceUtility.Redact($"{packagePath} file is not a valid Unity package."));
                     return;
                 }
             }
             else
             {
-                Debug.LogError($"The package at path {packagePath} does not exist.");
+                Debug.LogError(PackageReferenceUtility.Redact($"The package at path {packagePath} does not exist."));
                 return;
             }
 
-            // 构建正确的标识符
-            string identifier = $"file:{packagePath}";
+            string identifier;
+            try
+            {
+                identifier = PackageReferenceUtility.PrepareLocalPackageReference(packagePath, Path.GetDirectoryName(Application.dataPath));
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(PackageReferenceUtility.Redact(ex.Message));
+                return;
+            }
             // 如果存在package.json，那么这是一个有效的包，可以继续安装
             AddRequest request = Client.Add(identifier);
             EditorApplication.CallbackFunction onUpdate = null;
@@ -65,9 +73,9 @@ namespace UnityPackageCreator.Editor
                 if (request.IsCompleted)
                 {
                     if (request.Status == StatusCode.Success)
-                        Debug.Log($"Package from {packagePath} installed successfully.");
+                        Debug.Log($"Package {identifier} installed successfully.");
                     else
-                        Debug.LogError($"Failed to install package from {packagePath}: {request.Error.message}");
+                        Debug.LogError(PackageReferenceUtility.Redact($"Failed to install package {identifier}: {request.Error.message}"));
 
                     EditorApplication.update -= onUpdate;
                 }
@@ -77,6 +85,20 @@ namespace UnityPackageCreator.Editor
 
         public static void InstallPackage(string packageName)
         {
+            if (packageName.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallPackageFromDisk(PackageReferenceUtility.ResolveLocalReference(packageName, Path.GetDirectoryName(Application.dataPath)));
+                return;
+            }
+            if (packageName.Contains("://") || packageName.StartsWith("git@", StringComparison.OrdinalIgnoreCase))
+            {
+                try { PackageReferenceUtility.ValidateGitUrl(packageName); }
+                catch (Exception ex)
+                {
+                    Debug.LogError(PackageReferenceUtility.Redact(ex.Message));
+                    return;
+                }
+            }
             AddRequest request = Client.Add(packageName);
             EditorApplication.CallbackFunction onUpdate = null;
             onUpdate = () =>
@@ -84,9 +106,9 @@ namespace UnityPackageCreator.Editor
                 if (request.IsCompleted)
                 {
                     if (request.Status == StatusCode.Success)
-                        Debug.Log($"Package {packageName} installed successfully.");
+                        Debug.Log(PackageReferenceUtility.Redact($"Package {packageName} installed successfully."));
                     else
-                        Debug.LogError($"Failed to install package {packageName}: {request.Error.message}");
+                        Debug.LogError(PackageReferenceUtility.Redact($"Failed to install package {packageName}: {request.Error.message}"));
 
                     EditorApplication.update -= onUpdate;
                 }
@@ -103,9 +125,9 @@ namespace UnityPackageCreator.Editor
                 if (request.IsCompleted)
                 {
                     if (request.Status == StatusCode.Success)
-                        Debug.Log($"Package {packageName} removed successfully.");
+                        Debug.Log(PackageReferenceUtility.Redact($"Package {packageName} removed successfully."));
                     else
-                        Debug.LogError($"Failed to remove package {packageName}: {request.Error.message}");
+                        Debug.LogError(PackageReferenceUtility.Redact($"Failed to remove package {packageName}: {request.Error.message}"));
 
                     EditorApplication.update -= onUpdate;
                 }

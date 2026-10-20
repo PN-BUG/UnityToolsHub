@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -33,7 +34,8 @@ public class CryptoUtility : EditorWindow
 
     private const int MaxRecentCount = 15;
     private const string PrefKeyPrefix = "CryptoUtility.";
-    private const string PrefKeyXor = PrefKeyPrefix + "XorKey";
+    private const string LegacyKeyPreference = PrefKeyPrefix + "XorKey";
+    private const string KeyRelativePath = "Resources/UnityFramework/XorKey.txt";
     private const string PrefKeyBinaryPath = PrefKeyPrefix + "BinaryPath";
     private const string PrefKeyJsonPath = PrefKeyPrefix + "JsonPath";
     private const string PrefKeyRecentBinary = PrefKeyPrefix + "RecentBinary";
@@ -43,7 +45,9 @@ public class CryptoUtility : EditorWindow
 
     #region 字段
 
-    private string _xorKey = "解密大傻子";
+    [NonSerialized] private string _xorKey = string.Empty;
+    private string _keyFilePath = string.Empty;
+    private string _keyFileError = string.Empty;
     private bool _showKey = false;
 
     private string _binaryFilePath = "";
@@ -96,7 +100,7 @@ public class CryptoUtility : EditorWindow
 
     private void OnEnable()
     {
-        _xorKey = EditorPrefs.GetString(PrefKeyXor, "解密大傻子");
+        LoadLocalKey(false);
         _binaryFilePath = EditorPrefs.GetString(PrefKeyBinaryPath, "");
         _jsonFilePath = EditorPrefs.GetString(PrefKeyJsonPath, "");
         _recentBinaryFiles = LoadRecentList(PrefKeyRecentBinary);
@@ -108,7 +112,6 @@ public class CryptoUtility : EditorWindow
 
     private void OnDisable()
     {
-        EditorPrefs.SetString(PrefKeyXor, _xorKey);
         EditorPrefs.SetString(PrefKeyBinaryPath, _binaryFilePath);
         EditorPrefs.SetString(PrefKeyJsonPath, _jsonFilePath);
         SaveRecentList(PrefKeyRecentBinary, _recentBinaryFiles);
@@ -157,12 +160,157 @@ public class CryptoUtility : EditorWindow
         else
         {
             EditorGUILayout.LabelField("密钥:", GUILayout.Width(40));
-            EditorGUILayout.PasswordField(_xorKey);
+            _xorKey = EditorGUILayout.PasswordField(_xorKey);
         }
         _showKey = EditorGUILayout.ToggleLeft("显示", _showKey, GUILayout.Width(50));
         EditorGUILayout.EndHorizontal();
 
+        EditorGUILayout.LabelField("本地文件", _keyFilePath);
+        if (!string.IsNullOrEmpty(_keyFileError))
+            EditorGUILayout.HelpBox(_keyFileError, MessageType.Warning);
+        EditorGUILayout.HelpBox("新密钥保存到被 Git 忽略的本地文件。旧数据必须使用原密钥；请备份密钥，勿随意更换。", MessageType.Info);
+        EditorGUILayout.BeginHorizontal();
+        if (GUILayout.Button("生成并保存本地密钥"))
+        {
+            try
+            {
+                GenerateLocalKeyFile();
+                LoadLocalKey(true);
+            }
+            catch (Exception ex) { SetStatus(ex.Message, MessageType.Error); }
+        }
+        if (GUILayout.Button("保存输入密钥")) SaveInputKey();
+        if (GUILayout.Button("导入已有密钥"))
+        {
+            string path = EditorUtility.OpenFilePanel("选择原有 XOR 密钥文件", "", "txt");
+            if (!string.IsNullOrEmpty(path))
+            {
+                try
+                {
+                    SaveLocalKeyFile(ReadKeyFile(path));
+                    LoadLocalKey(true);
+                }
+                catch (Exception ex) { SetStatus(ex.Message, MessageType.Error); }
+            }
+        }
+        if (GUILayout.Button("重新载入")) LoadLocalKey(true);
+        EditorGUILayout.EndHorizontal();
+
+        if (EditorPrefs.HasKey(LegacyKeyPreference))
+        {
+            EditorGUILayout.HelpBox("检测到旧版保存在 EditorPrefs 的密钥。可手动迁移到本地文件，成功后会删除旧设置。", MessageType.Warning);
+            if (GUILayout.Button("迁移旧版保存的密钥"))
+            {
+                try
+                {
+                    SaveLocalKeyFile(EditorPrefs.GetString(LegacyKeyPreference, string.Empty));
+                    LoadLocalKey(true);
+                }
+                catch (Exception ex) { SetStatus(ex.Message, MessageType.Error); }
+            }
+        }
+
         EditorGUILayout.Space(5);
+    }
+
+    /// <summary>Explicit action only. Creates a random key without overwriting an existing file.</summary>
+    public static string GenerateLocalKeyFile()
+    {
+        byte[] bytes = new byte[32];
+        using (var random = RandomNumberGenerator.Create()) random.GetBytes(bytes);
+        return SaveLocalKeyFile(Convert.ToBase64String(bytes));
+    }
+
+    /// <summary>Save a generated or legacy key locally. The key is never logged or stored in EditorPrefs.</summary>
+    public static string SaveLocalKeyFile(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key) || key.IndexOfAny(new[] { '\r', '\n', '\uFEFF' }) >= 0)
+            throw new ArgumentException("密钥不能为空，且必须是单行文本。");
+
+        string path = GetLocalKeyFilePath();
+        if (File.Exists(path))
+            throw new IOException("本地密钥文件已存在，不会覆盖。需要更换时，请先备份原密钥和数据，再移走原文件。");
+
+        string directory = Path.GetDirectoryName(path);
+        Directory.CreateDirectory(directory);
+        // This also protects standalone Hub installs or keys created outside the framework repository.
+        string ignorePath = Path.Combine(directory, ".gitignore");
+        const string ignoreRules = "\n# Local XOR key; do not commit.\nXorKey.txt\nXorKey.txt.meta\n";
+        string existingIgnore = File.Exists(ignorePath) ? File.ReadAllText(ignorePath) : string.Empty;
+        if (!existingIgnore.Contains("\nXorKey.txt\n") || !existingIgnore.Contains("\nXorKey.txt.meta\n"))
+            File.AppendAllText(ignorePath, ignoreRules, new UTF8Encoding(false));
+
+        using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        using (var writer = new StreamWriter(stream, new UTF8Encoding(false))) writer.Write(key);
+        AssetDatabase.Refresh();
+        // Only remove legacy storage after the same key has been explicitly saved successfully.
+        if (EditorPrefs.HasKey(LegacyKeyPreference) && EditorPrefs.GetString(LegacyKeyPreference) == key)
+            EditorPrefs.DeleteKey(LegacyKeyPreference);
+        return path;
+    }
+
+    private static string GetLocalKeyFilePath()
+    {
+        string projectRoot = Path.GetDirectoryName(Application.dataPath);
+        string found = null;
+        foreach (string guid in AssetDatabase.FindAssets("XorKey t:TextAsset"))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (!path.EndsWith("/" + KeyRelativePath, StringComparison.Ordinal)) continue;
+            if (found != null) throw new InvalidOperationException("发现多个本地 XOR 密钥文件，请只保留一份 Resources/UnityFramework/XorKey.txt。");
+            found = path;
+        }
+        if (found != null) return Path.GetFullPath(Path.Combine(projectRoot, found));
+
+        // Locate the runtime script so moving the framework does not introduce an absolute path dependency.
+        foreach (string guid in AssetDatabase.FindAssets("EncryptTool t:MonoScript"))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            // Resolve from the source asset even before its assembly has successfully compiled.
+            if (Path.GetFileName(path) == "EncryptTool.cs" && path.StartsWith("Assets/", StringComparison.Ordinal)
+                && path.IndexOf("/Editor/", StringComparison.Ordinal) < 0)
+                return Path.GetFullPath(Path.Combine(projectRoot, Path.GetDirectoryName(path), KeyRelativePath));
+        }
+        return Path.GetFullPath(Path.Combine(Application.dataPath, KeyRelativePath));
+    }
+
+    private static string ReadKeyFile(string path)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException("缺少本地 XOR 密钥文件，请手动生成或导入原有密钥。读取旧数据必须使用原密钥。", path);
+        string key = File.ReadAllText(path, Encoding.UTF8).TrimStart('\uFEFF').TrimEnd('\r', '\n');
+        if (string.IsNullOrWhiteSpace(key) || key.IndexOfAny(new[] { '\r', '\n', '\uFEFF' }) >= 0)
+            throw new InvalidDataException("本地 XOR 密钥文件为空或格式无效，请使用单行文本密钥。");
+        return key;
+    }
+
+    private bool LoadLocalKey(bool showStatus)
+    {
+        _xorKey = string.Empty;
+        try
+        {
+            _keyFilePath = GetLocalKeyFilePath();
+            _xorKey = ReadKeyFile(_keyFilePath);
+            _keyFileError = string.Empty;
+            if (showStatus) SetStatus("本地密钥已载入。", MessageType.Info);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _keyFileError = ex.Message;
+            if (showStatus) SetStatus(_keyFileError, MessageType.Error);
+            return false;
+        }
+    }
+
+    private void SaveInputKey()
+    {
+        try
+        {
+            SaveLocalKeyFile(_xorKey);
+            LoadLocalKey(true);
+        }
+        catch (Exception ex) { SetStatus(ex.Message, MessageType.Error); }
     }
 
     private void DrawFileSection()
@@ -484,12 +632,12 @@ public class CryptoUtility : EditorWindow
 
     private static byte[] XorCrypt(byte[] data, string key)
     {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException("缺少本地 XOR 密钥，请先生成或导入密钥文件。");
         if (data == null || data.Length == 0)
             return Array.Empty<byte>();
 
         byte[] keyBytes = Encoding.UTF8.GetBytes(key);
-        if (keyBytes.Length == 0)
-            return data;
 
         byte[] result = new byte[data.Length];
         for (int i = 0; i < data.Length; i++)
@@ -503,6 +651,7 @@ public class CryptoUtility : EditorWindow
 
     private void DecryptAndView()
     {
+        if (!LoadLocalKey(true)) return;
         if (!ValidateBinaryPath()) return;
 
         try
@@ -550,6 +699,7 @@ public class CryptoUtility : EditorWindow
 
     private void EncryptAndSave()
     {
+        if (!LoadLocalKey(true)) return;
         if (string.IsNullOrEmpty(_contentText))
         { SetStatus("没有可保存的内容，请先解密一个文件", MessageType.Warning); return; }
         if (!ValidateBinaryPath()) return;
@@ -587,6 +737,7 @@ public class CryptoUtility : EditorWindow
 
     private void ExportBinaryToJson()
     {
+        if (!LoadLocalKey(true)) return;
         if (!ValidateBinaryPath()) return;
         if (!File.Exists(_binaryFilePath))
         { SetStatus($"文件不存在: {_binaryFilePath}", MessageType.Error); return; }
@@ -619,6 +770,7 @@ public class CryptoUtility : EditorWindow
 
     private void ImportJsonToBinary()
     {
+        if (!LoadLocalKey(true)) return;
         if (string.IsNullOrEmpty(_jsonFilePath))
         { SetStatus("请先选择 JSON 文件", MessageType.Warning); return; }
         if (!File.Exists(_jsonFilePath))
@@ -957,6 +1109,7 @@ public class CryptoUtility : EditorWindow
 
     private void BatchEncrypt()
     {
+        if (!LoadLocalKey(true)) return;
         if (!ValidateBatchFolder()) return;
         RecordRecentBatchFolder(_batchFolderPath);
 
@@ -998,6 +1151,7 @@ public class CryptoUtility : EditorWindow
 
     private void BatchDecrypt()
     {
+        if (!LoadLocalKey(true)) return;
         if (!ValidateBatchFolder()) return;
         RecordRecentBatchFolder(_batchFolderPath);
 
@@ -1039,6 +1193,7 @@ public class CryptoUtility : EditorWindow
 
     private void BatchExportJson()
     {
+        if (!LoadLocalKey(true)) return;
         if (!ValidateBatchFolder()) return;
         RecordRecentBatchFolder(_batchFolderPath);
 

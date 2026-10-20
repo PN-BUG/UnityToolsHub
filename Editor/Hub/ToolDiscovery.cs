@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using UnityPackageCreator.Editor;
 
 /// <summary>
 /// UnityToolsHub — 工具自动发现与创建
@@ -1121,6 +1122,13 @@ public partial class UnityToolsHub
             return;
         }
 
+        try { PackageReferenceUtility.ValidateGitUrl(gitUrl); }
+        catch (Exception ex)
+        {
+            _importStatus = PackageReferenceUtility.Redact(ex.Message);
+            return;
+        }
+
         // 去重检查
         var existing = _thirdPartyRegistry.FindByGitUrl(gitUrl);
         if (existing != null)
@@ -1159,6 +1167,7 @@ public partial class UnityToolsHub
                     importSource = "git",
                     gitUrl = gitUrl,
                     packagePath = gitUrl,
+                    packageName = addRequest?.Result?.name,
                     installPath = "",
                     isInstalled = true
                 };
@@ -1214,13 +1223,24 @@ public partial class UnityToolsHub
 
         if (hasPackageJson)
         {
-            // UPM 包：使用 Client.Add("file:" + path)
+            string projectRoot = System.IO.Path.GetDirectoryName(Application.dataPath);
+            string identifier;
+            try
+            {
+                identifier = PackageReferenceUtility.PrepareLocalPackageReference(localPath, projectRoot);
+                localPath = PackageReferenceUtility.RelativePath(projectRoot,
+                    PackageReferenceUtility.ResolveLocalReference(identifier, projectRoot));
+            }
+            catch (Exception ex)
+            {
+                _importStatus = PackageReferenceUtility.Redact(ex.Message);
+                return;
+            }
             _isImporting = true;
             _importStatus = "正在导入本地 UPM 包...";
 
-            string identifier = "file:" + localPath;
             var request = UnityEditor.PackageManager.Client.Add(identifier);
-            WaitForPackageRequest(request, localPath, (success) =>
+            WaitForPackageRequest(request, identifier, (success) =>
             {
                 _isImporting = false;
                 if (success)
@@ -1243,7 +1263,8 @@ public partial class UnityToolsHub
                         isEnabled = false,
                         importSource = "local",
                         gitUrl = "",
-                        packagePath = localPath,
+                        packagePath = addRequest?.Result?.name ?? identifier,
+                        packageName = addRequest?.Result?.name,
                         installPath = localPath,
                         isInstalled = true
                     };
@@ -1339,7 +1360,7 @@ public partial class UnityToolsHub
                 {
                     var error = (request as UnityEditor.PackageManager.Requests.AddRequest)?.Error
                              ?? (request as UnityEditor.PackageManager.Requests.RemoveRequest)?.Error;
-                    Debug.LogError($"[UnityToolsHub] 包操作失败: {identifier}\n{error?.message}");
+                    Debug.LogError(PackageReferenceUtility.Redact($"[UnityToolsHub] 包操作失败: {identifier}\n{error?.message}"));
                 }
                 EditorApplication.update -= onUpdate;
                 onComplete?.Invoke(success);
@@ -1352,6 +1373,20 @@ public partial class UnityToolsHub
     private void UninstallThirdPartyTool(ThirdPartyToolState state)
     {
         if (state == null) return;
+
+        if (!string.IsNullOrEmpty(state.packageName))
+        {
+            var removeRequest = UnityEditor.PackageManager.Client.Remove(state.packageName);
+            WaitForPackageRequest(removeRequest, state.packageName, success =>
+            {
+                if (!success) return;
+                _thirdPartyRegistry.Remove(state.typeName);
+                SaveThirdPartyRegistry();
+                DiscoverTools();
+                Repaint();
+            });
+            return;
+        }
 
         // Git / UPM 本地包：使用 Client.Remove
         if (state.importSource == "git" || (state.importSource == "local" && !string.IsNullOrEmpty(state.packagePath) && state.packagePath != state.scriptPath))
