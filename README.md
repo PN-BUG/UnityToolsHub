@@ -21,6 +21,7 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **作者信息**：支持在 `[ToolInfo]` 中标注作者和链接，详情页可点击跳转
 - **性能优化**：消除 OnGUI 每帧 GUIStyle/GUIContent 分配，反射元数据构造时缓存，快捷键冲突检测 O(1) 查找
 - **Odin Inspector 兼容**：自动检测 Odin，有则使用原生属性渲染，无则通过兼容层桩类型+反射绘制器回退
+- **场景字体替换**：在“字体工具 > 字体替换”（或 `UnityToolsHub > Font Replacer`）中，选择当前场景、全部已打开场景或选中物体及子物体，替换 Text / TMP 的全部字体或仅指定原字体；默认包含未激活物体，支持统计和 Ctrl+Z 撤销。Text 选择 `Font`，TMP 选择 `TMP Font Asset`（包含 UI 和 3D 文本）。TMP 自动检测，无需安装即可使用 Text 替换；替换后需保存场景
 - **圆角渲染**：`Drawing.DrawRoundedRect` 在 IMGUI 下退化为方形（角纹理合成有渲染伪影），纹理缓存加入上限保护
 
 ## 快速开始
