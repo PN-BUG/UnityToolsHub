@@ -16,8 +16,9 @@ Hub 入口：`Window > Unity Tools Hub > AI工具`。窗口、搜索、标签、
 | 工具 | 源码 | 入口与参数 | 副作用 |
 | --- | --- | --- | --- |
 | AI工具使用说明 | `AIToolsGuideWindow.cs` | Hub 中双击打开，无需参数 | 定位目录、更改编辑器选择、打开说明或复制文本；不修改场景和资产 |
+| 本地化可选模块 | `LocalizationModuleWindow.cs` | Hub「可选模块 > 本地化模块」；`GetInstalledPackage()` 读取状态，`InstallOrUpdate(onComplete)` 显式安装/更新，`OpenPipeline()` 打开流水线 | 只有显式安装调用才发起 UPM Git 安装，可能下载依赖并重载程序集；不会覆盖本地/嵌入源码目录 |
 
-目前仅提供收录入口和模板；每次新增实际工具时在此表登记用途、调用方法、参数、输出及副作用。
+本地化模块按用途显示在「可选模块」，源码在此目录复用。安装使用 `https://github.com/PN-BUG/UnityLocalization.git`；依赖已有 Nodin。当前只完成静态核对，UPM 安装结果及窗口布局仍需目标 Unity Editor 验证。
 
 ## 接入约定
 

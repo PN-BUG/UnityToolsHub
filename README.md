@@ -205,7 +205,9 @@ SDK 的完整示例见 `SDK~/README.md`。
 | 项目打包 | 构建工具 | 项目批量打包 |
 | 测试窗口 | 调试工具 | 聚合展示场景中标记了 [Test] 的方法和字段 |
 
-框架中的“本地化流水线”和“手柄图标绑定”已分别移至 `Assets/UnityFramework/Editor/LocalizationTools` 与 `Assets/UnityFramework/Editor/JoystickIcons`。Hub 仅在对应窗口类型已加载时显示入口；它们各自保留菜单，不依赖 Hub SDK。Hub 自带窗口主要通过 `[ToolInfo]` 注册，另有少量跨程序集入口由 Hub 显式发现。
+“本地化流水线”现位于独立 UPM 包 `Packages/com.zko.localization/Editor`，“手柄图标绑定”归入 `Assets/UnityFramework/Editor/InputSystem/JoystickIcons`。Hub 仅在对应窗口类型已加载时显示入口；它们各自保留菜单，不依赖 Hub SDK。Hub 自带窗口主要通过 `[ToolInfo]` 注册，另有少量跨程序集入口由 Hub 显式发现。
+
+本地化作为可选模块提供：Hub「可选模块 > 本地化模块」或菜单 `UnityToolsHub > 可选模块 > 本地化` 在未安装时也显示，可显式安装/更新 [UnityLocalization](https://github.com/PN-BUG/UnityLocalization) Git 包；安装后可以打开本地化流水线。打开 Hub 不会自动安装本地化。已有本地/嵌入源码目录会保留；手柄图标与按键文本替换仍由输入模块适配，Nodin 依赖继续保留。
 
 ## Unity 主工具栏按钮
 
