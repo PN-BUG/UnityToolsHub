@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using UnityPackageCreator.Editor;
 
 /// <summary>
 /// UnityToolsHub — 工具自动发现与创建
@@ -25,42 +26,39 @@ public partial class UnityToolsHub
         // ── 1. 扫描 [ToolInfo] 特性 ──────────────────────
         var discovered = new List<ToolEntry>();
 
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        foreach (var type in TypeCache.GetTypesWithAttribute<ToolInfoAttribute>())
         {
-            Type[] types;
-            try { types = assembly.GetTypes(); }
-            catch { continue; }
+            if (type == null || type.IsAbstract || !typeof(EditorWindow).IsAssignableFrom(type))
+                continue;
 
-            foreach (var type in types)
+            var attr = (ToolInfoAttribute)Attribute.GetCustomAttribute(type, typeof(ToolInfoAttribute));
+            if (attr == null) continue;
+
+            discovered.Add(new ToolEntry
             {
-                if (!typeof(EditorWindow).IsAssignableFrom(type)) continue;
-
-                var attr = (ToolInfoAttribute)Attribute.GetCustomAttribute(type, typeof(ToolInfoAttribute));
-                if (attr == null) continue;
-
-                discovered.Add(new ToolEntry
-                {
-                    name       = attr.Name,
-                    description = attr.Description ?? "",
-                    category   = attr.Category,
-                    originalCategory = attr.Category,
-                    typeName   = type.FullName,
-                    icon       = string.IsNullOrEmpty(attr.Icon) ? Theme.GetCategoryIcon(attr.Category) : attr.Icon,
-                    tags       = attr.Tags,
-                    shortcut   = attr.Shortcut,
-                    priority   = attr.Priority,
-                    author     = attr.Author ?? "",
-                    authorLink = attr.AuthorLink ?? "",
-                    isThirdParty = attr.IsThirdParty
-                });
-            }
+                name       = attr.Name,
+                description = attr.Description ?? "",
+                category   = attr.Category,
+                originalCategory = attr.Category,
+                typeName   = type.FullName,
+                icon       = string.IsNullOrEmpty(attr.Icon) ? Theme.GetCategoryIcon(attr.Category) : attr.Icon,
+                tags       = attr.Tags,
+                shortcut   = attr.Shortcut,
+                priority   = attr.Priority,
+                author     = attr.Author ?? "",
+                authorLink = attr.AuthorLink ?? "",
+                isThirdParty = attr.IsThirdParty
+            });
         }
+
+        var discoveredTypeNames = new HashSet<string>(
+            discovered.Where(tool => !string.IsNullOrEmpty(tool.typeName)).Select(tool => tool.typeName));
 
         // Optional SDK metadata is read by reflection, so neither side needs to
         // reference the other's assembly.
         foreach (var sdkTool in DiscoverSdkTools())
         {
-            if (!discovered.Any(tool => tool.typeName == sdkTool.typeName))
+            if (discoveredTypeNames.Add(sdkTool.typeName))
                 discovered.Add(sdkTool);
         }
 
@@ -96,19 +94,8 @@ public partial class UnityToolsHub
             }
             else
             {
-                // 更新元数据但保留 isEnabled
-                existing.toolName = t.name;
-                existing.author = t.author;
-                existing.authorLink = t.authorLink;
-                existing.description = t.description;
-                existing.category = t.category;
-                existing.entryKind = t.entryKind;
-                existing.menuItem = t.menuItem;
-                existing.staticMethod = t.staticMethod;
-                existing.tags = t.tags;
-                existing.icon = t.icon;
-                existing.priority = t.priority;
-                registryDirty = true;
+                // 更新元数据但保留 isEnabled；仅在内容变化时写 EditorPrefs。
+                registryDirty |= UpdateDiscoveredToolMetadata(existing, t);
             }
 
             // 未启用的第三方工具不加入分类列表
@@ -122,7 +109,7 @@ public partial class UnityToolsHub
         foreach (var state in _thirdPartyRegistry.tools)
         {
             if (!state.isEnabled || !state.isInstalled) continue;
-            if (discovered.Any(tool => tool.typeName == state.typeName)) continue;
+            if (!discoveredTypeNames.Add(state.typeName)) continue;
             discovered.Add(new ToolEntry
             {
                 name = state.toolName,
@@ -201,6 +188,45 @@ public partial class UnityToolsHub
                     _shortcutIndex[sc] = tool;
             }
         }
+    }
+
+    private static bool UpdateDiscoveredToolMetadata(ThirdPartyToolState state, ToolEntry tool)
+    {
+        bool changed = state.toolName != tool.name
+            || state.author != tool.author
+            || state.authorLink != tool.authorLink
+            || state.description != tool.description
+            || state.category != tool.category
+            || state.entryKind != tool.entryKind
+            || state.menuItem != tool.menuItem
+            || state.staticMethod != tool.staticMethod
+            || !StringArraysEqual(state.tags, tool.tags)
+            || state.icon != tool.icon
+            || state.priority != tool.priority;
+
+        if (!changed) return false;
+
+        state.toolName = tool.name;
+        state.author = tool.author;
+        state.authorLink = tool.authorLink;
+        state.description = tool.description;
+        state.category = tool.category;
+        state.entryKind = tool.entryKind;
+        state.menuItem = tool.menuItem;
+        state.staticMethod = tool.staticMethod;
+        state.tags = tool.tags;
+        state.icon = tool.icon;
+        state.priority = tool.priority;
+        return true;
+    }
+
+    private static bool StringArraysEqual(string[] left, string[] right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left == null || right == null || left.Length != right.Length) return false;
+        for (int i = 0; i < left.Length; i++)
+            if (!string.Equals(left[i], right[i], StringComparison.Ordinal)) return false;
+        return true;
     }
 
     private static int GetPriority(ToolEntry t)
@@ -1096,6 +1122,13 @@ public partial class UnityToolsHub
             return;
         }
 
+        try { PackageReferenceUtility.ValidateGitUrl(gitUrl); }
+        catch (Exception ex)
+        {
+            _importStatus = PackageReferenceUtility.Redact(ex.Message);
+            return;
+        }
+
         // 去重检查
         var existing = _thirdPartyRegistry.FindByGitUrl(gitUrl);
         if (existing != null)
@@ -1134,6 +1167,7 @@ public partial class UnityToolsHub
                     importSource = "git",
                     gitUrl = gitUrl,
                     packagePath = gitUrl,
+                    packageName = addRequest?.Result?.name,
                     installPath = "",
                     isInstalled = true
                 };
@@ -1189,13 +1223,24 @@ public partial class UnityToolsHub
 
         if (hasPackageJson)
         {
-            // UPM 包：使用 Client.Add("file:" + path)
+            string projectRoot = System.IO.Path.GetDirectoryName(Application.dataPath);
+            string identifier;
+            try
+            {
+                identifier = PackageReferenceUtility.PrepareLocalPackageReference(localPath, projectRoot);
+                localPath = PackageReferenceUtility.RelativePath(projectRoot,
+                    PackageReferenceUtility.ResolveLocalReference(identifier, projectRoot));
+            }
+            catch (Exception ex)
+            {
+                _importStatus = PackageReferenceUtility.Redact(ex.Message);
+                return;
+            }
             _isImporting = true;
             _importStatus = "正在导入本地 UPM 包...";
 
-            string identifier = "file:" + localPath;
             var request = UnityEditor.PackageManager.Client.Add(identifier);
-            WaitForPackageRequest(request, localPath, (success) =>
+            WaitForPackageRequest(request, identifier, (success) =>
             {
                 _isImporting = false;
                 if (success)
@@ -1218,7 +1263,8 @@ public partial class UnityToolsHub
                         isEnabled = false,
                         importSource = "local",
                         gitUrl = "",
-                        packagePath = localPath,
+                        packagePath = addRequest?.Result?.name ?? identifier,
+                        packageName = addRequest?.Result?.name,
                         installPath = localPath,
                         isInstalled = true
                     };
@@ -1314,7 +1360,7 @@ public partial class UnityToolsHub
                 {
                     var error = (request as UnityEditor.PackageManager.Requests.AddRequest)?.Error
                              ?? (request as UnityEditor.PackageManager.Requests.RemoveRequest)?.Error;
-                    Debug.LogError($"[UnityToolsHub] 包操作失败: {identifier}\n{error?.message}");
+                    Debug.LogError(PackageReferenceUtility.Redact($"[UnityToolsHub] 包操作失败: {identifier}\n{error?.message}"));
                 }
                 EditorApplication.update -= onUpdate;
                 onComplete?.Invoke(success);
@@ -1327,6 +1373,20 @@ public partial class UnityToolsHub
     private void UninstallThirdPartyTool(ThirdPartyToolState state)
     {
         if (state == null) return;
+
+        if (!string.IsNullOrEmpty(state.packageName))
+        {
+            var removeRequest = UnityEditor.PackageManager.Client.Remove(state.packageName);
+            WaitForPackageRequest(removeRequest, state.packageName, success =>
+            {
+                if (!success) return;
+                _thirdPartyRegistry.Remove(state.typeName);
+                SaveThirdPartyRegistry();
+                DiscoverTools();
+                Repaint();
+            });
+            return;
+        }
 
         // Git / UPM 本地包：使用 Client.Remove
         if (state.importSource == "git" || (state.importSource == "local" && !string.IsNullOrEmpty(state.packagePath) && state.packagePath != state.scriptPath))

@@ -1,26 +1,23 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using UnityEngine.UI;
 using System.Linq;
 using System;
-using System.Collections.Generic;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 
 
 [ToolInfo("字体替换", "字体工具",
-    Description = "批量替换 Prefab 和 Scene 中的 UGUI / TextMeshPro 字体。\n\n支持指定目标文件夹，自动检测 TMP 是否可用。",
+    Description = "替换场景中 Text / TMP 的全部字体或指定原字体。支持当前场景、已打开场景和选中物体（含子物体），支持撤销。\n\nTMP 为可选依赖；另保留 Prefab 批处理与组件转换。",
     Icon = "🔤", Tags = new[] { "UGUI", "TMP", "批量替换" })]
-public class FontReplacer : EditorWindow
+public partial class FontReplacer : EditorWindow
 {
     private const string ConvertContextMenu = "GameObject/Font Replacer/Text 与 TMP 相互转换";
 
-    private Font newFont; // 普通UGUI字体
+    [SerializeField] private Font newFont; // 普通UGUI字体
     private bool hasTMP;
-#if TMP_PRESENT
-    private TMPro.TMP_FontAsset newTMPFont;
-#endif
+    [SerializeField] private UnityEngine.Object newTMPFont;
 
     private bool isProcessing = false;
     private int currentIndex = 0;
@@ -39,28 +36,23 @@ public class FontReplacer : EditorWindow
     [MenuItem(ConvertContextMenu, false, 20)]
     private static void ConvertSelectedTextComponents()
     {
+        if (!ValidateConvertSelectedTextComponents()) return;
+        Undo.IncrementCurrentGroup();
         int undoGroup = Undo.GetCurrentGroup();
         Undo.SetCurrentGroupName("Convert Text and TMP");
-
         int converted = 0;
         foreach (GameObject gameObject in Selection.gameObjects)
         {
             Text legacyText = gameObject.GetComponent<Text>();
             if (legacyText != null)
             {
-                ConvertLegacyTextToTMP(legacyText);
-                converted++;
+                if (ConvertLegacyTextToTMP(legacyText) != null) converted++;
                 continue;
             }
-
-            TMPro.TextMeshProUGUI tmpText = gameObject.GetComponent<TMPro.TextMeshProUGUI>();
-            if (tmpText != null)
-            {
-                ConvertTMPToLegacyText(tmpText);
-                converted++;
-            }
+            var tmpType = FindTypeInLoadedAssemblies("TMPro.TextMeshProUGUI");
+            var tmpText = tmpType == null ? null : gameObject.GetComponent(tmpType);
+            if (tmpText != null && ConvertTMPToLegacyText(tmpText) != null) converted++;
         }
-
         Undo.CollapseUndoOperations(undoGroup);
         Debug.Log($"Font Replacer：已转换 {converted} 个 Text/TMP 组件。");
     }
@@ -68,9 +60,9 @@ public class FontReplacer : EditorWindow
     [MenuItem(ConvertContextMenu, true)]
     private static bool ValidateConvertSelectedTextComponents()
     {
-        return Selection.gameObjects.Any(gameObject =>
-            gameObject.GetComponent<Text>() != null ||
-            gameObject.GetComponent<TMPro.TextMeshProUGUI>() != null);
+        var tmpType = FindTypeInLoadedAssemblies("TMPro.TextMeshProUGUI");
+        return !EditorApplication.isPlayingOrWillChangePlaymode && tmpType != null &&
+            Selection.gameObjects.Any(go => go.GetComponent<Text>() != null || go.GetComponent(tmpType) != null);
     }
 
     [MenuItem("CONTEXT/Text/转换为 TextMeshProUGUI")]
@@ -79,146 +71,140 @@ public class FontReplacer : EditorWindow
         ConvertLegacyTextToTMP((Text)command.context);
     }
 
+    [MenuItem("CONTEXT/Text/转换为 TextMeshProUGUI", true)]
+    private static bool ValidateConvertTextComponent(MenuCommand command)
+    {
+        return !EditorApplication.isPlayingOrWillChangePlaymode &&
+            FindTypeInLoadedAssemblies("TMPro.TextMeshProUGUI") != null;
+    }
+
     [MenuItem("CONTEXT/TextMeshProUGUI/转换为 UGUI Text")]
     private static void ConvertTMPComponent(MenuCommand command)
     {
-        ConvertTMPToLegacyText((TMPro.TextMeshProUGUI)command.context);
+        if (!EditorApplication.isPlayingOrWillChangePlaymode)
+            ConvertTMPToLegacyText((Component)command.context);
     }
 
-    private static TMPro.TextMeshProUGUI ConvertLegacyTextToTMP(Text source)
+    // Type names and reflection keep TextMeshPro optional, including the conversion menus.
+    private static Component ConvertLegacyTextToTMP(Text source)
     {
-        GameObject gameObject = source.gameObject;
+        Type tmpType = FindTypeInLoadedAssemblies("TMPro.TextMeshProUGUI");
+        if (source == null || tmpType == null) return null;
+        GameObject go = source.gameObject;
         string text = source.text;
         Color color = source.color;
-        int fontSize = source.fontSize;
-        FontStyle fontStyle = source.fontStyle;
+        int size = source.fontSize;
+        FontStyle style = source.fontStyle;
         TextAnchor alignment = source.alignment;
-        bool raycastTarget = source.raycastTarget;
+        bool raycast = source.raycastTarget;
         bool maskable = source.maskable;
         bool richText = source.supportRichText;
-
         Undo.DestroyObjectImmediate(source);
-        var target = Undo.AddComponent<TMPro.TextMeshProUGUI>(gameObject);
-        target.text = text;
-        target.color = color;
-        target.fontSize = fontSize;
-        target.fontStyle = ConvertFontStyle(fontStyle);
-        target.alignment = ConvertAlignment(alignment);
-        target.raycastTarget = raycastTarget;
-        target.maskable = maskable;
-        target.richText = richText;
-        target.enableAutoSizing = false;
-        EditorUtility.SetDirty(gameObject);
+        Component target = Undo.AddComponent(go, tmpType);
+        Undo.RecordObject(target, "Convert Text to TMP");
+        SetTMPProperty(target, "text", text);
+        SetTMPProperty(target, "color", color);
+        SetTMPProperty(target, "fontSize", (float)size);
+        string styleName = style == FontStyle.BoldAndItalic ? "Bold, Italic" : style.ToString();
+        SetTMPEnum(target, "fontStyle", styleName);
+        string[] alignments = { "TopLeft", "Top", "TopRight", "Left", "Center", "Right", "BottomLeft", "Bottom", "BottomRight" };
+        SetTMPEnum(target, "alignment", alignments[(int)alignment]);
+        SetTMPProperty(target, "raycastTarget", raycast);
+        SetTMPProperty(target, "maskable", maskable);
+        SetTMPProperty(target, "richText", richText);
+        SetTMPProperty(target, "enableAutoSizing", false);
+        RecordComponentChange(target);
         return target;
     }
 
-    private static Text ConvertTMPToLegacyText(TMPro.TextMeshProUGUI source)
+    private static Text ConvertTMPToLegacyText(Component source)
     {
-        GameObject gameObject = source.gameObject;
-        string text = source.text;
-        Color color = source.color;
-        int fontSize = Mathf.Max(1, Mathf.RoundToInt(source.fontSize));
-        TMPro.FontStyles fontStyle = source.fontStyle;
-        TMPro.TextAlignmentOptions alignment = source.alignment;
-        bool raycastTarget = source.raycastTarget;
-        bool maskable = source.maskable;
-        bool richText = source.richText;
-
+        if (source == null) return null;
+        GameObject go = source.gameObject;
+        string text = (string)GetTMPProperty(source, "text");
+        Color color = (Color)GetTMPProperty(source, "color");
+        int size = Mathf.Max(1, Mathf.RoundToInt((float)GetTMPProperty(source, "fontSize")));
+        string style = GetTMPProperty(source, "fontStyle").ToString();
+        string alignment = GetTMPProperty(source, "alignment").ToString();
+        bool raycast = (bool)GetTMPProperty(source, "raycastTarget");
+        bool maskable = (bool)GetTMPProperty(source, "maskable");
+        bool richText = (bool)GetTMPProperty(source, "richText");
         Undo.DestroyObjectImmediate(source);
-        var target = Undo.AddComponent<Text>(gameObject);
+        Text target = Undo.AddComponent<Text>(go);
+        Undo.RecordObject(target, "Convert TMP to Text");
         target.text = text;
         target.color = color;
-        target.fontSize = fontSize;
-        target.fontStyle = ConvertFontStyle(fontStyle);
-        target.alignment = ConvertAlignment(alignment);
-        target.raycastTarget = raycastTarget;
+        target.fontSize = size;
+        bool bold = style.Contains("Bold");
+        bool italic = style.Contains("Italic");
+        target.fontStyle = bold ? (italic ? FontStyle.BoldAndItalic : FontStyle.Bold) :
+            (italic ? FontStyle.Italic : FontStyle.Normal);
+        int row = alignment.Contains("Top") ? 0 : alignment.Contains("Bottom") ? 2 : 1;
+        int col = alignment.Contains("Left") ? 0 : alignment.Contains("Right") ? 2 : 1;
+        target.alignment = (TextAnchor)(row * 3 + col);
+        target.raycastTarget = raycast;
         target.maskable = maskable;
         target.supportRichText = richText;
-        EditorUtility.SetDirty(gameObject);
+        RecordComponentChange(target);
         return target;
     }
 
-    private static TMPro.FontStyles ConvertFontStyle(FontStyle style)
+    private static object GetTMPProperty(Component component, string name)
     {
-        switch (style)
-        {
-            case FontStyle.Bold: return TMPro.FontStyles.Bold;
-            case FontStyle.Italic: return TMPro.FontStyles.Italic;
-            case FontStyle.BoldAndItalic: return TMPro.FontStyles.Bold | TMPro.FontStyles.Italic;
-            default: return TMPro.FontStyles.Normal;
-        }
+        return component.GetType().GetProperty(name).GetValue(component);
     }
 
-    private static FontStyle ConvertFontStyle(TMPro.FontStyles style)
+    private static void SetTMPProperty(Component component, string name, object value)
     {
-        bool bold = (style & TMPro.FontStyles.Bold) != 0;
-        bool italic = (style & TMPro.FontStyles.Italic) != 0;
-        if (bold && italic) return FontStyle.BoldAndItalic;
-        if (bold) return FontStyle.Bold;
-        if (italic) return FontStyle.Italic;
-        return FontStyle.Normal;
+        component.GetType().GetProperty(name).SetValue(component, value);
     }
 
-    private static TMPro.TextAlignmentOptions ConvertAlignment(TextAnchor alignment)
+    private static void SetTMPEnum(Component component, string name, string value)
     {
-        switch (alignment)
-        {
-            case TextAnchor.UpperLeft: return TMPro.TextAlignmentOptions.TopLeft;
-            case TextAnchor.UpperCenter: return TMPro.TextAlignmentOptions.Top;
-            case TextAnchor.UpperRight: return TMPro.TextAlignmentOptions.TopRight;
-            case TextAnchor.MiddleLeft: return TMPro.TextAlignmentOptions.Left;
-            case TextAnchor.MiddleRight: return TMPro.TextAlignmentOptions.Right;
-            case TextAnchor.LowerLeft: return TMPro.TextAlignmentOptions.BottomLeft;
-            case TextAnchor.LowerCenter: return TMPro.TextAlignmentOptions.Bottom;
-            case TextAnchor.LowerRight: return TMPro.TextAlignmentOptions.BottomRight;
-            default: return TMPro.TextAlignmentOptions.Center;
-        }
-    }
-
-    private static TextAnchor ConvertAlignment(TMPro.TextAlignmentOptions alignment)
-    {
-        if ((alignment & TMPro.TextAlignmentOptions.Top) != 0)
-            return (alignment & TMPro.TextAlignmentOptions.Left) != 0 ? TextAnchor.UpperLeft :
-                (alignment & TMPro.TextAlignmentOptions.Right) != 0 ? TextAnchor.UpperRight : TextAnchor.UpperCenter;
-        if ((alignment & TMPro.TextAlignmentOptions.Bottom) != 0)
-            return (alignment & TMPro.TextAlignmentOptions.Left) != 0 ? TextAnchor.LowerLeft :
-                (alignment & TMPro.TextAlignmentOptions.Right) != 0 ? TextAnchor.LowerRight : TextAnchor.LowerCenter;
-        return (alignment & TMPro.TextAlignmentOptions.Left) != 0 ? TextAnchor.MiddleLeft :
-            (alignment & TMPro.TextAlignmentOptions.Right) != 0 ? TextAnchor.MiddleRight : TextAnchor.MiddleCenter;
+        var property = component.GetType().GetProperty(name);
+        property.SetValue(component, Enum.Parse(property.PropertyType, value));
     }
 
     private void OnEnable()
     {
-        // 自动检测 TMP
-        hasTMP = System.AppDomain.CurrentDomain.GetAssemblies()
-            .Any(a => a.GetType("TMPro.TMP_FontAsset") != null);
+        DetectTMP();
+        minSize = new Vector2(440, 420);
+    }
+
+    private void OnDisable()
+    {
+        if (isProcessing) StopProcessing();
+    }
+
+    private void OnSelectionChange()
+    {
+        sceneResult = null;
+        Repaint();
     }
 
     private void OnGUI()
     {
-        GUILayout.Label("Font Replacement Settings", EditorStyles.boldLabel);
-
-        newFont = (Font)EditorGUILayout.ObjectField("New UGUI Font", newFont, typeof(Font), false);
-
-        if (hasTMP)
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+        using (new EditorGUI.DisabledScope(isProcessing || EditorApplication.isPlayingOrWillChangePlaymode))
         {
-#if TMP_PRESENT
-            newTMPFont = (TMPro.TMP_FontAsset)EditorGUILayout.ObjectField("New TextMeshPro Font", newTMPFont, typeof(TMPro.TMP_FontAsset), false);
-#endif
+            DrawSceneFontControls();
+            showAdvanced = EditorGUILayout.Foldout(showAdvanced, "预制体批处理与组件转换", true);
+            if (showAdvanced)
+            {
+                DrawAdvancedControls();
+            }
         }
-        else
+        if (isProcessing)
         {
-            EditorGUILayout.HelpBox("TextMeshPro not detected. TMP font replacement will be skipped.", MessageType.Info);
+            EditorGUILayout.HelpBox("正在处理，可点击取消停止后续处理。", MessageType.Info);
+            if (GUILayout.Button("取消")) StopProcessing();
         }
+        EditorGUILayout.EndScrollView();
+    }
 
-        GUILayout.Space(10);
-
-        if (GUILayout.Button("Replace Fonts In Open Scene"))
-        {
-            if (EditorUtility.DisplayDialog("Confirm", "Replace fonts in current open scene?", "Yes", "No"))
-                ReplaceFontsInOpenScene();
-        }
-
+    private void DrawAdvancedControls()
+    {
+        EditorGUILayout.HelpBox("字体替换共用上方字体与筛选条件。组件转换会更换组件类型。", MessageType.Info);
         GUILayout.Space(6);
         EditorGUILayout.LabelField("Convert Components", EditorStyles.boldLabel);
         using (new EditorGUILayout.HorizontalScope())
@@ -276,26 +262,7 @@ public class FontReplacer : EditorWindow
             if (EditorUtility.DisplayDialog("Confirm", "Replace fonts in ALL prefabs?", "Yes", "No"))
                 StartReplaceAllPrefabs();
         }
-
-        if (isProcessing)
-        {
-            EditorGUILayout.HelpBox("正在处理，请等待完成 或 点击 Cancel 停止", MessageType.Info);
-            if (GUILayout.Button("Cancel", GUILayout.MaxWidth(120)))
-            {
-                StopProcessing();
-            }
-        }
     }
-
-    #region Open Scene
-    private void ReplaceFontsInOpenScene()
-    {
-        Scene scene = SceneManager.GetActiveScene();
-        int count = ReplaceFontsInScene(scene);
-        EditorSceneManager.MarkSceneDirty(scene);
-        Debug.Log($"当前打开场景字体替换完成，总共替换 {count} 个对象！");
-    }
-    #endregion
 
     // Helper: convert all Text children under root GameObject to TMP, return count
     private int ConvertTextToTMP_Root(GameObject root)
@@ -309,141 +276,32 @@ public class FontReplacer : EditorWindow
         return count;
     }
 
-    // Helper: convert single GameObject's Text to TMP, return 1 if converted
     private int ConvertTextToTMP_Single(GameObject go)
     {
-        var txt = go.GetComponent<Text>();
-        if (txt == null) return 0;
-        if (!hasTMP)
-        {
-            Debug.LogWarning("TextMeshPro not present. Skipping conversion.");
-            return 0;
-        }
-        // prefer direct API when compiled with TMP, otherwise use reflection
-#if TMP_PRESENT
-        var text = txt.text;
-        var color = txt.color;
-        var size = txt.fontSize;
-        DestroyImmediate(txt, true);
-        var tmp = go.AddComponent<TMPro.TextMeshProUGUI>();
-        tmp.text = text;
-        tmp.color = color;
-        try { tmp.enableAutoSizing = false; } catch { }
-        tmp.fontSize = size;
-        try { tmp.ForceMeshUpdate(); } catch { }
-        try { tmp.SetVerticesDirty(); tmp.SetLayoutDirty(); } catch { }
-        if (newTMPFont != null) tmp.font = newTMPFont;
+        var target = ConvertLegacyTextToTMP(go.GetComponent<Text>());
+        if (target == null) return 0;
+        if (newTMPFont != null) SetTMPProperty(target, "font", newTMPFont);
         return 1;
-#else
-        var text = txt.text;
-        var color = txt.color;
-        var size = txt.fontSize;
-        DestroyImmediate(txt, true);
-
-        var tmpType = FindTypeInLoadedAssemblies("TMPro.TextMeshProUGUI");
-        if (tmpType == null)
-        {
-            Debug.LogWarning("Cannot find TextMeshProUGUI type. Skipping conversion.");
-            return 0;
-        }
-
-        var tmpComp = go.AddComponent(tmpType);
-
-        // set properties via reflection
-        try
-        {
-            var textProp = tmpType.GetProperty("text");
-            var colorProp = tmpType.GetProperty("color");
-            var fontSizeProp = tmpType.GetProperty("fontSize");
-            var autoProp = tmpType.GetProperty("enableAutoSizing");
-
-            if (textProp != null) textProp.SetValue(tmpComp, text);
-            if (colorProp != null) colorProp.SetValue(tmpComp, color);
-            if (autoProp != null)
-            {
-                try { autoProp.SetValue(tmpComp, false); } catch { }
-            }
-            if (fontSizeProp != null)
-            {
-                try { fontSizeProp.SetValue(tmpComp, Convert.ChangeType(size, fontSizeProp.PropertyType)); } catch { }
-            }
-
-            // try to call ForceMeshUpdate, SetVerticesDirty, SetLayoutDirty
-            var force = tmpType.GetMethod("ForceMeshUpdate");
-            var setV = tmpType.GetMethod("SetVerticesDirty");
-            var setL = tmpType.GetMethod("SetLayoutDirty");
-            try { force?.Invoke(tmpComp, null); } catch { }
-            try { setV?.Invoke(tmpComp, null); } catch { }
-            try { setL?.Invoke(tmpComp, null); } catch { }
-        }
-        catch { }
-
-        return 1;
-#endif
     }
 
-    // Helper: convert all TMP children under root GameObject to Text, return count
     private int ConvertTMPToText_Root(GameObject root)
     {
+        var tmpType = FindTypeInLoadedAssemblies("TMPro.TextMeshProUGUI");
+        if (tmpType == null) return 0;
         int count = 0;
-#if TMP_PRESENT
-        var tmps = root.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true);
-        foreach (var tmp in tmps)
-        {
-            count += ConvertTMPToText_Single(tmp.gameObject);
-        }
-#endif
+        foreach (var component in root.GetComponentsInChildren(tmpType, true))
+            count += ConvertTMPToText_Single(component.gameObject);
         return count;
     }
 
-    // Helper: convert single GameObject's TMP to Text, return 1 if converted
     private int ConvertTMPToText_Single(GameObject go)
     {
-        if (!hasTMP) return 0;
-
-#if TMP_PRESENT
-        var tmp = go.GetComponent<TMPro.TextMeshProUGUI>();
-        if (tmp == null) return 0;
-        var text = tmp.text;
-        var color = tmp.color;
-        int size = 0;
-        try { bool wasAuto = tmp.enableAutoSizing; if (wasAuto) tmp.enableAutoSizing = false; size = Mathf.RoundToInt(tmp.fontSize); if (wasAuto) tmp.enableAutoSizing = true; } catch { size = Mathf.RoundToInt(tmp.fontSize); }
-        DestroyImmediate(tmp, true);
-        var t = go.AddComponent<Text>();
-        t.text = text;
-        t.color = color;
-        if (newFont != null) t.font = newFont;
-        if (size > 0) t.fontSize = size;
-        return 1;
-#else
         var tmpType = FindTypeInLoadedAssemblies("TMPro.TextMeshProUGUI");
         if (tmpType == null) return 0;
-        var tmpComp = go.GetComponent(tmpType);
-        if (tmpComp == null) return 0;
-
-        string text = string.Empty;
-        Color color = Color.white;
-        int size = 0;
-        try
-        {
-            var textProp = tmpType.GetProperty("text");
-            var colorProp = tmpType.GetProperty("color");
-            var fontSizeProp = tmpType.GetProperty("fontSize");
-            if (textProp != null) text = (string)textProp.GetValue(tmpComp);
-            if (colorProp != null) color = (Color)colorProp.GetValue(tmpComp);
-            if (fontSizeProp != null) size = Convert.ToInt32(fontSizeProp.GetValue(tmpComp));
-        }
-        catch { }
-
-        DestroyImmediate((UnityEngine.Object)tmpComp, true);
-
-        var t = go.AddComponent<Text>();
-        t.text = text;
-        t.color = color;
-        if (newFont != null) t.font = newFont;
-        if (size > 0) t.fontSize = size;
+        var target = ConvertTMPToLegacyText(go.GetComponent(tmpType));
+        if (target == null) return 0;
+        if (newFont != null) target.font = newFont;
         return 1;
-#endif
     }
 
     #region All Scenes
@@ -467,7 +325,6 @@ public class FontReplacer : EditorWindow
         EditorApplication.update -= ProcessScenes;
         EditorApplication.update -= ProcessPrefabs;
         EditorApplication.update -= ProcessPrefabs_Convert;
-        EditorApplication.update -= ProcessScenes;
         EditorUtility.ClearProgressBar();
         Debug.Log("Font replacement/process cancelled by user.");
     }
@@ -555,27 +412,9 @@ public class FontReplacer : EditorWindow
         GameObject prefabRoot = PrefabUtility.LoadPrefabContents(path);
         bool changed = false;
 
-        foreach (var t in prefabRoot.GetComponentsInChildren<Text>(true))
-        {
-            if (newFont != null)
-            {
-                t.font = newFont;
-                changed = true;
-                totalObjects++;
-            }
-        }
-
-#if TMP_PRESENT
-        if (hasTMP && newTMPFont != null)
-        {
-            foreach (var tmp in prefabRoot.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true))
-            {
-                tmp.font = newTMPFont;
-                changed = true;
-                totalObjects++;
-            }
-        }
-#endif
+        int count = ReplaceFontsUnderRoot(prefabRoot, false);
+        changed = count > 0;
+        totalObjects += count;
 
         if (changed)
         {
@@ -696,44 +535,15 @@ public class FontReplacer : EditorWindow
     {
         int count = 0;
         foreach (var root in scene.GetRootGameObjects())
-        {
-            foreach (var t in root.GetComponentsInChildren<Text>(true))
-            {
-                if (newFont != null)
-                {
-                    Undo.RecordObject(t, "Replace Font");
-                    t.font = newFont;
-                    count++;
-                }
-            }
-
-#if TMP_PRESENT
-            if (hasTMP && newTMPFont != null)
-            {
-                foreach (var tmp in root.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true))
-                {
-                    Undo.RecordObject(tmp, "Replace TMP Font");
-                    tmp.font = newTMPFont;
-                    count++;
-                }
-            }
-#endif
-        }
+            count += ReplaceFontsUnderRoot(root, true);
         return count;
     }
 
     private bool CheckFontSelected()
     {
-        if (newFont == null
-#if TMP_PRESENT
-            && (hasTMP && newTMPFont == null)
-#endif
-        )
-        {
-            Debug.LogWarning("请至少选择一个新字体！");
-            return false;
-        }
-        return true;
+        if (HasValidFontSettings()) return true;
+        Debug.LogWarning("请为每种勾选的组件选择目标字体；至少勾选一种组件。");
+        return false;
     }
 }
 #endif

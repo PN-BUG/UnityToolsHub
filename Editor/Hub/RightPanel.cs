@@ -23,6 +23,9 @@ public partial class UnityToolsHub
     private static GUIStyle _cachedCategoryIconCenter;
     private static GUIStyle _cachedDashboardButtonLabel;
     private static GUIStyle _cachedDashboardLinkLabel;
+    private static GUIStyle _cachedToolListTitle;
+    private static GUIStyle _cachedToolListDescription;
+    private static GUIStyle _cachedToolListMetadata;
     private static readonly GUIContent _cachedContent = new GUIContent();
 
     private static GUIStyle CachedTooltipStyle
@@ -63,6 +66,37 @@ public partial class UnityToolsHub
             normal = { textColor = Theme.ClrTextDim }
         });
 
+    private static GUIStyle CachedToolListTitle
+        => _cachedToolListTitle ?? (_cachedToolListTitle = new GUIStyle(EditorStyles.boldLabel)
+        {
+            fontSize = 13,
+            padding = new RectOffset(),
+            margin = new RectOffset(),
+            clipping = TextClipping.Clip,
+            normal = { textColor = Theme.ClrTextBright }
+        });
+
+    private static GUIStyle CachedToolListDescription
+        => _cachedToolListDescription ?? (_cachedToolListDescription = new GUIStyle(EditorStyles.label)
+        {
+            fontSize = 12,
+            wordWrap = true,
+            padding = new RectOffset(),
+            margin = new RectOffset(),
+            clipping = TextClipping.Clip,
+            normal = { textColor = Theme.ClrText }
+        });
+
+    private static GUIStyle CachedToolListMetadata
+        => _cachedToolListMetadata ?? (_cachedToolListMetadata = new GUIStyle(EditorStyles.label)
+        {
+            fontSize = 11,
+            padding = new RectOffset(),
+            margin = new RectOffset(),
+            clipping = TextClipping.Clip,
+            normal = { textColor = Theme.ClrTextDim }
+        });
+
     [UnityEditor.InitializeOnLoadMethod]
     private static void RegisterRightPanelCleanup()
     {
@@ -77,6 +111,9 @@ public partial class UnityToolsHub
             _cachedCategoryIconCenter = null;
             _cachedDashboardButtonLabel = null;
             _cachedDashboardLinkLabel = null;
+            _cachedToolListTitle = null;
+            _cachedToolListDescription = null;
+            _cachedToolListMetadata = null;
         };
     }
 
@@ -84,7 +121,9 @@ public partial class UnityToolsHub
     private void DrawRightPanel()
     {
         // 右侧背景
-        EditorGUILayout.BeginVertical();
+        EditorGUILayout.BeginVertical(
+            GUILayout.Width(Mathf.Max(1f, position.width - LeftPanelWidth - SplitterWidth)),
+            GUILayout.ExpandHeight(true));
         EditorGUI.DrawRect(
             new Rect(LeftPanelWidth + SplitterWidth, 0,
                 position.width - LeftPanelWidth - SplitterWidth, position.height),
@@ -113,6 +152,8 @@ public partial class UnityToolsHub
                 DrawCreateOrAddToolPanel();
             else if (_selectedTool != null)
                 DrawToolDetailPanel(_selectedTool);
+            else if (HasSearchQuery)
+                DrawSearchResultsPanel();
             else if (_selectedCategory != null)
                 DrawCategoryPanel(_selectedCategory);
             else
@@ -619,6 +660,45 @@ public partial class UnityToolsHub
         EditorGUILayout.EndHorizontal();
     }
 
+    // Reserve the vertical scrollbar before sizing content. Do not let a row's
+    // width depend on its GUI.Label calls: those do not participate in GUILayout.
+    private float BeginToolListContent()
+    {
+        float width = Mathf.Max(1f,
+            position.width - LeftPanelWidth - SplitterWidth - RightPadding * 2 - 20f);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.BeginVertical(GUILayout.Width(width));
+        return width;
+    }
+
+    private void EndToolListContent()
+    {
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private void DrawSearchResultsPanel()
+    {
+        EditorGUILayout.Space(18);
+        float width = BeginToolListContent();
+        var categories = _categories.Where(category => !_hiddenItems.IsCategoryHidden(category.name)).ToList();
+        int count = categories.Sum(category => category.tools.Count(MatchesSearch));
+        GUILayout.Label("搜索结果", Styles.RightTitle);
+        string summary = $"“{_searchText.Trim()}” · 找到 {count} 个工具";
+        GUILayout.Label(new GUIContent(summary, summary), CachedToolListDescription, GUILayout.Width(width));
+        EditorGUILayout.Space(16);
+        if (count == 0)
+            EditorGUILayout.HelpBox("未找到匹配的工具，请尝试工具名称、功能说明或标签。", MessageType.Info);
+        else
+            foreach (var category in categories)
+                foreach (var tool in category.tools.Where(MatchesSearch))
+                    DrawCategoryToolRow(category, tool, width, true);
+        EndToolListContent();
+        EditorGUILayout.Space(20);
+    }
+
     private void DrawCategoryPanel(CategoryNode category)
     {
         if (category == null)
@@ -634,18 +714,22 @@ public partial class UnityToolsHub
                 Mathf.Min(1f, accent.b + 0.14f), 1f));
 
         EditorGUILayout.Space(18);
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Space(RightPadding);
+        float width = BeginToolListContent();
         if (GUILayout.Button("← 总览", Styles.BackButton, GUILayout.Width(52)))
         {
             _selectedCategory = null;
             _rightScroll = Vector2.zero;
-            EditorGUILayout.EndHorizontal();
+            EndToolListContent();
             return;
         }
-        GUILayout.Space(10);
-
-        var iconRect = GUILayoutUtility.GetRect(30, 30, GUILayout.Width(30));
+        EditorGUILayout.Space(8);
+        int visibleCount = category.tools.Count(tool => !_hiddenItems.IsToolHidden(tool.typeName));
+        string subtitle = $"{visibleCount} 个可用工具 · 点击查看详情，也可直接打开";
+        float headingWidth = Mathf.Max(1f, width - 42f);
+        float subtitleHeight = CachedToolListDescription.CalcHeight(new GUIContent(subtitle), headingWidth);
+        var headingRect = GUILayoutUtility.GetRect(width, 34f + subtitleHeight,
+            GUILayout.Width(width), GUILayout.Height(34f + subtitleHeight));
+        var iconRect = new Rect(headingRect.x, headingRect.y + 2, 30, 30);
         Drawing.DrawRoundedRect(iconRect,
             new Color(accent.r, accent.g, accent.b, 0.18f), 5f);
         var previousGuiColor = GUI.color;
@@ -653,24 +737,13 @@ public partial class UnityToolsHub
         GUI.Label(iconRect, category.icon, CachedCategoryIconCenter);
         GUI.color = previousGuiColor;
 
-        GUILayout.Space(8);
-        EditorGUILayout.BeginVertical();
-        GUILayout.Label(category.name, Styles.RightTitle);
-        int visibleCount = category.tools.Count(tool => !_hiddenItems.IsToolHidden(tool.typeName));
-        GUILayout.Label($"{visibleCount} 个可用工具 · 点击查看详情，也可直接打开", Styles.RightSubtitle);
-        EditorGUILayout.EndVertical();
-        GUILayout.FlexibleSpace();
-        GUILayout.Space(RightPadding);
-        EditorGUILayout.EndHorizontal();
+        GUI.Label(new Rect(headingRect.x + 42, headingRect.y, headingWidth, 30), category.name, Styles.RightTitle);
+        GUI.Label(new Rect(headingRect.x + 42, headingRect.y + 34, headingWidth, subtitleHeight),
+            subtitle, CachedToolListDescription);
 
         EditorGUILayout.Space(18);
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Space(RightPadding);
         GUILayout.Label("分类工具", Styles.SectionHeader);
-        GUILayout.FlexibleSpace();
-        GUILayout.Label("右键左侧列表可管理分类", Styles.RightSubtitle);
-        GUILayout.Space(RightPadding);
-        EditorGUILayout.EndHorizontal();
+        GUILayout.Label("右键左侧列表可管理分类", CachedToolListMetadata);
         EditorGUILayout.Space(6);
 
         var visibleTools = category.tools
@@ -678,28 +751,26 @@ public partial class UnityToolsHub
             .ToList();
         if (visibleTools.Count == 0)
         {
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Space(RightPadding);
             EditorGUILayout.HelpBox("这个分类当前没有可显示的工具。", MessageType.Info);
-            GUILayout.Space(RightPadding);
-            EditorGUILayout.EndHorizontal();
         }
         else
         {
             foreach (var tool in visibleTools)
-                DrawCategoryToolRow(category, tool);
+                DrawCategoryToolRow(category, tool, width);
         }
 
+        EndToolListContent();
         EditorGUILayout.Space(20);
     }
 
-    private void DrawCategoryToolRow(CategoryNode category, ToolEntry tool)
+    private void DrawCategoryToolRow(CategoryNode category, ToolEntry tool, float width, bool showCategory = false)
     {
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Space(RightPadding);
-        var rect = GUILayoutUtility.GetRect(0, 62f, GUILayout.ExpandWidth(true));
-        GUILayout.Space(RightPadding);
-        EditorGUILayout.EndHorizontal();
+        float textWidth = Mathf.Max(1f, width - 126f);
+        string description = string.IsNullOrWhiteSpace(tool.description) ? "暂无功能说明" : tool.description;
+        float descriptionHeight = Mathf.Clamp(
+            CachedToolListDescription.CalcHeight(new GUIContent(description), textWidth), 18f, 54f);
+        float height = 54f + descriptionHeight;
+        var rect = GUILayoutUtility.GetRect(width, height, GUILayout.Width(width), GUILayout.Height(height));
 
         bool hover = rect.Contains(Event.current.mousePosition);
         Drawing.DrawRoundedRect(rect, hover ? Theme.ClrItemHover : Theme.ClrCardBg, 6f);
@@ -714,18 +785,21 @@ public partial class UnityToolsHub
         GUI.Label(iconRect, icon, CachedCategoryIconCenter);
         GUI.color = previousGuiColor;
 
-        GUI.Label(new Rect(rect.x + 54, rect.y + 8, rect.width - 126, 20), tool.name, Styles.CatCardName);
-        string description = string.IsNullOrWhiteSpace(tool.description) ? "暂无功能说明" : tool.description;
-        GUI.Label(new Rect(rect.x + 54, rect.y + 29, rect.width - 126, 17), description, Styles.CatCardCount);
+        GUI.Label(new Rect(rect.x + 54, rect.y + 8, textWidth, 20),
+            new GUIContent(tool.name, tool.name), CachedToolListTitle);
+        GUI.Label(new Rect(rect.x + 54, rect.y + 31, textWidth, descriptionHeight),
+            new GUIContent(description, description), CachedToolListDescription);
 
         var shortcut = GetEffectiveShortcut(tool.typeName);
         string usageText = _usageStats.GetToolCount(tool.typeName) > 0
             ? $"已使用 {_usageStats.GetToolCount(tool.typeName)} 次"
             : "尚未使用";
-        GUI.Label(new Rect(rect.x + 54, rect.y + 45, rect.width - 126, 13),
-            shortcut.IsValid ? $"{usageText}  ·  {shortcut}" : usageText, Styles.CatCardCount);
+        string metadata = shortcut.IsValid ? $"{usageText}  ·  {shortcut}" : usageText;
+        if (showCategory) metadata = $"{category.name}  ·  {metadata}";
+        GUI.Label(new Rect(rect.x + 54, rect.yMax - 20, textWidth, 16),
+            new GUIContent(metadata, metadata), CachedToolListMetadata);
 
-        var openRect = new Rect(rect.xMax - 60, rect.y + 17, 48, 28);
+        var openRect = new Rect(rect.xMax - 60, rect.y + (rect.height - 28f) * 0.5f, 48, 28);
         bool openHover = openRect.Contains(Event.current.mousePosition);
         Drawing.DrawRoundedRect(openRect, openHover ? Theme.ClrBtnHover : Theme.ClrBtnNormal, 4f);
         GUI.Label(openRect, "打开", CachedDashboardButtonLabel);
@@ -1317,6 +1391,7 @@ public partial class UnityToolsHub
         {
             _selectedTool = null;
             _selectedCategory = null;
+            _rightScroll = Vector2.zero;
             shouldReturn = true;
         }
 

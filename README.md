@@ -11,6 +11,7 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **分类管理**：按功能分类展示工具，支持自定义分类图标和颜色
 - **文件夹式分类**：支持拖拽工具切换分类、拖拽分类排序、新建/重命名/删除自定义分类
 - **快速搜索**：支持关键字搜索和标签过滤
+- **AI工具**：固定收录可复用的 AI 编辑器工具，提供目录定位、接入模板和复用说明；新增工具前先查阅 [工具索引与接入约定](Editor/Tools/AI/README.md)，避免反复生成相同脚本
 - **排序方式**：支持按名称（默认）、最近使用（按时间戳）、最常使用（按次数）排序
 - **快捷键**：为常用工具绑定键盘快捷键，O(1) 字典查找导航，冲突检测 O(1)
 - **使用统计**：记录工具使用频率，常用工具自动置顶，O(1) 字典查找
@@ -21,7 +22,28 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **作者信息**：支持在 `[ToolInfo]` 中标注作者和链接，详情页可点击跳转
 - **性能优化**：消除 OnGUI 每帧 GUIStyle/GUIContent 分配，反射元数据构造时缓存，快捷键冲突检测 O(1) 查找
 - **Odin Inspector 兼容**：自动检测 Odin，有则使用原生属性渲染，无则通过兼容层桩类型+反射绘制器回退
+- **场景字体替换**：在“字体工具 > 字体替换”（或 `UnityToolsHub > Font Replacer`）中，选择当前场景、全部已打开场景或选中物体及子物体，替换 Text / TMP 的全部字体或仅指定原字体；默认包含未激活物体，支持统计和 Ctrl+Z 撤销。Text 选择 `Font`，TMP 选择 `TMP Font Asset`（包含 UI 和 3D 文本）。TMP 自动检测，无需安装即可使用 Text 替换；替换后需保存场景
 - **圆角渲染**：`Drawing.DrawRoundedRect` 在 IMGUI 下退化为方形（角纹理合成有渲染伪影），纹理缓存加入上限保护
+
+## 包路径与凭据保护
+
+- Hub 本地导入、PackageInstaller 和 Git 包切换器共用 `UnityPackageCreator.Editor.PackageReferenceUtility`。项目外及 Library/Temp 缓存中的本地包先复制到 `LocalPackages`，同名目录不会覆盖；引用统一相对于 `Packages`，例如 `file:../LocalPackages/com.example.tool`。需将本地包文件与项目一起纳入版本管理。
+- 复制时跳过 Git/SVN 元数据、本地 XOR 密钥、签名材料、私有签名目录及常见本地环境文件；不跟随符号链接或目录联接。失败时只清理本次导入的临时目录，保留源文件。
+- Git 操作拒绝带 HTTP 用户信息、SSH 密码或认证查询参数的 URL；保留 `?path=` 子目录与 `#revision` 支持。认证交给系统 Git 凭据管理器或 SSH。
+- Git URL、UPM 错误及 Git 输出在展示前脱敏，失败日志不再输出整条命令；Git 元数据写入前再次验证 URL，并使用 JSON 序列化。
+
+UPM 相对路径基准见 [Unity 2023.2 本地包路径说明](https://docs.unity3d.com/2023.2/Documentation/Manual/upm-localpath.html)。核心接口 `PrepareLocalPackageReference(sourcePath, projectRoot)` 仅在既有导入操作中调用，会复制项目外的包；`ValidateGitUrl(value)` 和 `Redact(text)` 分别用于拒绝凭据 URL 和脱敏输出。
+
+## 加密解密工具的本地密钥
+
+入口：`Tools > 数据处理 > 加密解密工具`。工具没有内置默认密钥，也不再将新密钥保存到 EditorPrefs。
+
+- 新数据使用“生成并保存本地密钥”；原有数据使用“导入已有密钥”或“保存输入密钥”。检测到旧版 EditorPrefs 密钥时，可手动迁移，成功保存后删除旧设置。
+- 密钥为 `Resources/UnityFramework/XorKey.txt` 单行 UTF-8 文件，与框架运行时共用。安装了框架时保存在 `EncryptTool.cs` 目录下；独立使用 Hub 时保存在 `Assets/Resources/UnityFramework/XorKey.txt`。
+- 生成与导入均拒绝覆盖已有密钥，缺少文件时窗口会提示，单个及批量加解密都停止执行；不使用输入框中尚未保存的密钥作为回退。
+- 工具为密钥及其 `.meta` 创建局部 Git 忽略规则。SVN 项目需要另外配置相应忽略规则。备份密钥，勿提交或输出密钥内容；客户端构建中的 XOR 仍只用于数据混淆。
+
+可复用接口：`CryptoUtility.GenerateLocalKeyFile()` 和 `CryptoUtility.SaveLocalKeyFile(string key)`，返回保存路径，创建本地文件并刷新资产；现有文件或非法输入会抛出异常。仅在用户明确操作时调用，不在窗口加载或脚本编译时自动生成。
 
 ## 快速开始
 

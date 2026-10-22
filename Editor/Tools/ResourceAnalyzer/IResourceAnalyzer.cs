@@ -29,12 +29,13 @@ namespace ResourceAnalyzer
         List<ResourceAnalysisResult> Analyze(List<string> assetPaths, TargetPlatform platform);
 
         /// <summary>
-        /// 对单个资源执行优化建议（自动修复）
+        /// 对单个资源执行指定的优化建议（自动修复）
         /// </summary>
         /// <param name="result">分析结果</param>
         /// <param name="platform">目标平台</param>
+        /// <param name="suggestions">要应用的建议</param>
         /// <returns>是否成功应用优化</returns>
-        bool ApplyOptimization(ResourceAnalysisResult result, TargetPlatform platform);
+        bool ApplyOptimization(ResourceAnalysisResult result, TargetPlatform platform, IReadOnlyCollection<OptimizationSuggestion> suggestions);
     }
 
     /// <summary>

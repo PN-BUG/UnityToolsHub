@@ -16,6 +16,17 @@ namespace ResourceAnalyzer
         Error       // 严重问题（必须修复）
     }
 
+    public enum OptimizationAction
+    {
+        None,
+        MaxSize,
+        Mipmap,
+        ReadWrite,
+        StreamingMipmaps,
+        Format,
+        WrapMode
+    }
+
     /// <summary>
     /// 单条优化建议
     /// </summary>
@@ -37,15 +48,23 @@ namespace ResourceAnalyzer
         /// <summary>可自动修复</summary>
         public bool CanAutoFix;
 
+        /// <summary>自动修复对应的设置</summary>
+        public OptimizationAction Action;
+
+        /// <summary>在详情面板中选中此建议</summary>
+        [NonSerialized] public bool IsSelected;
+
         public OptimizationSuggestion() { }
 
-        public OptimizationSuggestion(string description, IssueSeverity severity, string recommendation, long estimatedSaving = 0, bool canAutoFix = false)
+        public OptimizationSuggestion(string description, IssueSeverity severity, string recommendation,
+            long estimatedSaving = 0, OptimizationAction action = OptimizationAction.None, bool canAutoFix = true)
         {
             Description = description;
             Severity = severity;
             Recommendation = recommendation;
             EstimatedSavingBytes = estimatedSaving;
-            CanAutoFix = canAutoFix;
+            Action = action;
+            CanAutoFix = canAutoFix && action != OptimizationAction.None;
         }
 
         /// <summary>格式化预估节省大小</summary>
@@ -88,11 +107,26 @@ namespace ResourceAnalyzer
         /// <summary>高度</summary>
         public int Height;
 
+        /// <summary>源文件原始宽度（不受 Max Size 限制）</summary>
+        public int SourceWidth;
+
+        /// <summary>源文件原始高度（不受 Max Size 限制）</summary>
+        public int SourceHeight;
+
         /// <summary>是否启用 Mipmap</summary>
         public bool HasMipmap;
 
         /// <summary>当前压缩格式</summary>
         public string CurrentFormat;
+
+        /// <summary>目标平台是否启用了独立纹理设置</summary>
+        public bool HasPlatformOverride;
+
+        /// <summary>目标平台是否由 Unity 自动选择具体格式</summary>
+        public bool UsesAutomaticFormat;
+
+        /// <summary>目标平台纹理是否未压缩</summary>
+        public bool IsUncompressed;
 
         /// <summary>推荐压缩格式</summary>
         public string RecommendedFormat;

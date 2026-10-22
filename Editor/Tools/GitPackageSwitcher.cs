@@ -6,6 +6,8 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
+using Newtonsoft.Json.Linq;
+using UnityPackageCreator.Editor;
 using Debug = UnityEngine.Debug;
 
 /// <summary>
@@ -55,7 +57,7 @@ public class GitPackageSwitcher : ToolEditorWindow
     // ═══════════════════════════════════════════════════════════════
 
     private List<PackageInfo> _packages = new List<PackageInfo>();
-    private Vector2 _scrollPos;
+    private bool CompactLayout => position.width < 720f;
     private bool _isProcessing;
     private string _statusMessage = "";
     private string _manifestPath;
@@ -147,6 +149,8 @@ public class GitPackageSwitcher : ToolEditorWindow
 
         DrawPackageList();
         DrawBatchActions();
+        // 空余高度留在列表之后，不分配给包卡片。
+        GUILayout.FlexibleSpace();
     }
 
     private void EnsureStyles()
@@ -189,14 +193,16 @@ public class GitPackageSwitcher : ToolEditorWindow
                 fontSize = 14,
                 fontStyle = FontStyle.Bold,
                 clipping = TextClipping.Clip,
+                fixedHeight = 22,
             };
         }
         if (_metaStyle == null)
         {
             _metaStyle = new GUIStyle(StLabelDim)
             {
-                fontSize = 10,
+                fontSize = 11,
                 clipping = TextClipping.Clip,
+                fixedHeight = 18,
             };
         }
         if (_segmentStyle == null)
@@ -295,6 +301,13 @@ public class GitPackageSwitcher : ToolEditorWindow
 
             GUILayout.Space(6);
 
+            if (CompactLayout)
+            {
+                EditorGUILayout.EndHorizontal();
+                GUILayout.Space(6);
+                EditorGUILayout.BeginHorizontal();
+            }
+
             if (BtnPrimary("扫描目录", GUILayout.Width(96), GUILayout.Height(28)))
                 PickAndScanDirectory();
 
@@ -304,14 +317,6 @@ public class GitPackageSwitcher : ToolEditorWindow
                 ScanPackageCache();
 
             GUILayout.FlexibleSpace();
-
-            if (DrawFlatButton("全选", GUILayout.Width(50)))
-                _packages.ForEach(p => p.isSelected = true);
-
-            GUILayout.Space(4);
-
-            if (DrawFlatButton("全不选", GUILayout.Width(60)))
-                _packages.ForEach(p => p.isSelected = false);
         }
         EditorGUILayout.EndHorizontal();
 
@@ -348,6 +353,17 @@ public class GitPackageSwitcher : ToolEditorWindow
         _selectedCountStyle.normal.textColor = selectedColor;
         GUILayout.Label($"已选 {selectedCount}", _selectedCountStyle, GUILayout.Width(64));
 
+        if (CompactLayout)
+        {
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+        }
+        GUILayout.Space(12);
+        if (DrawFlatButton("全选", GUILayout.Width(44)))
+            _packages.ForEach(p => p.isSelected = true);
+        if (DrawFlatButton("全不选", GUILayout.Width(56)))
+            _packages.ForEach(p => p.isSelected = false);
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.Space(6);
     }
@@ -430,7 +446,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("扫描失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
@@ -515,23 +531,19 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         if (string.IsNullOrEmpty(scanned.name)) return;
 
-        // 计算相对于项目根目录的路径
-        string relativePath = GetRelativePath(_projectRoot, scanned.folderPath);
-        string fileRef = $"file:{relativePath.Replace('\\', '/')}";
-
-        AddGitPackage(fileRef, scanned.name, scanned.folderName);
+        try
+        {
+            string fileRef = PackageReferenceUtility.PrepareLocalPackageReference(scanned.folderPath, _projectRoot);
+            AddGitPackage(fileRef, scanned.name, scanned.folderName);
+        }
+        catch (Exception ex) { ShowStatus(ex.Message, MessageType.Error); }
     }
 
     private static string GetRelativePath(string basePath, string fullPath)
     {
-        basePath = basePath.Replace('\\', '/').TrimEnd('/');
-        fullPath = fullPath.Replace('\\', '/').TrimEnd('/');
-
-        if (!basePath.EndsWith("/")) basePath += "/";
-        if (fullPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
-            return fullPath.Substring(basePath.Length);
-
-        return fullPath;
+        if (!PackageReferenceUtility.IsWithin(basePath, fullPath))
+            throw new ArgumentException("包位于项目外，请先通过本地导入复制到 LocalPackages。");
+        return PackageReferenceUtility.RelativePath(basePath, fullPath);
     }
 
     // ─── PackageCache 检测 ──────────────────────────────────────
@@ -601,7 +613,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                 // 附加信息
                 pkg.displayName = $"{pkg.displayName}  [{commitHash.Substring(0, Math.Min(8, commitHash.Length))}]" +
                     (hasGitDir ? " [有.git]" : "") +
-                    (!string.IsNullOrEmpty(gitUrl) ? "\n    " + gitUrl : "");
+                    (!string.IsNullOrEmpty(gitUrl) ? "\n    " + PackageReferenceUtility.Redact(gitUrl) : "");
 
                 _cachePackages.Add(pkg);
             }
@@ -611,7 +623,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("扫描 PackageCache 失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
@@ -638,7 +650,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         }
         catch (Exception ex)
         {
-            Debug.LogWarning($"读取 packages-lock.json 失败: {ex.Message}");
+            Debug.LogWarning(PackageReferenceUtility.Redact($"读取 packages-lock.json 失败: {ex.Message}"));
         }
 
         return result;
@@ -766,7 +778,7 @@ public class GitPackageSwitcher : ToolEditorWindow
     private void DrawPackageList()
     {
         // ── 按过滤分组显示 ──
-        _scrollPos = EditorGUILayout.BeginScrollView(_scrollPos);
+        // ToolEditorWindow 已提供整体滚动，避免嵌套滚动挤压列表高度。
 
         var gitPackages = _packages.Where(p => p.isGit).ToList();
         var localPackages = _packages.Where(p => p.isLocal).ToList();
@@ -786,7 +798,9 @@ public class GitPackageSwitcher : ToolEditorWindow
                 DrawPackageRow(pkg);
         }
 
-        EditorGUILayout.EndScrollView();
+        if ((_filter == PackageFilter.Git && gitPackages.Count == 0)
+            || (_filter == PackageFilter.Local && localPackages.Count == 0))
+            EditorGUILayout.HelpBox("当前分类下没有包，可切换到其他分类查看。", MessageType.Info);
     }
 
     private bool DrawFilterSegment(string text, bool active, Color accent, float width)
@@ -807,8 +821,17 @@ public class GitPackageSwitcher : ToolEditorWindow
     private void DrawPackageRow(PackageInfo pkg)
     {
         Color modeColor = pkg.isGit ? ClrCatOrange : ClrCatGreen;
-        var cardRect = EditorGUILayout.BeginVertical(_cardStyle);
-        var selectionRect = new Rect(cardRect.x, cardRect.y, Mathf.Max(0, cardRect.width - 216), cardRect.height);
+        int detailLines = (string.IsNullOrEmpty(pkg.gitUrl) ? 0 : 1)
+            + (pkg.isLocal ? 1 : 0) + (string.IsNullOrEmpty(pkg.branch) ? 0 : 1);
+        float informationHeight = 22 + detailLines * 20;
+        float cardHeight = 20 + (CompactLayout
+            ? informationHeight + 8 + 58
+            : Mathf.Max(informationHeight, 58));
+        var cardRect = EditorGUILayout.BeginVertical(_cardStyle,
+            GUILayout.Height(cardHeight), GUILayout.ExpandHeight(false));
+        var selectionRect = new Rect(cardRect.x, cardRect.y,
+            Mathf.Max(0, cardRect.width - (CompactLayout ? 0 : 228)),
+            CompactLayout ? informationHeight + 10 : cardHeight);
         bool rowHover = selectionRect.Contains(Event.current.mousePosition);
         Color cardColor = pkg.isSelected
             ? Color.Lerp(ClrCardBg, modeColor, 0.12f)
@@ -827,53 +850,59 @@ public class GitPackageSwitcher : ToolEditorWindow
         {
             EditorGUILayout.BeginHorizontal();
             {
-                // 选中框：使用独立列，让不同高度卡片中的勾选框始终垂直居中。
+                // 复选框与包名首行对齐，避免弹性空白撑高整张卡片。
                 GUILayout.Space(2);
-                EditorGUILayout.BeginVertical(GUILayout.Width(20), GUILayout.ExpandHeight(true));
-                {
-                    GUILayout.FlexibleSpace();
-                    pkg.isSelected = DrawPackageToggle(pkg.isSelected);
-                    GUILayout.FlexibleSpace();
-                }
-                EditorGUILayout.EndVertical();
-                GUILayout.Space(4);
+                pkg.isSelected = DrawPackageToggle(pkg.isSelected);
+                GUILayout.Space(8);
 
                 // 包名 & 状态标签
-                EditorGUILayout.BeginVertical();
+                EditorGUILayout.BeginVertical(GUILayout.MinWidth(0), GUILayout.ExpandWidth(true),
+                    GUILayout.ExpandHeight(false));
                 {
                     EditorGUILayout.BeginHorizontal();
                     {
-                        GUILayout.Label(new GUIContent(pkg.packageName, pkg.packageName), _packageNameStyle);
-
                         if (pkg.isLocal)
                             DrawStatusTag("本地", ClrSuccess);
                         else if (pkg.isGit)
                             DrawStatusTag("Git", ClrAccent);
-
-                        GUILayout.FlexibleSpace();
+                        GUILayout.Space(6);
+                        GUILayout.Label(new GUIContent(pkg.packageName, pkg.packageName), _packageNameStyle,
+                            GUILayout.MinWidth(0), GUILayout.ExpandWidth(true));
                     }
                     EditorGUILayout.EndHorizontal();
 
                     if (!string.IsNullOrEmpty(pkg.gitUrl))
-                        GUILayout.Label(new GUIContent(pkg.gitUrl, pkg.gitUrl), _metaStyle);
+                        GUILayout.Label(new GUIContent(PackageReferenceUtility.Redact(pkg.gitUrl), PackageReferenceUtility.Redact(pkg.gitUrl)), _metaStyle, GUILayout.MinWidth(0));
 
                     if (pkg.isLocal)
                     {
                         string localPath = GetPackageRelativePath(pkg);
                         bool exists = Directory.Exists(GetPackageDirectory(pkg));
                         string status = exists ? "目录存在" : "目录缺失";
-                        GUILayout.Label(new GUIContent($"本地路径  {localPath}  ·  {status}", localPath), _metaStyle);
+                        GUILayout.Label(new GUIContent($"本地路径  {localPath}  ·  {status}", localPath), _metaStyle, GUILayout.MinWidth(0));
                     }
 
                     if (!string.IsNullOrEmpty(pkg.branch))
-                        GUILayout.Label($"分支  {pkg.branch}", _metaStyle);
+                        GUILayout.Label(new GUIContent($"分支  {pkg.branch}", pkg.branch), _metaStyle, GUILayout.MinWidth(0));
                 }
                 EditorGUILayout.EndVertical();
 
                 // 操作按钮
-                DrawPackageActions(pkg);
+                if (!CompactLayout)
+                {
+                    GUILayout.Space(12);
+                    DrawPackageActions(pkg);
+                }
             }
             EditorGUILayout.EndHorizontal();
+            if (CompactLayout)
+            {
+                GUILayout.Space(8);
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.FlexibleSpace();
+                DrawPackageActions(pkg);
+                EditorGUILayout.EndHorizontal();
+            }
         }
         EditorGUILayout.EndVertical();
         EditorGUILayout.Space(2);
@@ -881,7 +910,7 @@ public class GitPackageSwitcher : ToolEditorWindow
 
     private void DrawPackageActions(PackageInfo pkg)
     {
-        EditorGUILayout.BeginVertical(GUILayout.Width(204));
+        EditorGUILayout.BeginVertical(GUILayout.Width(204), GUILayout.ExpandHeight(false));
         {
             if (pkg.isGit)
             {
@@ -962,29 +991,30 @@ public class GitPackageSwitcher : ToolEditorWindow
         if (selected.Count == 0) return;
 
         EditorGUILayout.Space(4);
-        var batchRect = EditorGUILayout.BeginHorizontal(_cardStyle);
+        var batchRect = EditorGUILayout.BeginVertical(_cardStyle);
         Drawing.DrawRoundedRect(batchRect, ClrToolbarBg, 6f);
         {
-            GUILayout.Label($"已选择 {selected.Count} 个包", StTitle, GUILayout.Width(120));
+            GUILayout.Label($"批量操作 · 已选择 {selected.Count} 个包", StTitle);
 
-            GUILayout.Space(8);
+            GUILayout.Space(6);
+            EditorGUILayout.BeginHorizontal();
 
-            if (BtnSuccess("批量切换到本地", GUILayout.Width(140), GUILayout.Height(28)))
+            if (BtnSuccess("切换到本地", GUILayout.MinWidth(90), GUILayout.Height(28)))
                 SwitchBatchToLocal(selected);
 
             GUILayout.Space(6);
 
-            if (BtnPrimary("批量切回 Git", GUILayout.Width(130), GUILayout.Height(28)))
+            if (BtnPrimary("切回 Git", GUILayout.MinWidth(80), GUILayout.Height(28)))
                 SwitchBatchToGit(selected);
 
             GUILayout.Space(6);
 
-            if (BtnWarn("批量 Git 更新", GUILayout.Width(130), GUILayout.Height(28)))
+            if (BtnWarn("Git 更新", GUILayout.MinWidth(80), GUILayout.Height(28)))
                 PullBatchFromGit(selected);
 
-            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
         }
-        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.EndVertical();
     }
 
     // ─── 手动添加表单 ─────────────────────────────────────────
@@ -997,14 +1027,19 @@ public class GitPackageSwitcher : ToolEditorWindow
             GUILayout.Label("手动添加 Git 包", StTitle);
             EditorGUILayout.Space(4);
 
-            _newGitUrl = EditorGUILayout.TextField("Git URL", _newGitUrl);
-            _newPackageName = EditorGUILayout.TextField("包名 (com.xxx.yyy)", _newPackageName);
-            _newLocalFolder = EditorGUILayout.TextField("本地文件夹名", _newLocalFolder);
+            GUILayout.Label("Git URL", _metaStyle);
+            _newGitUrl = EditorGUILayout.TextField(_newGitUrl);
+            EditorGUILayout.Space(6);
+            GUILayout.Label("包名 (com.xxx.yyy)", _metaStyle);
+            _newPackageName = EditorGUILayout.TextField(_newPackageName);
+            EditorGUILayout.Space(6);
+            GUILayout.Label("本地文件夹名", _metaStyle);
+            _newLocalFolder = EditorGUILayout.TextField(_newLocalFolder);
 
             EditorGUILayout.Space(4);
             EditorGUILayout.BeginHorizontal();
             {
-                if (BtnSuccess("确认添加", GUILayout.Width(100)))
+                if (BtnSuccess("确认添加", GUILayout.Width(100), GUILayout.Height(28)))
                     AddGitPackage(_newGitUrl, _newPackageName, _newLocalFolder);
                 if (DrawFlatButton("取消", GUILayout.Width(60)))
                     ClearAddForm();
@@ -1093,9 +1128,9 @@ public class GitPackageSwitcher : ToolEditorWindow
                 {
                     // 已经是本地引用
                     info.isLocal = true;
-                    string filePath = value.Substring(5).Replace('\\', '/');
-                    info.isAsset = filePath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase);
-                    info.localFolder = info.isAsset ? filePath : ParseLocalFolder(value);
+                    string absolutePath = PackageReferenceUtility.ResolveLocalReference(value, _projectRoot);
+                    info.isAsset = PackageReferenceUtility.IsWithin(Application.dataPath, absolutePath);
+                    info.localFolder = info.isAsset ? GetRelativePath(_projectRoot, absolutePath) : ParseLocalFolder(value);
                     info.gitUrl = TryFindGitUrlFromLock(pkgName);
 
                     // Fallback: 从 .git/config 读取远程 URL
@@ -1197,7 +1232,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogWarning($"读取包信息失败: {pjPath} · {ex.Message}");
+                        Debug.LogWarning(PackageReferenceUtility.Redact($"读取包信息失败: {pjPath} · {ex.Message}"));
                     }
 
                     var info = new PackageInfo
@@ -1222,7 +1257,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("读取 manifest.json 失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
@@ -1230,12 +1265,15 @@ public class GitPackageSwitcher : ToolEditorWindow
     private void SwitchToLocal(PackageInfo pkg)
     {
         if (_isProcessing) return;
+        if (!CanUseGitUrl(pkg.gitUrl)) return;
         _isProcessing = true;
 
         try
         {
             string packagesDir = Path.Combine(_projectRoot, "Packages");
             string localPath = Path.Combine(packagesDir, pkg.localFolder);
+            if (!PackageReferenceUtility.IsWithin(_projectRoot, localPath))
+                throw new ArgumentException("本地包目录必须位于项目内。");
 
             // 1. 如果本地目录不存在，先 git clone
             if (!Directory.Exists(localPath))
@@ -1256,7 +1294,7 @@ public class GitPackageSwitcher : ToolEditorWindow
                     cloneUrl = cloneUrl.Substring(0, hashIdx);
                 }
 
-                if (!RunGitCommand($"clone --depth 1 -b {branch} \"{cloneUrl}\" \"{localPath}\"", _projectRoot))
+                if (!RunGitCommand($"clone --depth 1 -b \"{branch}\" -- \"{cloneUrl}\" \"{localPath}\"", _projectRoot))
                 {
                     ShowStatus($"克隆失败: {pkg.packageName}，请检查网络和 Git 配置", MessageType.Error);
                     _isProcessing = false;
@@ -1300,7 +1338,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("切换失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
         finally
         {
@@ -1318,6 +1356,8 @@ public class GitPackageSwitcher : ToolEditorWindow
             ShowStatus($"{pkg.packageName} 没有记录 Git URL，无法切回", MessageType.Warning);
             return;
         }
+
+        if (!CanUseGitUrl(pkg.gitUrl)) return;
 
         _isProcessing = true;
 
@@ -1344,7 +1384,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("切换失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
         finally
         {
@@ -1403,7 +1443,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("拉取失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
         finally
         {
@@ -1454,6 +1494,8 @@ public class GitPackageSwitcher : ToolEditorWindow
             ShowStatus($"{pkg?.packageName} 没有 Git URL，无法更新", MessageType.Warning);
             return;
         }
+
+        if (!CanUseGitUrl(pkg.gitUrl)) return;
 
         _isProcessing = true;
         ShowStatus($"正在通过 UPM 更新 {pkg.packageName} ...", MessageType.Info);
@@ -1506,14 +1548,22 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus($"移除失败: {ex.Message}", MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
     /// <summary>删除本地包目录（清除只读属性后删除）</summary>
     private void DeleteLocalPackage(PackageInfo pkg)
     {
-        string localPath = Path.Combine(_projectRoot, "Packages", pkg.localFolder);
+        string localPath = Path.GetFullPath(GetPackageDirectory(pkg));
+        if (!PackageReferenceUtility.IsWithin(_projectRoot, localPath)
+            || PackageReferenceUtility.IsWithin(localPath, Path.Combine(_projectRoot, "Packages"))
+            || PackageReferenceUtility.IsWithin(localPath, Path.Combine(_projectRoot, "LocalPackages"))
+            || !File.Exists(Path.Combine(localPath, "package.json")))
+        {
+            ShowStatus("仅允许删除项目内的具体包目录，不能删除项目外路径或包容器目录。", MessageType.Error);
+            return;
+        }
 
         if (!Directory.Exists(localPath))
         {
@@ -1551,7 +1601,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus($"删除失败: {ex.Message}", MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
         finally
         {
@@ -1631,16 +1681,13 @@ public class GitPackageSwitcher : ToolEditorWindow
         // 添加到 manifest.json
         try
         {
+            if (IsLocalRef(gitUrl))
+                gitUrl = PackageReferenceUtility.PrepareLocalPackageReference(gitUrl, _projectRoot);
+            else
+                PackageReferenceUtility.ValidateGitUrl(gitUrl);
             string manifest = File.ReadAllText(_manifestPath);
-
-            // 在 dependencies 的 } 之前插入
-            int lastBrace = manifest.LastIndexOf('}');
-            if (lastBrace > 0)
-            {
-                string entry = $"    \"{packageName}\": \"{gitUrl}\",\n";
-                manifest = manifest.Insert(lastBrace, entry);
-                File.WriteAllText(_manifestPath, manifest);
-            }
+            manifest = ReplaceManifestEntry(manifest, packageName, gitUrl);
+            File.WriteAllText(_manifestPath, manifest);
 
             _newGitUrl = "";
             _newPackageName = "";
@@ -1653,7 +1700,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         catch (Exception ex)
         {
             ShowStatus("添加失败: " + ex.Message, MessageType.Error);
-            Debug.LogException(ex);
+            Debug.LogError(PackageReferenceUtility.Redact(ex.ToString()));
         }
     }
 
@@ -1722,12 +1769,8 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         // file:xxx 或 file:Packages/xxx
         string folder = value.Substring(5); // 去掉 "file:"
-        // 取最后一段
-        if (folder.Contains("/"))
-            folder = folder.Substring(folder.LastIndexOf('/') + 1);
-        if (folder.Contains("\\"))
-            folder = folder.Substring(folder.LastIndexOf('\\') + 1);
-        return folder;
+        // Preserve ../LocalPackages and nested paths; file: is relative to Packages.
+        return folder.Replace('\\', '/');
     }
 
     /// <summary>从 .git/config 读取远程 URL</summary>
@@ -1761,13 +1804,16 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         try
         {
+            PackageReferenceUtility.ValidateGitUrl(gitUrl);
             string metaPath = Path.Combine(_projectRoot, "Packages", localFolder, ".gitswitcher.json");
-            string json = $"{{\"gitUrl\":\"{gitUrl}\",\"branch\":\"{branch ?? "main"}\"}}";
+            if (!PackageReferenceUtility.IsWithin(_projectRoot, metaPath))
+                throw new ArgumentException("Git 元数据目录必须位于项目内。");
+            string json = new JObject { ["gitUrl"] = gitUrl, ["branch"] = branch ?? "main" }.ToString();
             File.WriteAllText(metaPath, json);
         }
         catch (Exception ex)
         {
-            Debug.LogWarning($"保存 Git 元数据失败: {ex.Message}");
+            Debug.LogWarning(PackageReferenceUtility.Redact($"保存 Git 元数据失败: {ex.Message}"));
         }
     }
 
@@ -1813,7 +1859,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         }
         catch (Exception ex)
         {
-            Debug.LogWarning($"读取 packages-lock.json 失败: {ex.Message}");
+            Debug.LogWarning(PackageReferenceUtility.Redact($"读取 packages-lock.json 失败: {ex.Message}"));
         }
 
         return null;
@@ -1822,10 +1868,11 @@ public class GitPackageSwitcher : ToolEditorWindow
     /// <summary>精确替换 manifest 中某个包的引用值</summary>
     private static string ReplaceManifestEntry(string manifest, string packageName, string newValue)
     {
-        // 匹配 "com.xxx.yyy": "任意内容"
-        string pattern = $"\"{Regex.Escape(packageName)}\"\\s*:\\s*\"[^\"]*\"";
-        string replacement = $"\"{packageName}\": \"{newValue}\"";
-        return Regex.Replace(manifest, pattern, replacement);
+        var json = JObject.Parse(manifest);
+        var dependencies = json["dependencies"] as JObject;
+        if (dependencies == null) throw new InvalidDataException("manifest.json 缺少 dependencies 对象。");
+        dependencies[packageName] = newValue;
+        return json.ToString(Newtonsoft.Json.Formatting.Indented);
     }
 
     /// <summary>解析 manifest.json（简单 JSON 解析，避免依赖）</summary>
@@ -1897,26 +1944,32 @@ public class GitPackageSwitcher : ToolEditorWindow
 
                 if (process.ExitCode != 0)
                 {
-                    Debug.LogError($"Git 命令失败: git {arguments}\n{stderr}");
+                    Debug.LogError(PackageReferenceUtility.Redact($"Git 操作失败:\n{stderr}"));
                     return false;
                 }
 
                 if (!string.IsNullOrEmpty(stdout))
-                    Debug.Log($"Git 输出: {stdout}");
+                    Debug.Log(PackageReferenceUtility.Redact($"Git 输出: {stdout}"));
 
                 return true;
             }
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Git 命令执行异常: {ex.Message}");
+            Debug.LogError(PackageReferenceUtility.Redact($"Git 命令执行异常: {ex.Message}"));
             return false;
         }
     }
 
     private void ShowStatus(string message, MessageType type = MessageType.Info)
     {
-        _statusMessage = message;
+        _statusMessage = PackageReferenceUtility.Redact(message);
         Repaint();
+    }
+
+    private bool CanUseGitUrl(string url)
+    {
+        try { PackageReferenceUtility.ValidateGitUrl(url); return true; }
+        catch (Exception ex) { ShowStatus(ex.Message, MessageType.Error); return false; }
     }
 }

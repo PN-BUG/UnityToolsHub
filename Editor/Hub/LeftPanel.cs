@@ -15,7 +15,7 @@ public partial class UnityToolsHub
     private const float LeftPanelWidth = 248f;
     private const float CategoryHeaderHeight = 34f;
     private const float ToolItemHeight = 30f;
-    private const float SearchResultItemHeight = 44f;
+    private const float SearchResultItemHeight = 50f;
     private const float SplitterWidth = 1f;
     private const float RightPadding = 16f;
 
@@ -96,6 +96,33 @@ public partial class UnityToolsHub
         };
     }
     #endregion
+
+    private bool HasSearchQuery => !string.IsNullOrWhiteSpace(_searchText);
+
+    private bool MatchesSearch(ToolEntry tool)
+    {
+        if (_hiddenItems.IsToolHidden(tool.typeName)) return false;
+        string query = _searchText.Trim();
+        return (tool.name ?? "").IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+               (tool.description ?? "").IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+               (tool.tags != null && tool.tags.Any(tag =>
+                   !string.IsNullOrEmpty(tag) && tag.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0));
+    }
+
+    private void SetSearchText(string text)
+    {
+        if (_searchText == text) return;
+        _searchText = text;
+        _selectedTool = null;
+        _selectedCategory = null;
+        _showCreateForm = false;
+        _showAddToolPanel = false;
+        _showThirdPartyManager = false;
+        _showHiddenManager = false;
+        _rightScroll = Vector2.zero;
+        _leftScroll = Vector2.zero;
+        Repaint();
+    }
 
     #region 拖放处理
     /// <summary>
@@ -236,7 +263,6 @@ public partial class UnityToolsHub
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(8);
 
-        GUI.SetNextControlName("SearchField");
         var searchRect = GUILayoutUtility.GetRect(LeftPanelWidth - 24, 30);
         // 搜索框背景
         Drawing.DrawRoundedRect(searchRect, Theme.ClrSearchBg, 6f);
@@ -251,7 +277,8 @@ public partial class UnityToolsHub
         GUI.color = oldColor;
         // 输入区域（用 plain TextField 避免自带搜索图标重复）
         var inputRect = new Rect(searchRect.x + 27, searchRect.y + 3, searchRect.width - 51, searchRect.height - 6);
-        _searchText = GUI.TextField(inputRect, _searchText, EditorStyles.textField);
+        GUI.SetNextControlName("SearchField");
+        SetSearchText(GUI.TextField(inputRect, _searchText, EditorStyles.textField));
 
         // 占位符
         if (string.IsNullOrEmpty(_searchText) && GUI.GetNameOfFocusedControl() != "SearchField")
@@ -266,7 +293,7 @@ public partial class UnityToolsHub
             if (cancelHover) GUI.color = Theme.ClrTextBright;
             if (GUI.Button(cancelRect, "✕", EditorStyles.miniLabel))
             {
-                _searchText = "";
+                SetSearchText("");
                 GUI.FocusControl(null);
             }
             GUI.color = oldColor;
@@ -343,7 +370,7 @@ public partial class UnityToolsHub
             GUI.skin.scrollView,
             GUILayout.Height(svHeight));
 
-        bool hasSearch = !string.IsNullOrEmpty(_searchText);
+        bool hasSearch = HasSearchQuery;
         const float ScrollbarReserve = 16f;
 
         // 清空分类头矩形缓存
@@ -356,12 +383,7 @@ public partial class UnityToolsHub
             if (_hiddenItems.IsCategoryHidden(category.name)) continue;
 
             var filtered = hasSearch
-                ? category.tools.Where(t =>
-                    !_hiddenItems.IsToolHidden(t.typeName) &&
-                    (t.name.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                     t.description.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                     (t.tags != null && t.tags.Any(tag => tag.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0)))
-                  ).ToList()
+                ? category.tools.Where(MatchesSearch).ToList()
                 : category.tools;
 
             if (!hasSearch)
@@ -592,27 +614,26 @@ public partial class UnityToolsHub
                     RecordToolUsage(tool);
                 }
 
-                // 搜索结果使用双行布局：第一行工具名，第二行分类标签，避免与快捷键重叠。
+                // 搜索结果的名称独占第一行；分类和快捷键放在第二行。
                 var titleRect = hasSearch
-                    ? new Rect(itemRect.x, itemRect.y + 2, itemRect.width - shortcutWidth - 4, 20)
+                    ? new Rect(itemRect.x + 18, itemRect.y + 4, itemRect.width - 24, 20)
                     : itemRect;
 
                 // 绘制工具名称
                 if (!isDraggingThisTool)
                 {
-                    GUI.Label(titleRect, tool.name, style);
+                    GUI.Label(titleRect, new GUIContent(tool.name, tool.name), hasSearch ? CachedToolListTitle : style);
                 }
 
                 // 搜索模式下显示分类标签
                 if (hasSearch && !isDraggingThisTool)
                 {
-                    Styles.CategoryTagSearch.normal.textColor = category.accent;
-                    var catTagContent = new GUIContent(category.name);
-                    var catTagSize = Styles.CategoryTagSearch.CalcSize(catTagContent);
-                    var catTagRect = new Rect(itemRect.x + 18, itemRect.yMax - 17, catTagSize.x + 8, 13);
+                    var catTagContent = new GUIContent(category.name, category.name);
+                    var catTagRect = new Rect(itemRect.x + 18, itemRect.y + 28,
+                        Mathf.Max(1f, itemRect.width - 28 - shortcutWidth), 18);
                     Drawing.DrawRoundedRect(catTagRect,
-                        new Color(category.accent.r, category.accent.g, category.accent.b, 0.10f), 3f);
-                    GUI.Label(catTagRect, catTagContent, Styles.CategoryTagSearch);
+                        new Color(category.accent.r, category.accent.g, category.accent.b, 0.16f), 3f);
+                    GUI.Label(catTagRect, catTagContent, CachedToolListMetadata);
                 }
 
                 // 右侧显示快捷键
@@ -620,7 +641,7 @@ public partial class UnityToolsHub
                 {
                     var kbWidth = shortcutWidth;
                     var kbRect = new Rect(itemRect.xMax - kbWidth - 5,
-                        itemRect.y + (hasSearch ? 4 : (itemRect.height - 16) * 0.5f), kbWidth, 16);
+                        itemRect.y + (hasSearch ? 29 : (itemRect.height - 16) * 0.5f), kbWidth, 16);
                     if (kbRect.xMax > itemRect.xMax - 2)
                         kbRect.x = itemRect.xMax - kbWidth - 2;
                     EditorGUI.DrawRect(kbRect, Theme.ClrTagBg);
@@ -633,12 +654,8 @@ public partial class UnityToolsHub
 
         if (hasSearch)
         {
-            int matchCount = _categories.Sum(category => category.tools.Count(tool =>
-                !_hiddenItems.IsToolHidden(tool.typeName) &&
-                (tool.name.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 tool.description.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                 (tool.tags != null && tool.tags.Any(tag =>
-                     tag.IndexOf(_searchText, StringComparison.OrdinalIgnoreCase) >= 0)))));
+            int matchCount = _categories.Where(category => !_hiddenItems.IsCategoryHidden(category.name))
+                .Sum(category => category.tools.Count(MatchesSearch));
             if (matchCount == 0)
             {
                 EditorGUILayout.Space(18);

@@ -7,7 +7,6 @@
         "UnityToolsHub.Testing.Runtime",
         "Nodin.Runtime",
         "Nodin.Editor",
-        "Unity.TextMeshPro",
         "UnityEngine.UI"
     ],
     "includePlatforms": [

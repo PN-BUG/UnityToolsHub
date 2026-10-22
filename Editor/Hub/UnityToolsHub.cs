@@ -610,6 +610,9 @@ public partial class UnityToolsHub : EditorWindow
         if (_cachedCenterLabel != null) _cachedCenterLabel.normal.textColor = Theme.ClrText;
         if (_cachedDimLabel != null) _cachedDimLabel.normal.textColor = Theme.ClrTextDim;
         if (_cachedDashboardLinkLabel != null) _cachedDashboardLinkLabel.normal.textColor = Theme.ClrTextDim;
+        if (_cachedToolListTitle != null) _cachedToolListTitle.normal.textColor = Theme.ClrTextBright;
+        if (_cachedToolListDescription != null) _cachedToolListDescription.normal.textColor = Theme.ClrText;
+        if (_cachedToolListMetadata != null) _cachedToolListMetadata.normal.textColor = Theme.ClrTextDim;
     }
 
     public static void OpenRegisteredTool(string typeName)

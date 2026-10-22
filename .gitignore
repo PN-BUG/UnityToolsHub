@@ -1,2 +1,18 @@
 Editor/Tools/AudioConversionTool/ffmpeg-2026-08-03-git-01a25f74cc-full_build/bin/ffmpeg.exe
 Editor/Tools/AudioConversionTool/ffmpeg-2026-08-03-git-01a25f74cc-full_build/bin/ffmpeg.exe.meta
+
+# Per-project XOR key and its Unity metadata.
+**/Resources/UnityFramework/XorKey.txt
+**/Resources/UnityFramework/XorKey.txt.meta
+
+# Private signing material must not be distributed with editor tools.
+*.keystore
+*.keystore.meta
+*.jks
+*.jks.meta
+*.p12
+*.p12.meta
+*.pfx
+*.pfx.meta
+**/keystore/
+**/keystore.meta
