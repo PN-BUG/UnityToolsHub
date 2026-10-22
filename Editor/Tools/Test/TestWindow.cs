@@ -6,10 +6,11 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// 测试窗口 —— 聚合展示场景中所有标记了 [Test] 的方法和字段。
+/// 测试窗口 —— 聚合展示场景中所有标记了 [Test] 的方法、字段和属性。
+/// 按组件及显式业务分组展示，并在刷新时保留折叠状态和方法参数。
 /// 快捷键 Ctrl+T 打开/关闭。
 /// </summary>
-[ToolInfo("测试窗口", "调试工具", Description = "聚合展示场景中所有标记了 [Test] 的方法和字段。\n\n方法显示为可点击按钮，字段显示为可编辑控件。\n支持搜索过滤、按组件分组，快捷键 Ctrl+T 打开/关闭。", Icon = "⌘", Tags = new[] { "测试", "调试", "Test" }, Shortcut = "Ctrl+T")]
+[ToolInfo("测试窗口", "调试工具", Description = "聚合展示场景中所有标记了 [Test] 的方法、字段和属性。\n\n方法显示为按钮，字段和属性显示为输入或只读结果。\n支持显式业务分组、排序、折叠和搜索；刷新保留展开状态，快捷键 Ctrl+T 打开/关闭。", Icon = "⌘", Tags = new[] { "测试", "调试", "Test" }, Shortcut = "Ctrl+T")]
 public class TestWindow : EditorWindow
 {
 #if UNITY_6000_0_OR_NEWER
@@ -18,54 +19,98 @@ public class TestWindow : EditorWindow
     static int GetEntityKey(UnityEngine.Object obj) => obj.GetInstanceID();
 #endif
 
-    // ── 数据结构 ──────────────────────────────────────────────
-    private class TestMethodEntry
+    #region 展示数据结构
+
+    /// <summary>统一保存测试成员的展示元数据，使输入、按钮和结果可以在同一分组中排序。</summary>
+    private abstract class TestMemberEntry
     {
+        // 成员标签、实际所属组件以及显式布局配置。
         public string DisplayName;
         public MonoBehaviour Target;
+        public TestAttribute Layout;
+
+        /// <summary>原始反射成员，仅用于确定声明顺序和继承归属，不改变调用目标。</summary>
+        public abstract MemberInfo Member { get; }
+    }
+
+    /// <summary>测试方法及其独立参数输入，执行仍使用原有反射入口。</summary>
+    private class TestMethodEntry : TestMemberEntry
+    {
+        // 方法声明、参数类型与工具窗口缓存的参数值。
         public MethodInfo Method;
         public ParameterInfo[] Parameters;
         public object[] ParameterValues;
+
+        /// <summary>返回测试方法的原始声明。</summary>
+        public override MemberInfo Member => Method;
     }
 
-    private class TestFieldEntry
+    /// <summary>测试字段的展示信息，只读标记沿用现有 Nodin 契约。</summary>
+    private class TestFieldEntry : TestMemberEntry
     {
-        public string DisplayName;
-        public MonoBehaviour Target;
+        // 实际字段及工具窗口是否允许编辑。
         public FieldInfo Field;
         public bool IsReadOnly;
+
+        /// <summary>返回测试字段的原始声明。</summary>
+        public override MemberInfo Member => Field;
     }
 
-    private class TestPropertyEntry
+    /// <summary>测试属性的展示信息，仍区分只读标记与属性自身是否提供 setter。</summary>
+    private class TestPropertyEntry : TestMemberEntry
     {
-        public string DisplayName;
-        public MonoBehaviour Target;
+        // 实际属性、只读限制与 setter 是否存在。
         public PropertyInfo Property;
         public bool IsReadOnly;
         public bool HasSetter;
+
+        /// <summary>返回测试属性的原始声明。</summary>
+        public override MemberInfo Member => Property;
     }
 
+    /// <summary>缓存一个声明类型自身的测试成员，避免窗口重绘时重新扫描类型。</summary>
     private class TestTypeMetadata
     {
+        // 保留声明类型各类成员，继承成员由现有收集过程去重。
         public MethodInfo[] Methods;
         public FieldInfo[] Fields;
         public PropertyInfo[] Properties;
     }
 
+    /// <summary>一个实际组件实例的测试区域，内含独立业务分组。</summary>
     private class TestGroup
     {
+        // 实例身份用于刷新后匹配折叠状态，不能使用每次重建的区域对象作为键。
+        public int TargetKey;
         public string GroupName;           // 组件类型名
         public GameObject GameObject;      // 所属 GameObject
         public List<TestMethodEntry> Methods = new List<TestMethodEntry>();
         public List<TestFieldEntry> Fields = new List<TestFieldEntry>();
         public List<TestPropertyEntry> Properties = new List<TestPropertyEntry>();
         public HashSet<MemberInfo> Members = new HashSet<MemberInfo>();
+        // 业务分组由标记明确指定，不根据中文按钮名称推测。
+        public List<TestSection> Sections = new List<TestSection>();
     }
+
+    /// <summary>组件内的业务分组，统一排列输入、操作和结果；未分组成员保持原展示分类。</summary>
+    private class TestSection
+    {
+        // 分组名称与显示顺序，以及首次显示时的折叠配置。
+        public string Name;
+        public int Order;
+        public bool IsFoldout;
+        public bool ExpandedByDefault;
+        public List<TestMemberEntry> Members = new List<TestMemberEntry>();
+    }
+
+    #endregion
 
     // ── 状态 ─────────────────────────────────────────────────
     private Vector2 _scrollPos;
     private List<TestGroup> _groups = new List<TestGroup>();
-    private Dictionary<TestGroup, bool> _foldouts = new Dictionary<TestGroup, bool>();
+    // 折叠状态仅由窗口持有，刷新沿用相同组件和分组的选择，不写入场景或存档。
+    private Dictionary<int, bool> _foldouts = new Dictionary<int, bool>();
+    private Dictionary<int, Dictionary<string, bool>> _sectionFoldouts = new Dictionary<int, Dictionary<string, bool>>();
     private string _searchFilter = "";
     private Vector2 _scrollPosGroups;
     // 缓存参数值，避免刷新时丢失用户输入
@@ -152,13 +197,13 @@ public class TestWindow : EditorWindow
     }
 
     // ── 刷新数据 ────────────────────────────────────────────
+    /// <summary>重建测试入口与业务布局，保留同一组件的参数输入及两层折叠状态。</summary>
     private void RefreshEntries()
     {
-        // 保存当前参数值到缓存
+        // 1. 参数和折叠均属于工具状态，重建入口时不能清空已有用户选择。
         SaveParamCache();
         
         _groups.Clear();
-        _foldouts.Clear();
 
         EnsureTypeMetadataCache();
         var groupsByTarget = new Dictionary<int, TestGroup>();
@@ -175,6 +220,7 @@ public class TestWindow : EditorWindow
                 {
                     group = new TestGroup
                     {
+                        TargetKey = targetKey,
                         GroupName = ObjectNames.NicifyVariableName(mb.GetType().Name),
                         GameObject = mb.gameObject
                     };
@@ -190,6 +236,7 @@ public class TestWindow : EditorWindow
                     var entry = new TestMethodEntry
                     {
                         DisplayName = attr.Name,
+                        Layout = attr,
                         Target = mb,
                         Method = method,
                         Parameters = parameters,
@@ -215,6 +262,7 @@ public class TestWindow : EditorWindow
                     group.Fields.Add(new TestFieldEntry
                     {
                         DisplayName = attr.Name,
+                        Layout = attr,
                         Target = mb,
                         Field = field,
                         IsReadOnly = field.IsDefined(typeof(Nodin.ReadOnlyAttribute), true)
@@ -228,6 +276,7 @@ public class TestWindow : EditorWindow
                     group.Properties.Add(new TestPropertyEntry
                     {
                         DisplayName = attr.Name,
+                        Layout = attr,
                         Target = mb,
                         Property = prop,
                         IsReadOnly = prop.IsDefined(typeof(Nodin.ReadOnlyAttribute), true),
@@ -239,13 +288,106 @@ public class TestWindow : EditorWindow
 
         foreach (var group in groupsByTarget.Values)
         {
-            group.Methods.Sort((a, b) => GetInheritanceDepth(a.Method.DeclaringType).CompareTo(GetInheritanceDepth(b.Method.DeclaringType)));
-            group.Fields.Sort((a, b) => GetInheritanceDepth(a.Field.DeclaringType).CompareTo(GetInheritanceDepth(b.Field.DeclaringType)));
-            group.Properties.Sort((a, b) => GetInheritanceDepth(a.Property.DeclaringType).CompareTo(GetInheritanceDepth(b.Property.DeclaringType)));
+            // 2. 显式组装业务区域，再按配置顺序和声明位置排序，消除同继承层级的混排。
+            BuildSections(group);
             _groups.Add(group);
-            _foldouts[group] = true;
+            if (!_foldouts.ContainsKey(group.TargetKey)) _foldouts[group.TargetKey] = true;
         }
     }
+
+    #region 业务分组装配
+
+    /// <summary>从组件已有测试入口生成业务分组，不增加场景扫描或修改测试业务。</summary>
+    /// <param name="group">已经收集完整成员的实际组件区域。</param>
+    private void BuildSections(TestGroup group)
+    {
+        // 1. 未填写分组的标记仍放在组件顶部，按字段、属性、方法的原分类展示。
+        var sectionsByName = new Dictionary<string, TestSection>(StringComparer.Ordinal);
+        foreach (var entry in group.Fields) AddSectionMember(group, sectionsByName, entry);
+        foreach (var entry in group.Properties) AddSectionMember(group, sectionsByName, entry);
+        foreach (var entry in group.Methods) AddSectionMember(group, sectionsByName, entry);
+
+        // 2. 有序元数据只在刷新时创建，重绘直接读取现有布局。
+        group.Sections.AddRange(sectionsByName.Values);
+        group.Sections.Sort(CompareSections);
+        if (!_sectionFoldouts.TryGetValue(group.TargetKey, out var states))
+        {
+            states = new Dictionary<string, bool>(StringComparer.Ordinal);
+            _sectionFoldouts.Add(group.TargetKey, states);
+        }
+        foreach (var section in group.Sections)
+        {
+            section.Members.Sort((left, right) => CompareSectionMembers(left, right, string.IsNullOrEmpty(section.Name)));
+            if (section.IsFoldout && !states.ContainsKey(section.Name))
+                states.Add(section.Name, section.ExpandedByDefault);
+        }
+    }
+
+    /// <summary>将测试成员加入明确分组；同名分组配置冲突时记录错误并跳过该成员。</summary>
+    /// <param name="group">成员所属的实际组件。</param>
+    /// <param name="sectionsByName">本组件正在构建的分组映射。</param>
+    /// <param name="entry">保留原反射目标的测试入口。</param>
+    private void AddSectionMember(TestGroup group, Dictionary<string, TestSection> sectionsByName, TestMemberEntry entry)
+    {
+        // 1. 空分组是旧标记的明确展示语义；命名分组必须使用相同的布局配置。
+        string name = entry.Layout.Group ?? string.Empty;
+        if (!sectionsByName.TryGetValue(name, out var section))
+        {
+            section = new TestSection
+            {
+                Name = name,
+                Order = entry.Layout.GroupOrder,
+                IsFoldout = !string.IsNullOrEmpty(name) && entry.Layout.IsFoldout,
+                ExpandedByDefault = entry.Layout.ExpandedByDefault
+            };
+            sectionsByName.Add(name, section);
+        }
+        else if (!string.IsNullOrEmpty(name) && (section.Order != entry.Layout.GroupOrder
+            || section.IsFoldout != entry.Layout.IsFoldout || section.ExpandedByDefault != entry.Layout.ExpandedByDefault))
+        {
+            Debug.LogError($"[测试窗口] 组件 {group.GroupName} 的分组“{name}”布局配置不一致，跳过成员“{entry.DisplayName}”。请统一 GroupOrder、IsFoldout 和 ExpandedByDefault。", entry.Target);
+            return;
+        }
+        section.Members.Add(entry);
+    }
+
+    /// <summary>先显示未分组成员，其余业务分组按明确顺序排列，重名顺序使用名称确定。</summary>
+    /// <param name="left">左侧业务区域。</param>
+    /// <param name="right">右侧业务区域。</param>
+    /// <returns>用于排序的先后比较结果。</returns>
+    private static int CompareSections(TestSection left, TestSection right)
+    {
+        // 1. 保留未分组输入的原有顶部位置，业务区域的次序由标记提供。
+        bool leftUnnamed = string.IsNullOrEmpty(left.Name);
+        bool rightUnnamed = string.IsNullOrEmpty(right.Name);
+        if (leftUnnamed != rightUnnamed) return leftUnnamed ? -1 : 1;
+        int result = left.Order.CompareTo(right.Order);
+        return result != 0 ? result : string.Compare(left.Name, right.Name, StringComparison.Ordinal);
+    }
+
+    /// <summary>排序分组中的混合成员，明确顺序相同时使用成员类别、继承深度及声明位置。</summary>
+    /// <param name="left">左侧测试入口。</param>
+    /// <param name="right">右侧测试入口。</param>
+    /// <param name="isUnnamedSection">是否需要保留旧标记的字段、属性、方法展示分类。</param>
+    /// <returns>用于排序的确定性比较结果。</returns>
+    private static int CompareSectionMembers(TestMemberEntry left, TestMemberEntry right, bool isUnnamedSection)
+    {
+        // 1. 命名分组优先使用显式顺序，输入、按钮和结果可以交错布局。
+        int result = isUnnamedSection ? 0 : left.Layout.Order.CompareTo(right.Layout.Order);
+        if (result != 0) return result;
+        if (left is TestFieldEntry && right is not TestFieldEntry) return -1;
+        if (right is TestFieldEntry && left is not TestFieldEntry) return 1;
+        if (left is TestPropertyEntry && right is TestMethodEntry) return -1;
+        if (right is TestPropertyEntry && left is TestMethodEntry) return 1;
+
+        // 2. 保留基类成员在前，同层级不再只返回相等而交给不稳定排序。
+        result = GetInheritanceDepth(left.Member.DeclaringType).CompareTo(GetInheritanceDepth(right.Member.DeclaringType));
+        if (result != 0) return result;
+        result = string.Compare(left.Member.DeclaringType.FullName, right.Member.DeclaringType.FullName, StringComparison.Ordinal);
+        return result != 0 ? result : left.Member.MetadataToken.CompareTo(right.Member.MetadataToken);
+    }
+
+    #endregion
 
     private static void EnsureTypeMetadataCache()
     {
@@ -339,6 +481,7 @@ public class TestWindow : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
+    /// <summary>绘制工具栏，全部展开和折叠同时应用于组件与业务两层区域。</summary>
     private void DrawToolbar()
     {
         EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
@@ -352,14 +495,13 @@ public class TestWindow : EditorWindow
 
         if (GUILayout.Button("全部展开", EditorStyles.toolbarButton, GUILayout.Width(60)))
         {
-            foreach (var key in new List<TestGroup>(_foldouts.Keys))
-                _foldouts[key] = true;
+            // 1. 工具栏只更新窗口布局状态，不调用业务或修改场景。
+            SetAllFoldouts(true);
         }
 
         if (GUILayout.Button("全部折叠", EditorStyles.toolbarButton, GUILayout.Width(60)))
         {
-            foreach (var key in new List<TestGroup>(_foldouts.Keys))
-                _foldouts[key] = false;
+            SetAllFoldouts(false);
         }
 
         EditorGUILayout.EndHorizontal();
@@ -378,30 +520,43 @@ public class TestWindow : EditorWindow
         EditorGUILayout.EndHorizontal();
     }
 
+    /// <summary>判断组件或其中业务区域是否匹配当前搜索；不修改折叠状态。</summary>
+    /// <param name="group">待判断的实际组件区域。</param>
+    /// <returns>组件身份或任一业务区域匹配时返回 true。</returns>
     private bool MatchesFilter(TestGroup group)
     {
-        if (string.IsNullOrEmpty(_searchFilter)) return true;
-
-        if (group.GroupName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-        if (group.GameObject != null && group.GameObject.name.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-
-        foreach (var m in group.Methods)
-            if (m.DisplayName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-
-        foreach (var f in group.Fields)
-            if (f.DisplayName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-
-        foreach (var p in group.Properties)
-            if (p.DisplayName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-
+        // 1. 搜索组件时展示其完整区域，搜索业务时保留整组相关输入和结果。
+        if (MatchesComponentFilter(group)) return true;
+        foreach (var section in group.Sections)
+            if (MatchesSectionFilter(section)) return true;
         return false;
     }
 
+    /// <summary>判断搜索是否直接命中组件类型或所属对象。</summary>
+    /// <param name="group">待判断的组件区域。</param>
+    /// <returns>无搜索或组件身份命中时返回 true。</returns>
+    private bool MatchesComponentFilter(TestGroup group)
+    {
+        return string.IsNullOrEmpty(_searchFilter)
+            || group.GroupName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0
+            || (group.GameObject != null && group.GameObject.name.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    /// <summary>按业务分组名称或成员标签搜索，不将整组输入和结果拆散。</summary>
+    /// <param name="section">待判断的业务分组。</param>
+    /// <returns>分组名称或成员标签匹配时返回 true。</returns>
+    private bool MatchesSectionFilter(TestSection section)
+    {
+        if (section.Name.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        foreach (var entry in section.Members)
+            if (entry.DisplayName.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        return false;
+    }
+
+    /// <summary>绘制组件折叠及其业务区域，持续显示非折叠共用输入。</summary>
+    /// <param name="group">已完成排序和状态装配的实际组件。</param>
     private void DrawGroup(TestGroup group)
     {
-        if (!_foldouts.ContainsKey(group))
-            _foldouts[group] = true;
-
         // 分组标题：组件名 @ GameObject名
         string header = $"{group.GroupName}";
         if (group.GameObject != null)
@@ -409,26 +564,19 @@ public class TestWindow : EditorWindow
 
         EditorGUILayout.BeginVertical("box");
 
-        _foldouts[group] = EditorGUILayout.Foldout(_foldouts[group], header, true, EditorStyles.foldoutHeader);
+        // 1. 实例键在窗口刷新后保持一致，不再以每次新建的分组对象保存状态。
+        _foldouts[group.TargetKey] = EditorGUILayout.Foldout(_foldouts[group.TargetKey], header, true, EditorStyles.foldoutHeader);
 
-        if (_foldouts[group])
+        if (_foldouts[group.TargetKey])
         {
             EditorGUI.indentLevel++;
 
-            // 成员在元数据缓存创建时已经按继承顺序排序。
-            foreach (var entry in group.Fields)
+            // 2. 搜索保留显式共用输入；其他区域按分组或成员标签整体过滤。
+            bool showAllSections = MatchesComponentFilter(group);
+            foreach (var section in group.Sections)
             {
-                DrawFieldEntry(entry);
-            }
-
-            foreach (var entry in group.Properties)
-            {
-                DrawPropertyEntry(entry);
-            }
-
-            foreach (var entry in group.Methods)
-            {
-                DrawMethodEntry(entry);
+                bool isSharedInput = !string.IsNullOrEmpty(section.Name) && !section.IsFoldout;
+                if (showAllSections || isSharedInput || MatchesSectionFilter(section)) DrawSection(group, section);
             }
 
             EditorGUI.indentLevel--;
@@ -436,6 +584,56 @@ public class TestWindow : EditorWindow
 
         EditorGUILayout.EndVertical();
     }
+
+    #region 业务折叠绘制
+
+    /// <summary>绘制一个业务区域，输入、按钮和只读结果使用同一有序成员集合。</summary>
+    /// <param name="group">业务区域所属组件。</param>
+    /// <param name="section">具有明确折叠配置和显示顺序的业务区域。</param>
+    private void DrawSection(TestGroup group, TestSection section)
+    {
+        // 1. 未分组成员保持原布局，共用输入只显示标题且不创建可折叠按钮。
+        bool isNamed = !string.IsNullOrEmpty(section.Name);
+        if (isNamed) EditorGUILayout.BeginVertical("box");
+        bool expanded = true;
+        if (section.IsFoldout)
+        {
+            var states = _sectionFoldouts[group.TargetKey];
+            expanded = EditorGUILayout.Foldout(states[section.Name], section.Name, true);
+            states[section.Name] = expanded;
+        }
+        else if (isNamed)
+        {
+            EditorGUILayout.LabelField(section.Name, EditorStyles.boldLabel);
+        }
+
+        // 2. 绘制沿用原字段编辑和方法执行入口，不在布局层解释技能或存档规则。
+        if (expanded)
+        {
+            foreach (var entry in section.Members)
+            {
+                if (entry is TestFieldEntry field) DrawFieldEntry(field);
+                else if (entry is TestPropertyEntry property) DrawPropertyEntry(property);
+                else if (entry is TestMethodEntry method) DrawMethodEntry(method);
+            }
+        }
+        if (isNamed) EditorGUILayout.EndVertical();
+    }
+
+    /// <summary>统一更新全部已装配组件和业务分组的折叠状态，不影响共用输入的展示配置。</summary>
+    /// <param name="expanded">true 全部展开，false 全部折叠。</param>
+    private void SetAllFoldouts(bool expanded)
+    {
+        // 1. 包含当前隐藏区域，展开组件后各业务分组也保持本次明确选择。
+        foreach (var group in _groups)
+        {
+            _foldouts[group.TargetKey] = expanded;
+            foreach (var section in group.Sections)
+                if (section.IsFoldout) _sectionFoldouts[group.TargetKey][section.Name] = expanded;
+        }
+    }
+
+    #endregion
 
     private void DrawFieldEntry(TestFieldEntry entry)
     {
