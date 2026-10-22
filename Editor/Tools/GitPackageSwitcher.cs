@@ -22,8 +22,8 @@ using Debug = UnityEngine.Debug;
 [ToolInfo("Git 包切换器", "包管理工具",
     Description = "在 Git 包和本地包之间一键切换。\n" +
                   "本地包默认放在 Packages 目录下，切换后仍支持从 Git 拉取更新。",
-    Icon = "📦", Tags = new[] { "Git", "包管理", "依赖", "切换", "本地" })]
-public class GitPackageSwitcher : ToolEditorWindow
+    Icon = "📦", Tags = new[] { "Git", "包管理", "依赖", "切换", "本地" }, ShowInUnityMenuByDefault = true)]
+public partial class GitPackageSwitcher : ToolEditorWindow
 {
     // ═══════════════════════════════════════════════════════════════
     //  常量与配置
@@ -50,6 +50,9 @@ public class GitPackageSwitcher : ToolEditorWindow
         public bool isAsset;
         public string branch;
         public string subPath;
+        public string repositoryPath;
+        public GitRepositoryStatus gitStatus;
+        public bool checkingStatus;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -109,6 +112,19 @@ public class GitPackageSwitcher : ToolEditorWindow
         _projectRoot = Path.GetDirectoryName(Application.dataPath);
         _manifestPath = Path.Combine(_projectRoot, ManifestRelativePath);
         RefreshPackageList();
+        EditorApplication.update += PollGitStatus;
+    }
+
+    protected override void OnToolDisable()
+    {
+        EditorApplication.update -= PollGitStatus;
+        _gitStatusCancellation?.Cancel();
+    }
+
+    private void OnFocus()
+    {
+        if (!string.IsNullOrEmpty(_projectRoot) && _gitStatusJobs.Count == 0 && !_isProcessing)
+            StartGitStatusRefresh(false);
     }
 
     protected override void DrawStatusBarContent()
@@ -136,6 +152,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         EnsureStyles();
 
         DrawToolbarArea();
+        DrawGitClientSettings();
         DrawViewToggles();
         DrawScanSection();
         DrawCacheSection();
@@ -238,6 +255,9 @@ public class GitPackageSwitcher : ToolEditorWindow
 
     /// <summary>绘制带颜色的按钮（透明背景，颜色由 DrawRect 提供）</summary>
     private bool DrawColoredBtn(string text, Color normal, Color hover, params GUILayoutOption[] options)
+        => DrawColoredBtn(new GUIContent(text), normal, hover, options);
+
+    private bool DrawColoredBtn(GUIContent text, Color normal, Color hover, params GUILayoutOption[] options)
     {
         var rect = GUILayoutUtility.GetRect(GUIContent.none, _coloredBtnStyle, options);
         bool isHover = rect.Contains(Event.current.mousePosition);
@@ -318,6 +338,15 @@ public class GitPackageSwitcher : ToolEditorWindow
 
             GUILayout.FlexibleSpace();
         }
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.BeginHorizontal();
+        using (new EditorGUI.DisabledScope(_gitStatusJobs.Count > 0 || _isProcessing))
+            if (BtnPrimary("检查远端", GUILayout.Width(96), GUILayout.Height(26))) StartGitStatusRefresh(true);
+        GUILayout.Space(6);
+        if (BtnPrimary("Git 工具设置", GUILayout.Width(108), GUILayout.Height(26))) _showGitClientSettings = !_showGitClientSettings;
+        GUILayout.Space(6);
+        GUILayout.Label(_gitStatusJobs.Count > 0 ? "后台检查中…" : "返回窗口时刷新本地状态", _metaStyle, GUILayout.MinWidth(0));
         EditorGUILayout.EndHorizontal();
 
         if (_showAddForm)
@@ -821,12 +850,16 @@ public class GitPackageSwitcher : ToolEditorWindow
     private void DrawPackageRow(PackageInfo pkg)
     {
         Color modeColor = pkg.isGit ? ClrCatOrange : ClrCatGreen;
+        string branch = pkg.gitStatus?.branch ?? pkg.branch;
         int detailLines = (string.IsNullOrEmpty(pkg.gitUrl) ? 0 : 1)
-            + (pkg.isLocal ? 1 : 0) + (string.IsNullOrEmpty(pkg.branch) ? 0 : 1);
-        float informationHeight = 22 + detailLines * 20;
+            + (pkg.isLocal ? 1 : 0) + (string.IsNullOrEmpty(branch) ? 0 : 1);
+        // Reserve the scroll bar as well as card padding and the selection checkbox.
+        float informationWidth = Mathf.Max(120, position.width - (CompactLayout ? 112 : 340));
+        float statusHeight = GetGitStatusHeight(pkg, informationWidth);
+        float informationHeight = 22 + detailLines * 20 + statusHeight;
         float cardHeight = 20 + (CompactLayout
-            ? informationHeight + 8 + 58
-            : Mathf.Max(informationHeight, 58));
+            ? informationHeight + 8 + 90
+            : Mathf.Max(informationHeight, 90));
         var cardRect = EditorGUILayout.BeginVertical(_cardStyle,
             GUILayout.Height(cardHeight), GUILayout.ExpandHeight(false));
         var selectionRect = new Rect(cardRect.x, cardRect.y,
@@ -882,8 +915,9 @@ public class GitPackageSwitcher : ToolEditorWindow
                         GUILayout.Label(new GUIContent($"本地路径  {localPath}  ·  {status}", localPath), _metaStyle, GUILayout.MinWidth(0));
                     }
 
-                    if (!string.IsNullOrEmpty(pkg.branch))
-                        GUILayout.Label(new GUIContent($"分支  {pkg.branch}", pkg.branch), _metaStyle, GUILayout.MinWidth(0));
+                    if (!string.IsNullOrEmpty(branch))
+                        GUILayout.Label(new GUIContent($"分支  {branch}", pkg.gitStatus?.upstream ?? branch), _metaStyle, GUILayout.MinWidth(0));
+                    DrawGitStatus(pkg, informationWidth, statusHeight);
                 }
                 EditorGUILayout.EndVertical();
 
@@ -912,6 +946,7 @@ public class GitPackageSwitcher : ToolEditorWindow
     {
         EditorGUILayout.BeginVertical(GUILayout.Width(204), GUILayout.ExpandHeight(false));
         {
+            EditorGUI.BeginDisabledGroup(pkg.checkingStatus);
             if (pkg.isGit)
             {
                 EditorGUILayout.BeginHorizontal();
@@ -971,6 +1006,16 @@ public class GitPackageSwitcher : ToolEditorWindow
                 }
                 EditorGUILayout.EndHorizontal();
             }
+            EditorGUI.EndDisabledGroup();
+            GUILayout.Space(4);
+            EnsureGitClientSettings();
+            string client = string.IsNullOrEmpty(_gitClientPath) ? "Git 工具" : Path.GetFileNameWithoutExtension(_gitClientPath);
+            string clientTooltip = string.IsNullOrEmpty(pkg.repositoryPath)
+                ? "没有可打开的本地 Git 仓库。UPM 缓存不是工作副本，可先切换到本地。"
+                : "打开仓库：" + pkg.repositoryPath;
+            using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(pkg.repositoryPath)))
+                if (DrawColoredBtn(new GUIContent(client + " 打开", clientTooltip), ClrBtnNormal, ClrBtnHover,
+                    GUILayout.Width(196), GUILayout.Height(26))) OpenPackageInGitClient(pkg);
         }
         EditorGUILayout.EndVertical();
     }
@@ -990,6 +1035,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         var selected = _packages.Where(p => p.isSelected).ToList();
         if (selected.Count == 0) return;
 
+        EditorGUI.BeginDisabledGroup(_gitStatusJobs.Count > 0);
         EditorGUILayout.Space(4);
         var batchRect = EditorGUILayout.BeginVertical(_cardStyle);
         Drawing.DrawRoundedRect(batchRect, ClrToolbarBg, 6f);
@@ -1015,6 +1061,7 @@ public class GitPackageSwitcher : ToolEditorWindow
             EditorGUILayout.EndHorizontal();
         }
         EditorGUILayout.EndVertical();
+        EditorGUI.EndDisabledGroup();
     }
 
     // ─── 手动添加表单 ─────────────────────────────────────────
@@ -1253,6 +1300,8 @@ public class GitPackageSwitcher : ToolEditorWindow
             int gitCount = _packages.Count(p => p.isGit);
             int localCount = _packages.Count(p => p.isLocal);
             ShowStatus($"已加载 {_packages.Count} 个包（{gitCount} Git / {localCount} 本地）", MessageType.Info);
+            foreach (var pkg in _packages) pkg.repositoryPath = FindGitWorkingDirectory(GetPackageDirectory(pkg));
+            StartGitStatusRefresh(false, true);
         }
         catch (Exception ex)
         {
@@ -1448,6 +1497,7 @@ public class GitPackageSwitcher : ToolEditorWindow
         finally
         {
             _isProcessing = false;
+            StartGitStatusRefresh(false);
         }
     }
 

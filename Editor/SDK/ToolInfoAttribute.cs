@@ -28,6 +28,9 @@ public class ToolInfoAttribute : Attribute
     /// <summary>Lower values are displayed first.</summary>
     public int Priority { get; set; }
 
+    /// <summary>Show in the UnityToolsHub top menu until the user changes the switch.</summary>
+    public bool ShowInUnityMenuByDefault { get; set; }
+
     /// <summary>Optional tool author.</summary>
     public string Author { get; set; } = "";
 

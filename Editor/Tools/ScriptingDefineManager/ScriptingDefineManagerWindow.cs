@@ -13,7 +13,7 @@ using UnityEngine;
     Description = "扫描条件编译宏，支持按目录查看、切换启用状态、备注及忽略规则配置。",
     Icon = "⚙",
     Tags = new[] { "宏定义", "条件编译", "代码" },
-    Priority = 30)]
+    Priority = 30, ShowInUnityMenuByDefault = true)]
 public sealed class ScriptingDefineManagerWindow : EditorWindow
 {
     private static readonly Regex DirectiveRegex = new Regex(@"^\s*#\s*(if|elif)\s+(.+)$", RegexOptions.Compiled);

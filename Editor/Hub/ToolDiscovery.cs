@@ -45,6 +45,7 @@ public partial class UnityToolsHub
                 tags       = attr.Tags,
                 shortcut   = attr.Shortcut,
                 priority   = attr.Priority,
+                showInUnityMenuByDefault = attr.ShowInUnityMenuByDefault,
                 author     = attr.Author ?? "",
                 authorLink = attr.AuthorLink ?? "",
                 isThirdParty = attr.IsThirdParty
@@ -188,6 +189,8 @@ public partial class UnityToolsHub
                     _shortcutIndex[sc] = tool;
             }
         }
+        ApplyUnityMenuDefaults();
+        QueueDynamicMenuRefresh();
     }
 
     private static bool UpdateDiscoveredToolMetadata(ThirdPartyToolState state, ToolEntry tool)
@@ -268,6 +271,12 @@ public partial class UnityToolsHub
     /// <summary>添加无 EditorWindow 类的特殊工具（仅菜单项）</summary>
     private void AddSpecialTools()
     {
+        AddCrossAssemblyTool("UI Kit", "UI工具", "UI 控件绑定与脚本生成工具。",
+            "UIKitWindow", "▣", new[] { "UI", "代码生成" }, true);
+        if (FindType("UnityFramework.Editor.ModuleSystem.ModuleInitializerWindow") != null)
+            AddCrossAssemblyTool("模块管理", "框架初始化", "管理框架模块的启用状态与配置。",
+                "UnityFramework.Editor.ModuleSystem.ModuleInitializerWindow", "⚙", new[] { "模块", "框架", "配置" }, true);
+
         // ── 跨程序集工具（无法使用 [ToolInfo] 特性的 Editor 子文件夹工具）──
         if (FindType("JoystickIconBindingWindow") != null)
         {
@@ -280,16 +289,16 @@ public partial class UnityToolsHub
         {
             AddCrossAssemblyTool("本地化流水线", "文本工具",
                 "扫描 Text/TMP 文本，翻译并生成 Unity Localization String Tables，自动挂载本地化组件。支持 Prefab 优先、场景 Override、组合文本和占位符保护。",
-                "LocalizationPipelineWindow", "文", new[] { "Localization", "本地化", "翻译", "Text", "TMP", "Prefab" });
+                "LocalizationPipelineWindow", "文", new[] { "Localization", "本地化", "翻译", "Text", "TMP", "Prefab" }, true);
         }
 
         AddCrossAssemblyTool("数据工具", "数据管理",
             "清理数据工具：可选择清空控制台日志、PersistentData 目录、PlayerPrefs。\n\n支持 GamingDataSO 配置管理，一键重置运行时数据。",
-            "DataToolsWindow", "☰", new[] { "清理", "PlayerPrefs", "SO配置" });
+            "DataToolsWindow", "☰", new[] { "清理", "PlayerPrefs", "SO配置" }, true, "ClearData");
 
         AddCrossAssemblyTool("事件中心调试", "调试工具",
             "ZEventSystem 事件中心调试窗口：搜索、查看已注册的事件监听器。\n\n支持手动发送测试事件，实时监控事件流，快速定位事件通信问题。",
-            "ZEventSystem.Editor.EventCenterDebugWindow", "⌕", new[] { "事件系统", "调试", "监控" });
+            "ZEventSystem.Editor.EventCenterDebugWindow", "⌕", new[] { "事件系统", "调试", "监控" }, true);
 
         AddCrossAssemblyTool("帧动画创建工具", "媒体工具",
             "从图片序列自动创建 Sprite 帧动画。\n\n支持按文件名数字排序、帧率/循环配置、批量子文件夹处理、角色分组、自动生成 AnimatorController 和预制体。",
@@ -307,7 +316,9 @@ public partial class UnityToolsHub
             description = "快速打开项目常用目录：\n\n• Project Root  • Assets Folder\n• Project Settings  • Library Folder\n• Temp Folder  • Builds Folder\n• Editor Log  • Player Log\n• Persistent Data  • Streaming Assets\n• Temporary Cache",
             category    = "路径工具",
             originalCategory = "路径工具",
-            typeName    = null,
+            typeName    = typeof(UnityPathUtility).FullName,
+            entryKind   = "menuGroup",
+            showInUnityMenuByDefault = true,
             icon        = "◈",
             tags        = new[] { "目录", "快速访问" }
         });
@@ -315,8 +326,16 @@ public partial class UnityToolsHub
 
     /// <summary>添加跨程序集工具（Editor 子文件夹内、无法使用 [ToolInfo] 的工具）</summary>
     private void AddCrossAssemblyTool(string name, string category, string description,
-        string typeName, string icon, string[] tags)
+        string typeName, string icon, string[] tags, bool showInUnityMenuByDefault = false, string nativeMenuOwner = null)
     {
+        if (FindType(typeName) == null) return;
+        var existing = _categories.SelectMany(categoryNode => categoryNode.tools).FirstOrDefault(tool => tool.typeName == typeName);
+        if (existing != null)
+        {
+            existing.showInUnityMenuByDefault |= showInUnityMenuByDefault;
+            if (nativeMenuOwner != null) existing.nativeMenuOwner = nativeMenuOwner;
+            return;
+        }
         var cat = GetOrCreateCategory(category);
         cat.tools.Add(new ToolEntry
         {
@@ -325,6 +344,8 @@ public partial class UnityToolsHub
             category    = category,
             originalCategory = category,
             typeName    = typeName,
+            showInUnityMenuByDefault = showInUnityMenuByDefault,
+            nativeMenuOwner = nativeMenuOwner,
             icon        = icon,
             tags        = tags
         });
@@ -423,6 +444,19 @@ public partial class UnityToolsHub
         string entryKind = entry?.entryKind ?? state?.entryKind;
         string menuItem = entry?.menuItem ?? state?.menuItem;
         string staticMethod = entry?.staticMethod ?? state?.staticMethod;
+
+        if (entryKind == "menuGroup")
+        {
+            var menu = new GenericMenu();
+            foreach (var item in GetNativeToolMenus(typeName))
+            {
+                var captured = item;
+                string label = item.path.Substring(item.path.IndexOf('/', "UnityToolsHub/".Length) + 1);
+                menu.AddItem(new GUIContent(label), false, () => InvokeNativeMenu(captured.execute));
+            }
+            menu.ShowAsContext();
+            return;
+        }
 
         if (entryKind == "menu")
         {

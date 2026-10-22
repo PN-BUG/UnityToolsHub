@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 /// <summary>
 /// Captures only the rendered contents of the Unity Game view, excluding editor chrome.
@@ -26,6 +27,18 @@ public sealed class GameViewScreenshotWindow : ToolEditorWindow
     private Texture2D _previewTexture;
     private bool _revealAfterCapture;
     private bool _captureQueued;
+    private IDisposable _hiddenUI;
+    private bool _queuedShowUI;
+    private bool _showUI;
+    private bool _enableCaptureShortcut;
+    private bool _recordingShortcut;
+    private bool _shortcutHeld;
+    private KeyCode _shortcutKey = KeyCode.F12;
+    private EventModifiers _shortcutModifiers;
+    private static readonly FieldInfo GlobalEventHandlerField = typeof(EditorApplication).GetField(
+        "globalEventHandler", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+    private const EventModifiers ShortcutModifierMask =
+        EventModifiers.Control | EventModifiers.Shift | EventModifiers.Alt | EventModifiers.Command;
 
     private string PreferencePrefix => "UnityToolsHub.GameViewScreenshot." + Application.dataPath + ".";
     private static string DefaultOutputDirectory =>
@@ -50,18 +63,34 @@ public sealed class GameViewScreenshotWindow : ToolEditorWindow
             DefaultOutputDirectory);
         _filePrefix = EditorPrefs.GetString(PreferencePrefix + "FilePrefix", DefaultFilePrefix);
         _revealAfterCapture = EditorPrefs.GetBool(PreferencePrefix + "RevealAfterCapture", false);
+        _showUI = EditorPrefs.GetBool(PreferencePrefix + "ShowUI", false);
+        _enableCaptureShortcut = EditorPrefs.GetBool(PreferencePrefix + "EnableCaptureShortcut", false);
+        _shortcutKey = (KeyCode)EditorPrefs.GetInt(PreferencePrefix + "ShortcutKey", (int)KeyCode.F12);
+        _shortcutModifiers = (EventModifiers)EditorPrefs.GetInt(PreferencePrefix + "ShortcutModifiers", 0)
+            & ShortcutModifierMask;
+        AssemblyReloadEvents.beforeAssemblyReload += CancelQueuedCapture;
+        EditorApplication.quitting += CancelQueuedCapture;
+        EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        UpdateShortcutRegistration();
     }
 
     protected override void OnToolDisable()
     {
-        EditorApplication.delayCall -= CaptureQueuedFrame;
+        CancelQueuedCapture();
+        AssemblyReloadEvents.beforeAssemblyReload -= CancelQueuedCapture;
+        EditorApplication.quitting -= CancelQueuedCapture;
+        EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+        SetShortcutRegistration(false);
+        _captureQueued = false;
+        _recordingShortcut = false;
         DestroyPreview();
     }
 
     protected override void DrawToolContent()
     {
         DrawTitle("保存纯净的 Game 画面");
-        DrawBody("截图直接来自 GameView 的渲染纹理，包含游戏 UI，但不包含 Unity 编辑器界面。");
+        RecordShortcut(Event.current);
+        DrawBody("保存 Game 画面，不包含 Unity 编辑器界面。可选择是否显示游戏 UI，默认不显示。");
         DrawTags(new[] { "PNG", "原始分辨率", "编辑器工具" });
 
         DrawSection("当前画面");
@@ -88,11 +117,41 @@ public sealed class GameViewScreenshotWindow : ToolEditorWindow
         EditorGUILayout.EndHorizontal();
 
         _filePrefix = EditorGUILayout.TextField("文件名前缀", _filePrefix);
+        _showUI = EditorGUILayout.ToggleLeft("显示 UI", _showUI);
         _revealAfterCapture = EditorGUILayout.ToggleLeft("截图后打开所在文件夹", _revealAfterCapture);
         if (EditorGUI.EndChangeCheck())
         {
             SavePreferences();
         }
+
+        DrawSection("截图快捷键");
+        EditorGUI.BeginChangeCheck();
+        _enableCaptureShortcut = EditorGUILayout.ToggleLeft("窗口打开时启用截图快捷键", _enableCaptureShortcut);
+        if (EditorGUI.EndChangeCheck())
+        {
+            _recordingShortcut = false;
+            SavePreferences();
+            UpdateShortcutRegistration();
+        }
+
+        using (new EditorGUI.DisabledScope(!_enableCaptureShortcut || GlobalEventHandlerField == null))
+        {
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("当前快捷键", GetShortcutLabel());
+            if (GUILayout.Button(_recordingShortcut ? "取消设置" : "设置快捷键…", GUILayout.Width(96f)))
+            {
+                _recordingShortcut = !_recordingShortcut;
+                _shortcutHeld = false;
+                GUI.FocusControl(null);
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+        if (_recordingShortcut)
+            DrawToolHelpBox("在此窗口按下新的快捷键，可组合 Ctrl / Shift / Alt / Command；Esc 取消。", MessageType.Info);
+        else
+            DrawLabelDim("仅在此工具窗口打开且勾选启用时生效，关闭窗口后停用。");
+        if (GlobalEventHandlerField == null)
+            DrawToolHelpBox("当前 Unity 版本不支持编辑器全局快捷键监听。", MessageType.Warning);
 
         DrawLabelDim("文件名示例：GameView_20260920_183015_123.png");
         EditorGUILayout.Space(8f);
@@ -154,7 +213,7 @@ public sealed class GameViewScreenshotWindow : ToolEditorWindow
 
     private void QueueCapture()
     {
-        if (_captureQueued)
+        if (_captureQueued || EditorApplication.isCompiling || EditorApplication.isPlayingOrWillChangePlaymode != EditorApplication.isPlaying)
         {
             return;
         }
@@ -166,44 +225,86 @@ public sealed class GameViewScreenshotWindow : ToolEditorWindow
         }
 
         _captureQueued = true;
+        _queuedShowUI = _showUI;
         SetStatus("正在刷新 Game 画面…", MessageType.Info);
-        EditorApplication.QueuePlayerLoopUpdate();
+        // Leave the keyboard/OnGUI callback before changing visibility or requesting rendering.
+        EditorApplication.delayCall += PrepareQueuedFrame;
+    }
+
+    private void PrepareQueuedFrame()
+    {
+        EditorApplication.delayCall -= PrepareQueuedFrame;
+        try
+        {
+            if (!_queuedShowUI)
+                _hiddenUI = GameViewScreenshotCapture.HideUI();
+            if (!GameViewScreenshotCapture.TryPrepareGameView(out var error))
+                throw new InvalidOperationException(error);
+            EditorApplication.QueuePlayerLoopUpdate();
+            EditorApplication.delayCall += WaitForGameViewFrame;
+        }
+        catch (Exception exception)
+        {
+            CancelQueuedCapture();
+            SetStatus("准备截图失败：" + exception.Message, MessageType.Error);
+        }
+    }
+
+    private void WaitForGameViewFrame()
+    {
+        EditorApplication.delayCall -= WaitForGameViewFrame;
+        // Allow the requested GameView repaint to finish before reading its render texture.
         EditorApplication.delayCall += CaptureQueuedFrame;
     }
 
     private void CaptureQueuedFrame()
     {
         EditorApplication.delayCall -= CaptureQueuedFrame;
-        _captureQueued = false;
-
-        string outputPath;
         try
         {
-            outputPath = BuildOutputPath();
+            var outputPath = BuildOutputPath();
+            if (!GameViewScreenshotCapture.TryCapture(outputPath, out var image, out var error))
+            {
+                SetStatus(error, MessageType.Error);
+                return;
+            }
+
+            DestroyPreview();
+            _previewTexture = image;
+            _lastCapturePath = outputPath;
+            SetStatus($"截图成功：{image.width} × {image.height}", MessageType.Info);
+
+            if (_revealAfterCapture)
+                EditorUtility.RevealInFinder(outputPath);
         }
         catch (Exception exception)
         {
             SetStatus("保存路径无效：" + exception.Message, MessageType.Error);
-            return;
         }
-
-        if (!GameViewScreenshotCapture.TryCapture(outputPath, out var image, out var error))
+        finally
         {
-            SetStatus(error, MessageType.Error);
+            CancelQueuedCapture();
+            Repaint();
+        }
+    }
+
+    private void CancelQueuedCapture()
+    {
+        EditorApplication.delayCall -= PrepareQueuedFrame;
+        EditorApplication.delayCall -= WaitForGameViewFrame;
+        EditorApplication.delayCall -= CaptureQueuedFrame;
+        _captureQueued = false;
+        var hiddenUI = _hiddenUI;
+        _hiddenUI = null;
+        if (hiddenUI == null)
             return;
-        }
+        hiddenUI.Dispose();
+        GameViewScreenshotCapture.TryPrepareGameView(out _);
+    }
 
-        DestroyPreview();
-        _previewTexture = image;
-        _lastCapturePath = outputPath;
-        SetStatus($"截图成功：{image.width} × {image.height}", MessageType.Info);
-
-        if (_revealAfterCapture)
-        {
-            EditorUtility.RevealInFinder(outputPath);
-        }
-
-        Repaint();
+    private void OnPlayModeStateChanged(PlayModeStateChange state)
+    {
+        CancelQueuedCapture();
     }
 
     private string BuildOutputPath()
@@ -283,6 +384,80 @@ public sealed class GameViewScreenshotWindow : ToolEditorWindow
         EditorPrefs.SetString(PreferencePrefix + "OutputDirectory", _outputDirectory ?? string.Empty);
         EditorPrefs.SetString(PreferencePrefix + "FilePrefix", _filePrefix ?? string.Empty);
         EditorPrefs.SetBool(PreferencePrefix + "RevealAfterCapture", _revealAfterCapture);
+        EditorPrefs.SetBool(PreferencePrefix + "ShowUI", _showUI);
+        EditorPrefs.SetBool(PreferencePrefix + "EnableCaptureShortcut", _enableCaptureShortcut);
+        EditorPrefs.SetInt(PreferencePrefix + "ShortcutKey", (int)_shortcutKey);
+        EditorPrefs.SetInt(PreferencePrefix + "ShortcutModifiers", (int)_shortcutModifiers);
+    }
+
+    private void UpdateShortcutRegistration()
+    {
+        SetShortcutRegistration(_enableCaptureShortcut);
+    }
+
+    private string GetShortcutLabel()
+    {
+        return ((_shortcutModifiers & EventModifiers.Control) != 0 ? "Ctrl + " : string.Empty) +
+            ((_shortcutModifiers & EventModifiers.Shift) != 0 ? "Shift + " : string.Empty) +
+            ((_shortcutModifiers & EventModifiers.Alt) != 0 ? "Alt + " : string.Empty) +
+            ((_shortcutModifiers & EventModifiers.Command) != 0 ? "Command + " : string.Empty) + _shortcutKey;
+    }
+
+    private void SetShortcutRegistration(bool enabled)
+    {
+        if (GlobalEventHandlerField == null)
+            return;
+
+        var handler = GlobalEventHandlerField.GetValue(null) as EditorApplication.CallbackFunction;
+        handler -= OnGlobalShortcut;
+        if (enabled)
+            handler += OnGlobalShortcut;
+        GlobalEventHandlerField.SetValue(null, handler);
+        _shortcutHeld = false;
+    }
+
+    private void OnGlobalShortcut()
+    {
+        var current = Event.current;
+        if (current == null || !_enableCaptureShortcut || _recordingShortcut)
+            return;
+        if (current.type == EventType.KeyUp && current.keyCode == _shortcutKey)
+            _shortcutHeld = false;
+        if (current.type != EventType.KeyDown || current.keyCode != _shortcutKey ||
+            (current.modifiers & ShortcutModifierMask) != _shortcutModifiers)
+            return;
+
+        current.Use();
+        if (_shortcutHeld)
+            return;
+        _shortcutHeld = true;
+        QueueCapture();
+    }
+
+    private void RecordShortcut(Event current)
+    {
+        if (!_recordingShortcut || current == null || current.type != EventType.KeyDown)
+            return;
+        if (current.keyCode == KeyCode.Escape)
+        {
+            _recordingShortcut = false;
+            current.Use();
+            return;
+        }
+        if (current.keyCode == KeyCode.None || current.keyCode >= KeyCode.Mouse0 ||
+            current.keyCode == KeyCode.LeftControl || current.keyCode == KeyCode.RightControl ||
+            current.keyCode == KeyCode.LeftShift || current.keyCode == KeyCode.RightShift ||
+            current.keyCode == KeyCode.LeftAlt || current.keyCode == KeyCode.RightAlt ||
+            current.keyCode == KeyCode.LeftCommand || current.keyCode == KeyCode.RightCommand ||
+            current.keyCode == KeyCode.AltGr)
+            return;
+
+        _shortcutKey = current.keyCode;
+        _shortcutModifiers = current.modifiers & ShortcutModifierMask;
+        _recordingShortcut = false;
+        SavePreferences();
+        current.Use();
+        Repaint();
     }
 
     private void SetStatus(string message, MessageType type)
@@ -413,6 +588,50 @@ internal static class GameViewScreenshotCapture
             {
                 RenderTexture.ReleaseTemporary(readableTarget);
             }
+        }
+    }
+
+    public static IDisposable HideUI()
+    {
+        return new HiddenUIScope();
+    }
+
+    // The window restores visibility after the normal GameView repaint, or on cancellation/reload.
+    private sealed class HiddenUIScope : IDisposable
+    {
+        private readonly Canvas[] _canvases;
+        private readonly VisualElement[] _roots;
+        private readonly StyleEnum<DisplayStyle>[] _display;
+
+        public HiddenUIScope()
+        {
+            _canvases = Resources.FindObjectsOfTypeAll<Canvas>()
+                .Where(canvas => canvas.gameObject.scene.IsValid() && canvas.isActiveAndEnabled).ToArray();
+            _roots = Resources.FindObjectsOfTypeAll<UIDocument>()
+                .Where(document => document.gameObject.scene.IsValid() && document.isActiveAndEnabled)
+                .Select(document => document.rootVisualElement).Where(root => root != null).ToArray();
+            _display = _roots.Select(root => root.style.display).ToArray();
+            try
+            {
+                foreach (var canvas in _canvases)
+                    canvas.enabled = false;
+                foreach (var root in _roots)
+                    root.style.display = DisplayStyle.None;
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            foreach (var canvas in _canvases)
+                if (canvas != null)
+                    canvas.enabled = true;
+            for (var index = 0; index < _roots.Length; index++)
+                _roots[index].style.display = _display[index];
         }
     }
 

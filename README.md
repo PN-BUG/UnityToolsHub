@@ -17,6 +17,7 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **使用统计**：记录工具使用频率，常用工具自动置顶，O(1) 字典查找
 - **工具栏按钮**：用 `[ToolbarButton]` 标记静态方法，自动显示到 Unity 主工具栏，并可在 Hub 中管理启用状态、左右位置和顺序
 - **设置中心**：配置最近使用/最常使用快捷列表、显示数量、Unity 顶栏入口和隐藏项
+- **顶栏菜单开关**：每个工具的分类/搜索列表、详情页及右键菜单均可切换是否显示在 `UnityToolsHub` 顶栏菜单；同时控制原有入口、快捷键入口和子命令。默认显示 Git 包切换器、框架主页、模块管理、UI Kit、工具栏按钮、包创建器、自定义宏管理、收藏夹、测试窗口、数据工具、事件中心调试、本地化模块/流水线及特殊目录。选择保存在本机 EditorPrefs，脚本重载后保留；快捷列表只收录已启用顶栏显示的工具
 - **第三方工具管理**：类似 Unity Package Manager 的管理界面，支持从本地文件夹或 Git URL 导入第三方工具包，默认禁用确保安全
 - **脚本信息展示**：工具详情页显示脚本名称、路径，支持一键打开脚本
 - **作者信息**：支持在 `[ToolInfo]` 中标注作者和链接，详情页可点击跳转
@@ -26,6 +27,14 @@ Unity编辑器工具集合管理器，提供工具自动发现、分类展示、
 - **圆角渲染**：`Drawing.DrawRoundedRect` 在 IMGUI 下退化为方形（角纹理合成有渲染伪影），纹理缓存加入上限保护
 
 ## 包路径与凭据保护
+
+### Git 包状态与本地 Git 工具
+
+`UnityToolsHub > Git 包切换器` 的包卡片显示未提交改动、已提交待上传、待更新、冲突、未设置上游及游离 HEAD 等状态；数量统计整个 Git 仓库，悬停标签可查看仓库根目录、上游及远端检查时间。打开/刷新列表后先读取本地状态，再在后台检查远端；返回窗口时刷新本地状态，也可手动点「检查远端」。检查只 fetch 远程记录，不合并、提交或上传，失败时保留本地状态并显示失败标签。
+
+UPM Git 模式使用 `packages-lock.json` 中的已安装提交与对应远端分支/标签比较，固定 SHA 显示「固定提交」；不会修改 PackageCache。每包的「SourceTree 打开」按钮直接打开实际本地仓库，支持 `.git` 文件及位于父仓库中的子包；没有工作副本时按钮禁用。自动发现 Windows SourceTree，其他客户端可在「Git 工具设置」中配置可执行文件和参数，使用 `{path}` 传入仓库路径。配置保存在本机 EditorPrefs。
+
+可复用入口：`GitPackageSwitcher.ReadRepositoryStatus(directory, checkRemote)`、`ReadGitPackageStatus(url, installedRevision, checkRemote)`、`FindSourceTreeExecutable()` 和 `OpenInGitClient(repository, executable, argumentTemplate)`。状态查询会运行 Git 子进程，应在后台调用；`checkRemote=true` 会访问远端并更新远程记录，打开客户端只启动指定的本地程序。
 
 - Hub 本地导入、PackageInstaller 和 Git 包切换器共用 `UnityPackageCreator.Editor.PackageReferenceUtility`。项目外及 Library/Temp 缓存中的本地包先复制到 `LocalPackages`，同名目录不会覆盖；引用统一相对于 `Packages`，例如 `file:../LocalPackages/com.example.tool`。需将本地包文件与项目一起纳入版本管理。
 - 复制时跳过 Git/SVN 元数据、本地 XOR 密钥、签名材料、私有签名目录及常见本地环境文件；不跟随符号链接或目录联接。失败时只清理本次导入的临时目录，保留源文件。
@@ -49,7 +58,9 @@ UPM 相对路径基准见 [Unity 2023.2 本地包路径说明](https://docs.unit
 
 ### 1. 打开 Hub
 
-菜单：`Window > Unity Tools Hub`
+菜单：`UnityToolsHub > 主面板`
+
+工具列表右下角的「顶栏菜单」开关可直接固定/移除入口；左侧工具右键菜单和详情页也提供相同开关。未固定的工具仍可从 Hub 打开。工具作者可通过 `[ToolInfo(..., ShowInUnityMenuByDefault = true)]` 声明首次发现时的默认值，之后以用户选择为准。框架外的 `Window`、`Assets` 和 `GameObject` 菜单不受此开关影响。
 
 ### 2. 创建自定义工具
 

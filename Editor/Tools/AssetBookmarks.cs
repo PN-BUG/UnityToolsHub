@@ -27,7 +27,7 @@ using UnityEngine;
     Icon = "⭐",
     Tags = new[] { "收藏", "书签", "bookmark", "favorite", "快速访问", "场景对象" },
     Shortcut = "Ctrl+Shift+V",
-    Priority = 5)]
+    Priority = 5, ShowInUnityMenuByDefault = true)]
 public class AssetBookmarks : EditorWindow
 {
     #region 数据结构

@@ -11,7 +11,7 @@ using PackageInfo = UnityEditor.PackageManager.PackageInfo;
 [ToolInfo("本地化模块", "可选模块",
     Description = "按需安装或更新独立本地化包；已安装时打开本地化流水线。保留 Nodin 依赖，输入图标由输入模块适配。",
     Icon = "文", Tags = new[] { "本地化", "Localization", "模块", "UPM", "安装", "翻译" },
-    Author = "zko", AuthorLink = "https://github.com/PN-BUG/UnityLocalization")]
+    Author = "zko", AuthorLink = "https://github.com/PN-BUG/UnityLocalization", ShowInUnityMenuByDefault = true)]
 public sealed class LocalizationModuleWindow : ToolEditorWindow
 {
     public const string PackageName = "com.zko.localization";

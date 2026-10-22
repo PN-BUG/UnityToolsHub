@@ -796,8 +796,13 @@ public partial class UnityToolsHub
             : "尚未使用";
         string metadata = shortcut.IsValid ? $"{usageText}  ·  {shortcut}" : usageText;
         if (showCategory) metadata = $"{category.name}  ·  {metadata}";
-        GUI.Label(new Rect(rect.x + 54, rect.yMax - 20, textWidth, 16),
+        GUI.Label(new Rect(rect.x + 54, rect.yMax - 20, Mathf.Max(1f, textWidth - 82f), 16),
             new GUIContent(metadata, metadata), CachedToolListMetadata);
+
+        bool inMenu = _hubSettings.IsInUnityMenu(tool.typeName);
+        bool showInMenu = GUI.Toggle(new Rect(rect.xMax - 148, rect.yMax - 23, 78, 20), inMenu,
+            new GUIContent("顶栏菜单", "在 Unity 顶部 UnityToolsHub 菜单显示此工具"));
+        if (showInMenu != inMenu) SetToolInUnityMenu(tool, showInMenu);
 
         var openRect = new Rect(rect.xMax - 60, rect.y + (rect.height - 28f) * 0.5f, 48, 28);
         bool openHover = openRect.Contains(Event.current.mousePosition);
@@ -877,8 +882,8 @@ public partial class UnityToolsHub
         _hubSettings.showMostUsedTools = EditorGUILayout.ToggleLeft("显示最常使用列表", _hubSettings.showMostUsedTools);
         using (new EditorGUI.DisabledScope(!_hubSettings.showMostUsedTools))
             _hubSettings.mostUsedToolsCount = EditorGUILayout.IntSlider("显示数量", _hubSettings.mostUsedToolsCount, 1, 20);
-        if (EditorGUI.EndChangeCheck()) { SaveHubSettings(); Repaint(); }
-        EditorGUILayout.HelpBox("快捷列表生成在 Unity 顶部 UnityToolsHub 菜单中，只收录已经使用过且未隐藏的工具。", MessageType.None);
+        if (EditorGUI.EndChangeCheck()) { SaveHubSettings(); RefreshDynamicUnityMenu(); Repaint(); }
+        EditorGUILayout.HelpBox("快捷列表生成在 Unity 顶部 UnityToolsHub 菜单中，只收录已开启「顶栏菜单」、使用过且未隐藏的工具。每个工具的列表行、详情页及右键菜单均可切换顶栏显示。", MessageType.None);
         GUILayout.Space(12);
         GUILayout.Label("隐藏项", Styles.SectionHeader);
         EditorGUILayout.EndVertical();
@@ -1496,19 +1501,17 @@ public partial class UnityToolsHub
         bool showInUnityMenu = _hubSettings.IsInUnityMenu(tool.typeName);
         EditorGUI.BeginChangeCheck();
         showInUnityMenu = EditorGUILayout.ToggleLeft(
-            new GUIContent("显示在 Unity 菜单栏", "在 UnityToolsHub/工具 下生成此工具的菜单入口"),
+            new GUIContent("显示在顶栏 UnityToolsHub 菜单", "同时控制此工具已有的 UnityToolsHub 菜单入口及子命令"),
             showInUnityMenu, GUILayout.Height(24));
         if (EditorGUI.EndChangeCheck())
         {
-            _hubSettings.SetInUnityMenu(tool.typeName, showInUnityMenu);
-            SaveHubSettings();
-            RefreshDynamicUnityMenu();
+            SetToolInUnityMenu(tool, showInUnityMenu);
         }
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.BeginHorizontal();
         GUILayout.Space(RightPadding);
-        EditorGUILayout.HelpBox("入口：UnityToolsHub/工具/" + tool.name, MessageType.None);
+        EditorGUILayout.HelpBox("入口：" + GetUnityMenuPath(tool), MessageType.None);
         GUILayout.Space(RightPadding);
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.Space(12);

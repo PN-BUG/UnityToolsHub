@@ -502,6 +502,8 @@ public partial class UnityToolsHub : EditorWindow
         }
         _hubSettings.recentToolsCount = Mathf.Clamp(_hubSettings.recentToolsCount, 1, 20);
         _hubSettings.mostUsedToolsCount = Mathf.Clamp(_hubSettings.mostUsedToolsCount, 1, 20);
+        if (_hubSettings.unityMenuTools == null) _hubSettings.unityMenuTools = new List<string>();
+        if (_hubSettings.initializedUnityMenuTools == null) _hubSettings.initializedUnityMenuTools = new List<string>();
         EnsureThemeSettings();
         ApplyCurrentTheme();
     }
@@ -644,6 +646,7 @@ public partial class UnityToolsHub : EditorWindow
             .ToList();
         var available = _toolIndex.Values
             .Where(tool => tool != null && !string.IsNullOrEmpty(tool.typeName) &&
+                           tool.entryKind != "menuGroup" && _hubSettings.IsInUnityMenu(tool.typeName) &&
                            !_hiddenItems.IsToolHidden(tool.typeName) && _usageStats.GetToolCount(tool.typeName) > 0)
             .GroupBy(tool => tool.typeName).Select(group => group.First()).ToList();
         var recent = _hubSettings.showRecentTools
@@ -657,18 +660,24 @@ public partial class UnityToolsHub : EditorWindow
             : new List<ToolEntry>();
 
         var menuType = typeof(Editor).Assembly.GetType("UnityEditor.Menu");
-        var addMenuItem = menuType?.GetMethod("AddMenuItem", BindingFlags.Static | BindingFlags.NonPublic,
+        var addMenuItem = menuType?.GetMethod("AddMenuItem", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
             null, new[] { typeof(string), typeof(string), typeof(bool), typeof(int), typeof(Action), typeof(Func<bool>) }, null);
-        var removeMenuItem = menuType?.GetMethod("RemoveMenuItem", BindingFlags.Static | BindingFlags.NonPublic,
+        var removeMenuItem = menuType?.GetMethod("RemoveMenuItem", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
             null, new[] { typeof(string) }, null);
+        var menuItemExists = menuType?.GetMethod("MenuItemExists", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
         if (addMenuItem == null || removeMenuItem == null)
         {
-            Debug.LogWarning("[UnityToolsHub] 当前 Unity 版本不支持动态菜单注册，最近使用/最常使用菜单已跳过。");
+            Debug.LogWarning("[UnityToolsHub] 当前 Unity 版本不支持动态菜单注册，顶栏菜单显示开关无法应用。");
             return;
         }
 
-        foreach (var oldPath in DynamicMenuPaths)
-            removeMenuItem.Invoke(null, new object[] { oldPath });
+        // 静态 MenuItem 与动态入口由同一个开关控制，避免取消勾选后旧入口仍然存在。
+        var pathsToRemove = new HashSet<string>(DynamicMenuPaths);
+        foreach (var tool in _toolIndex.Values)
+            foreach (var item in GetNativeToolMenus(tool)) pathsToRemove.Add(item.path);
+        foreach (var oldPath in pathsToRemove)
+            if (menuItemExists == null || (bool)menuItemExists.Invoke(null, new object[] { oldPath }))
+                removeMenuItem.Invoke(null, new object[] { oldPath });
         DynamicMenuPaths.Clear();
 
         var uniquePaths = new HashSet<string>();
@@ -685,7 +694,105 @@ public partial class UnityToolsHub : EditorWindow
         };
         for (int i = 0; i < recent.Count; i++) register("最近使用", recent[i], -80 + i);
         for (int i = 0; i < mostUsed.Count; i++) register("最常使用", mostUsed[i], -60 + i);
-        for (int i = 0; i < selected.Count; i++) register("工具", selected[i], 1000 + i);
+        foreach (var tool in selected)
+        {
+            var nativeMenus = GetNativeToolMenus(tool);
+            foreach (var item in nativeMenus)
+            {
+                if (!uniquePaths.Add(item.path)) continue;
+                var captured = item;
+                Action execute = () => InvokeNativeMenu(captured.execute);
+                Func<bool> validate = () => captured.validate == null || (bool)InvokeNativeMenu(captured.validate);
+                addMenuItem.Invoke(null, new object[] { item.path, item.shortcut, false, item.priority, execute, validate });
+                DynamicMenuPaths.Add(item.path);
+            }
+            if (nativeMenus.Count > 0) continue;
+
+            string path = GetUnityMenuPath(tool);
+            if (!uniquePaths.Add(path)) continue;
+            string typeName = tool.typeName;
+            Action open = () => OpenRegisteredTool(typeName);
+            addMenuItem.Invoke(null, new object[] { path, "", false, 1000 + tool.priority, open, (Func<bool>)(() => true) });
+            DynamicMenuPaths.Add(path);
+        }
+    }
+
+    private void ApplyUnityMenuDefaults()
+    {
+        bool changed = false;
+        foreach (var tool in _toolIndex.Values)
+        {
+            if (_hubSettings.initializedUnityMenuTools.Contains(tool.typeName)) continue;
+            // 保留旧版已勾选项。默认值只在首次发现这个工具时应用。
+            _hubSettings.SetInUnityMenu(tool.typeName,
+                _hubSettings.IsInUnityMenu(tool.typeName) || tool.showInUnityMenuByDefault);
+            changed = true;
+        }
+        if (changed) SaveHubSettings();
+    }
+
+    private void SetToolInUnityMenu(ToolEntry tool, bool visible)
+    {
+        _hubSettings.SetInUnityMenu(tool.typeName, visible);
+        SaveHubSettings();
+        RefreshDynamicUnityMenu();
+        Repaint();
+    }
+
+    private sealed class NativeToolMenu
+    {
+        public string path;
+        public string shortcut;
+        public int priority;
+        public MethodInfo execute;
+        public MethodInfo validate;
+    }
+
+    private static readonly Dictionary<string, List<NativeToolMenu>> NativeToolMenus = new Dictionary<string, List<NativeToolMenu>>();
+
+    private static List<NativeToolMenu> GetNativeToolMenus(ToolEntry tool)
+        => GetNativeToolMenus(tool.nativeMenuOwner ?? tool.typeName);
+
+    private static List<NativeToolMenu> GetNativeToolMenus(string typeName)
+    {
+        if (NativeToolMenus.TryGetValue(typeName, out var cached)) return cached;
+        var items = new Dictionary<string, NativeToolMenu>();
+        var type = FindType(typeName);
+        if (type != null)
+        {
+            var flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            foreach (var method in type.GetMethods(flags).OrderBy(method => method.MetadataToken))
+            {
+                foreach (MenuItem attribute in method.GetCustomAttributes(typeof(MenuItem), false))
+                {
+                    if (!attribute.menuItem.StartsWith("UnityToolsHub/", StringComparison.Ordinal)) continue;
+                    string path = attribute.menuItem;
+                    string shortcut = "";
+                    int hotkeyIndex = path.LastIndexOf(' ');
+                    if (hotkeyIndex >= 0 && hotkeyIndex + 1 < path.Length && "_%#&".IndexOf(path[hotkeyIndex + 1]) >= 0)
+                    {
+                        shortcut = path.Substring(hotkeyIndex).Trim();
+                        path = path.Substring(0, hotkeyIndex).TrimEnd();
+                    }
+                    if (!items.TryGetValue(path, out var item))
+                        items[path] = item = new NativeToolMenu { path = path, shortcut = shortcut, priority = attribute.priority };
+                    if (attribute.validate) item.validate = method;
+                    else { item.execute = method; item.priority = attribute.priority; item.shortcut = shortcut; }
+                }
+            }
+        }
+        return NativeToolMenus[typeName] = items.Values.Where(item => item.execute != null).ToList();
+    }
+
+    private static object InvokeNativeMenu(MethodInfo method)
+    {
+        return method.Invoke(null, method.GetParameters().Length == 0 ? null : new object[] { new MenuCommand(null) });
+    }
+
+    private static string GetUnityMenuPath(ToolEntry tool)
+    {
+        var nativeMenus = GetNativeToolMenus(tool);
+        return nativeMenus.Count > 0 ? nativeMenus[0].path : "UnityToolsHub/" + tool.name.Replace("/", "／");
     }
 
     private List<ToolEntry> GetBuiltInTools()

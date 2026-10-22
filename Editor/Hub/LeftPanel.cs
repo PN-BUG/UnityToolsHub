@@ -989,6 +989,13 @@ public partial class UnityToolsHub
     private void ShowToolContextMenu(ToolEntry tool)
     {
         var menu = new GenericMenu();
+        if (!string.IsNullOrEmpty(tool.typeName))
+        {
+            bool inMenu = _hubSettings.IsInUnityMenu(tool.typeName);
+            menu.AddItem(new GUIContent("显示在顶栏 UnityToolsHub 菜单"), inMenu,
+                () => SetToolInUnityMenu(tool, !inMenu));
+            menu.AddSeparator("");
+        }
         if (string.IsNullOrEmpty(tool.typeName))
         {
             menu.AddDisabledItem(new GUIContent("此工具无法隐藏"));

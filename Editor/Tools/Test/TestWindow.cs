@@ -10,7 +10,7 @@ using UnityEngine;
 /// 按组件及显式业务分组展示，并在刷新时保留折叠状态和方法参数。
 /// 快捷键 Ctrl+T 打开/关闭。
 /// </summary>
-[ToolInfo("测试窗口", "调试工具", Description = "聚合展示场景中所有标记了 [Test] 的方法、字段和属性。\n\n方法显示为按钮，字段和属性显示为输入或只读结果。\n支持显式业务分组、排序、折叠和搜索；刷新保留展开状态，快捷键 Ctrl+T 打开/关闭。", Icon = "⌘", Tags = new[] { "测试", "调试", "Test" }, Shortcut = "Ctrl+T")]
+[ToolInfo("测试窗口", "调试工具", Description = "聚合展示场景中所有标记了 [Test] 的方法、字段和属性。\n\n方法显示为按钮，字段和属性显示为输入或只读结果。\n支持显式业务分组、排序、折叠和搜索；刷新保留展开状态，快捷键 Ctrl+T 打开/关闭。", Icon = "⌘", Tags = new[] { "测试", "调试", "Test" }, Shortcut = "Ctrl+T", ShowInUnityMenuByDefault = true)]
 public class TestWindow : EditorWindow
 {
 #if UNITY_6000_0_OR_NEWER

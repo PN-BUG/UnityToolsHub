@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEngine;
 namespace Zko.UnityToolsHub.Toolbar
 {
-    [ToolInfo("工具栏按钮", "编辑器工具", Description = "管理通过 ToolbarButton 标签注册的 Unity 主工具栏按钮", Icon = "TB", Tags = new[] { "Toolbar", "工具栏", "按钮" }, Priority = -20)]
+    [ToolInfo("工具栏按钮", "编辑器工具", Description = "管理通过 ToolbarButton 标签注册的 Unity 主工具栏按钮", Icon = "TB", Tags = new[] { "Toolbar", "工具栏", "按钮" }, Priority = -20, ShowInUnityMenuByDefault = true)]
     public sealed class ToolbarButtonManagerWindow : EditorWindow
     {
         private Vector2 _scroll;

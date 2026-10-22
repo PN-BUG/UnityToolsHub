@@ -22,6 +22,7 @@ public partial class UnityToolsHub
         public string[] tags;         // 功能标签
         public string shortcut;       // 快捷键提示
         public int priority;          // 排序优先级（发现时缓存）
+        public bool showInUnityMenuByDefault;
         public string author;         // 工具作者
         public string authorLink;      // 作者链接/主页 URL
         public bool isThirdParty;      // 是否第三方工具
@@ -29,6 +30,7 @@ public partial class UnityToolsHub
         public string entryKind;       // "window" | "menu" | "static"
         public string menuItem;
         public string staticMethod;
+        public string nativeMenuOwner; // 菜单方法声明在辅助类型上时显式指定
     }
     #endregion
 
@@ -149,6 +151,7 @@ public partial class UnityToolsHub
         public bool showMostUsedTools = true;
         public int mostUsedToolsCount = 5;
         public List<string> unityMenuTools = new List<string>();
+        public List<string> initializedUnityMenuTools = new List<string>();
 
         // 主题配置。themeInitialized 用于兼容没有这些字段的旧 EditorPrefs 数据。
         public bool themeInitialized;
@@ -167,6 +170,7 @@ public partial class UnityToolsHub
         public void SetInUnityMenu(string typeName, bool visible)
         {
             if (string.IsNullOrEmpty(typeName)) return;
+            if (!initializedUnityMenuTools.Contains(typeName)) initializedUnityMenuTools.Add(typeName);
             unityMenuTools.RemoveAll(x => x == typeName);
             if (visible) unityMenuTools.Add(typeName);
         }

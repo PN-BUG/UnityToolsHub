@@ -13,7 +13,7 @@ using UnityEngine;
 /// </summary>
 [ToolInfo("框架主页", "框架初始化",
     Description = "UnityFramework 主页入口 — 框架信息概览、快捷入口、模块状态与文档链接。",
-    Icon = "🏠", Tags = new[] { "主页", "入口", "概览" })]
+    Icon = "🏠", Tags = new[] { "主页", "入口", "概览" }, ShowInUnityMenuByDefault = true)]
 public class UnityFrameworkHomeWindow : ToolEditorWindow
 {
     private const string PackageAssetPath = "Assets/UnityFramework";

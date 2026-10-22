@@ -33,7 +33,7 @@ namespace UnityPackageCreator.Editor
                       "• 创建后自动安装到当前工程",
         Icon = "📦",
         Tags = new[] { "package", "upm", "包", "创建", "Unity Package" },
-        Priority = 10)]
+        Priority = 10, ShowInUnityMenuByDefault = true)]
     public class PackageCreatorWindow : EditorWindow
     {
         #region 字段
