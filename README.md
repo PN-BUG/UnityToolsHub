@@ -359,9 +359,11 @@ public static class MyPluginDetector
 
 ## 依赖关系
 
-主程序集 `UnityToolsHub.Editor` 依赖 `UnityToolsHub.SDK`、`UnityToolsHub.ToolWindowBase.Editor`、`UnityToolsHub.Testing.Runtime`、Nodin、TextMeshPro 和 Unity UI。`UnityToolsHub.Testing.Runtime` 位于框架的 `Runtime/ToolAttributes`，供项目运行时脚本和 Hub 测试窗口共同引用。
+主程序集 `UnityToolsHub.Editor` 依赖 `UnityToolsHub.SDK`、`UnityToolsHub.ToolWindowBase.Editor`、`UnityToolsHub.Testing.Runtime`、Nodin 和 Unity UI。`UnityToolsHub.Testing.Runtime` 随 Hub 一同发布，位于包内的 `Runtime/Testing`，供项目运行时脚本和 Hub 测试窗口共同引用；该程序集不依赖 UnityEditor 或 UnityEngine。
 
-仅复制 `Assets/UnityFramework/Editor/UnityToolsHub` 目录**不能保证完整 Hub 编译**：测试窗口缺少 `UnityToolsHub.Testing.Runtime`，Toolbar 与 FolderRuleTool 的 asmdef 仍引用 `UnityFramework`。本地化、手柄图标程序集已移出 Hub，Hub 通过类型查找可选显示其窗口，不再直接引用它们。若要发布独立 Hub 包，需要先拆分或移除上述框架相关程序集，并在干净项目中验证。`SDK~/` 是单独的元数据包，不受这些主程序依赖影响。
+Toolbar 与 FolderRuleTool 不再引用 `UnityFramework`。本地化、手柄图标程序集位于 Hub 外部，Hub 通过类型查找可选显示其窗口。FolderRuleTool 的 asmdef 仍直接引用 Addressables Editor，因此使用完整 Hub 时需要安装 Addressables；Nodin 按下述流程安装。独立 UPM 安装仍需在目标项目中验证。`SDK~/` 是单独的元数据包，不受这些主程序依赖影响。
+
+从旧版完整 UnityFramework 迁移时，将 `Runtime/ToolAttributes` 及其 `.meta` 移到 Hub 的 `Runtime/Testing`，不要保留两份 `TestAttribute` 或同名程序集。此修复保留原脚本、程序集及文件夹 GUID。通过 UPM 安装的项目应在修复发布后更新 Git 包；若 manifest 固定到旧提交（例如 `40f4a2f41f`），需改为包含修复的提交。不要修改 `Library/PackageCache`，缓存重建会覆盖这些改动。
 
 Nodin 依赖通过 `Editor/Setup/NodinSetup.cs` 自动处理：
 - 首次加载时自动将 `com.zko.nodin` 写入 `manifest.json`
