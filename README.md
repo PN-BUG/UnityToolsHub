@@ -36,6 +36,12 @@ UPM Git 模式使用 `packages-lock.json` 中的已安装提交与对应远端�
 
 可复用入口：`GitPackageSwitcher.ReadRepositoryStatus(directory, checkRemote)`、`ReadGitPackageStatus(url, installedRevision, checkRemote)`、`FindSourceTreeExecutable()` 和 `OpenInGitClient(repository, executable, argumentTemplate)`。状态查询会运行 Git 子进程，应在后台调用；`checkRemote=true` 会访问远端并更新远程记录，打开客户端只启动指定的本地程序。
 
+切换与本地 Git 更新通过后台队列逐个执行，窗口持续显示当前操作、耗时、剩余数量和具体错误，可取消剩余操作；克隆及拉取单次超时为 300 秒。URL 未指定 `#revision` 时克隆远端默认分支；显式分支、标签和提交分别处理，`?path=` 引用实际含 `package.json` 的子目录。新工作副本以完整包名放在 `LocalPackages`，已有同名目录先核对包名，不覆盖。失败或取消只清理本次克隆的临时目录。
+
+切回 Git 时，直接位于 `Packages` 下的普通嵌入包会连同目录 `.meta` 移到 `LocalPackages` 保留，避免继续覆盖 manifest 的 Git 引用；目标已存在时停止，写入失败时恢复原目录。Git 子模块/worktree 的 `.git` 文件涉及相对路径，需先由用户整理为 `Packages` 外的本地引用。切换提示保留到下次操作，明确区分引用写入与 UPM 后续解析。复用 `GetCloneArguments(gitUrl, destination)` 可生成克隆参数；`ExecuteGit(directory, token, timeoutSeconds, arguments)` 会运行 Git 子进程，必须在后台显式调用。
+
+窗口最小宽度为 460，包卡片使用紧凑的信息区和横向操作栏，窄窗口不再预留右侧按钮堆叠的空白高度。切换操作突出显示，删除/移除放在「•••」菜单；扫描、缓存检测和客户端设置位于「更多工具」。选中包后，批量操作出现在筛选栏下方，不适用的操作禁用；完整地址、路径、分支及错误详情保留在悬停提示中。
+
 - Hub 本地导入、PackageInstaller 和 Git 包切换器共用 `UnityPackageCreator.Editor.PackageReferenceUtility`。项目外及 Library/Temp 缓存中的本地包先复制到 `LocalPackages`，同名目录不会覆盖；引用统一相对于 `Packages`，例如 `file:../LocalPackages/com.example.tool`。需将本地包文件与项目一起纳入版本管理。
 - 复制时跳过 Git/SVN 元数据、本地 XOR 密钥、签名材料、私有签名目录及常见本地环境文件；不跟随符号链接或目录联接。失败时只清理本次导入的临时目录，保留源文件。
 - Git 操作拒绝带 HTTP 用户信息、SSH 密码或认证查询参数的 URL；保留 `?path=` 子目录与 `#revision` 支持。认证交给系统 Git 凭据管理器或 SSH。

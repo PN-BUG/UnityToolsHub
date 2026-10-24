@@ -204,33 +204,56 @@ public partial class GitPackageSwitcher
 
     private static string QueryGit(string directory, CancellationToken token, params string[] arguments)
     {
+        return ExecuteGit(directory, token, 30, arguments);
+    }
+
+    /// <summary>
+    /// Runs Git without an interactive prompt. Call from a worker for clone/pull operations;
+    /// both output streams are drained concurrently and the caller controls the timeout.
+    /// Throws a redacted error on failure and never accesses Unity APIs.
+    /// </summary>
+    public static string ExecuteGit(string directory, CancellationToken token, int timeoutSeconds,
+        params string[] arguments)
+    {
+        if (timeoutSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(timeoutSeconds));
         token.ThrowIfCancellationRequested();
         var start = new ProcessStartInfo("git", string.Join(" ", arguments.Select(QuoteProcessArgument)))
         {
             WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true,
+            RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
         };
         start.EnvironmentVariables["GIT_TERMINAL_PROMPT"] = "0";
         start.EnvironmentVariables["GCM_INTERACTIVE"] = "Never";
         start.EnvironmentVariables["GIT_OPTIONAL_LOCKS"] = "0";
-        using (var process = Process.Start(start))
+        try
         {
-            var stdout = process.StandardOutput.ReadToEndAsync();
-            var stderr = process.StandardError.ReadToEndAsync();
-            var timer = Stopwatch.StartNew();
-            while (!process.WaitForExit(100))
+            using (var process = Process.Start(start))
             {
-                if (!token.IsCancellationRequested && timer.Elapsed.TotalSeconds < 30) continue;
-                try { process.Kill(); } catch { }
+                process.StandardInput.Close();
+                var stdout = process.StandardOutput.ReadToEndAsync();
+                var stderr = process.StandardError.ReadToEndAsync();
+                var streams = Task.WhenAll(stdout, stderr);
+                var timer = Stopwatch.StartNew();
+                // A spawned child can keep a redirected pipe open after Git exits, so the
+                // same timeout and cancellation also cover draining the output streams.
+                while (!process.WaitForExit(100) || !streams.Wait(100))
+                {
+                    if (!token.IsCancellationRequested && timer.Elapsed.TotalSeconds < timeoutSeconds) continue;
+                    try { process.Kill(); } catch { }
+                    token.ThrowIfCancellationRequested();
+                    throw new TimeoutException($"Git 操作超时（{timeoutSeconds} 秒），可稍后重试");
+                }
                 token.ThrowIfCancellationRequested();
-                throw new TimeoutException("Git 检查超时（30 秒），可稍后重试");
+                string output = stdout.GetAwaiter().GetResult(), error = stderr.GetAwaiter().GetResult();
+                if (process.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(error)
+                    ? $"Git 操作失败（退出码 {process.ExitCode}）" : PackageReferenceUtility.Redact(error.Trim()));
+                return output;
             }
-            string output = stdout.GetAwaiter().GetResult(), error = stderr.GetAwaiter().GetResult();
-            if (process.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(error)
-                ? $"Git 检查失败（退出码 {process.ExitCode}）" : PackageReferenceUtility.Redact(error.Trim()));
-            return output;
         }
+        catch (OperationCanceledException) { throw; }
+        catch (TimeoutException) { throw; }
+        catch (Exception ex) { throw new InvalidOperationException(PackageReferenceUtility.Redact(ex.Message)); }
     }
 
     // ProcessStartInfo.Arguments quoting; no shell is involved.
@@ -358,9 +381,9 @@ public partial class GitPackageSwitcher
         return rows * 22;
     }
 
-    private void DrawGitStatus(PackageInfo pkg, float width, float height)
+    private void DrawGitStatus(PackageInfo pkg, Rect rect)
     {
-        var rect = GUILayoutUtility.GetRect(width, height, GUILayout.ExpandWidth(false), GUILayout.Height(height));
+        float width = rect.width;
         float x = 0, y = 0;
         var s = pkg.gitStatus;
         string tooltip = "仓库整体状态：" + (pkg.repositoryPath ?? "UPM Git 包") + "\n未提交包括暂存、未暂存及未跟踪项。待上传仅统计已提交的提交数。";
