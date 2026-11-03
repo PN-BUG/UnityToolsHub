@@ -715,6 +715,25 @@ public partial class UnityToolsHub : EditorWindow
             addMenuItem.Invoke(null, new object[] { path, "", false, 1000 + tool.priority, open, (Func<bool>)(() => true) });
             DynamicMenuPaths.Add(path);
         }
+
+        RefreshUnityMenuShortcuts();
+    }
+
+    private static void RefreshUnityMenuShortcuts()
+    {
+        // AddMenuItem 只更新菜单及其快捷键文字，不会同步 ShortcutManager 的缓存。
+        // 必须等整批移除/注册结束后重建，否则 Ctrl+T 等原生菜单快捷键可能缺失。
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var integrationType = typeof(Editor).Assembly.GetType("UnityEditor.ShortcutManagement.ShortcutIntegration");
+        var controller = integrationType?.GetProperty("instance", flags)?.GetValue(null);
+        var rebuildShortcuts = controller?.GetType().GetMethod("RebuildShortcuts", flags, null, Type.EmptyTypes, null);
+        if (rebuildShortcuts == null)
+        {
+            Debug.LogWarning("[UnityToolsHub] 当前 Unity 版本不支持刷新菜单快捷键，动态菜单快捷键可能需要重载编辑器后生效。");
+            return;
+        }
+
+        rebuildShortcuts.Invoke(controller, null);
     }
 
     private void ApplyUnityMenuDefaults()
