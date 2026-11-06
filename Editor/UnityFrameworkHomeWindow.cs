@@ -226,6 +226,9 @@ public class UnityFrameworkHomeWindow : ToolEditorWindow
     {
         DrawSection("文档与链接", ClrCatPurple);
 
+        if (DrawFlatButton("打开本地文档中心（阅读 / 搜索 / 编辑）"))
+            FrameworkDocumentationWindow.ShowWindow();
+
         // 飞书文档
         if (!string.IsNullOrEmpty(_docUrl))
             DrawLinkRow("📖", "飞书文档", _docUrl);

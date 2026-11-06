@@ -16,11 +16,14 @@ Hub 入口：`Window > Unity Tools Hub > AI工具`。窗口、搜索、标签、
 | 工具 | 源码 | 入口与参数 | 副作用 |
 | --- | --- | --- | --- |
 | AI工具使用说明 | `AIToolsGuideWindow.cs` | Hub 中双击打开，无需参数 | 定位目录、更改编辑器选择、打开说明或复制文本；不修改场景和资产 |
+| 框架文档中心 | `FrameworkDocumentationWindow.cs`、`FrameworkDocumentation.cs`、`FrameworkMarkdownView.cs` | `UnityFramework > 文档中心` 或 Hub「AI工具」；`GetDocumentationRoot()` 定位框架文档；`ReadPages(root)` / `LoadDocument(root, relativePath)` 读取；`SaveDocument(root, relativePath, content, expectedContent)` 保存，expectedContent 为打开时原文，null 表示新建 | 读取 Markdown/图片；显式保存或新建写文档并刷新资产，原文变动时拒绝覆盖；窗口保留当前 Editor 会话草稿；不改场景或运行时设置 |
 | 本地化可选模块 | `LocalizationModuleWindow.cs` | Hub「可选模块 > 本地化模块」；`GetInstalledPackage()` 读取状态，`InstallOrUpdate(onComplete)` 显式安装/更新，`OpenPipeline()` 打开流水线 | 只有显式安装调用才发起 UPM Git 安装，可能下载依赖并重载程序集；不会覆盖本地/嵌入源码目录 |
 
 本地化模块按用途显示在「可选模块」，源码在此目录复用。安装使用 `https://github.com/PN-BUG/UnityLocalization.git`；依赖已有 Nodin。当前只完成静态核对，UPM 安装结果及窗口布局仍需目标 Unity Editor 验证。
 
 ## 接入约定
+
+文档中心右上角“外观”支持跟随 Unity（默认）、日间和夜间，偏好保存在本机 EditorPrefs。窗口公开 `SetThemeMode(ThemeMode)`、`CurrentTheme` 和 `UsesDarkTheme`，只改变窗口外观；样式位于 `FrameworkDocumentationTheme.uss`。
 
 - 文件保存在本目录，可按用途创建子目录；保持编辑器代码和运行时代码隔离。
 - 使用 `[ToolInfo("明确的工具名称", "AI工具", Description = "用途、输入和副作用", Tags = new[] { "AI", "功能关键词" })]`。Hub 自动发现，无需修改分类注册代码。

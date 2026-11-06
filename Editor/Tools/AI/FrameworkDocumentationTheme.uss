@@ -1,0 +1,79 @@
+.fw-docs-light {
+    --fw-page: #f7f8fa;
+    --fw-text: #24282e;
+    --fw-control: #ffffff;
+    --fw-toolbar: #e7eaf0;
+    --fw-border: #b8bec8;
+    --fw-hover: #dce7f4;
+    --fw-selection: #c7dcf4;
+    --fw-disabled: #8b929b;
+    --fw-dragger: #a4adb9;
+}
+
+.fw-docs-dark {
+    --fw-page: #292b30;
+    --fw-text: #d9dde4;
+    --fw-control: #373a40;
+    --fw-toolbar: #30333a;
+    --fw-border: #535965;
+    --fw-hover: #424e60;
+    --fw-selection: #384f6e;
+    --fw-disabled: #818792;
+    --fw-dragger: #687383;
+}
+
+.fw-docs-manual {
+    background-color: var(--fw-page);
+    color: var(--fw-text);
+}
+
+.fw-docs-manual .unity-text-element {
+    color: var(--fw-text);
+}
+
+.fw-docs-manual .unity-toolbar,
+.fw-docs-manual .unity-scroller {
+    background-color: var(--fw-toolbar);
+    border-color: var(--fw-border);
+}
+
+.fw-docs-manual .unity-button,
+.fw-docs-manual .unity-toolbar-button,
+.fw-docs-manual .unity-toolbar-menu,
+.fw-docs-manual .unity-toolbar-toggle,
+.fw-docs-manual .unity-base-field__input {
+    background-color: var(--fw-control);
+    color: var(--fw-text);
+    border-color: var(--fw-border);
+    -unity-background-image-tint-color: var(--fw-text);
+}
+
+.fw-docs-manual .unity-text-field {
+    --unity-cursor-color: var(--fw-text);
+    --unity-selection-color: var(--fw-selection);
+}
+
+.fw-docs-manual .unity-button:hover,
+.fw-docs-manual .unity-toolbar-button:hover,
+.fw-docs-manual .unity-toolbar-menu:hover,
+.fw-docs-manual .unity-toolbar-toggle:hover {
+    background-color: var(--fw-hover);
+}
+
+.fw-docs-manual .unity-toolbar-toggle:checked {
+    background-color: var(--fw-selection);
+}
+
+.fw-docs-manual .unity-button:disabled,
+.fw-docs-manual .unity-toolbar-button:disabled {
+    color: var(--fw-disabled);
+}
+
+.fw-docs-manual .unity-base-slider__dragger {
+    background-color: var(--fw-dragger);
+    border-color: var(--fw-border);
+}
+
+.fw-docs-manual .unity-two-pane-split-view__dragline {
+    background-color: var(--fw-border);
+}
