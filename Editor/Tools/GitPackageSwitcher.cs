@@ -1285,6 +1285,10 @@ public partial class GitPackageSwitcher : ToolEditorWindow
         string remote = gitUrl.Split('#')[0].Split('?')[0];
         if (remote.StartsWith("git+", StringComparison.OrdinalIgnoreCase)) remote = remote.Substring(4);
         var arguments = new List<string> { "clone", "--depth", "1" };
+        // Persist before the initial checkout so external Git clients can also
+        // work with long paths after the staging directory is moved into place.
+        if (Path.DirectorySeparatorChar == '\\')
+            arguments.AddRange(new[] { "--config", "core.longpaths=true" });
         if (!string.IsNullOrEmpty(info.branch) && info.branch != "HEAD"
             && !info.branch.StartsWith("refs/tags/", StringComparison.Ordinal)
             && !Regex.IsMatch(info.branch, @"^[0-9a-fA-F]{7,40}$"))
@@ -1302,6 +1306,7 @@ public partial class GitPackageSwitcher : ToolEditorWindow
         if (Directory.Exists(existing))
         {
             ValidateLocalPackage(existing, pkg.packageName);
+            ValidateExistingGitPackage(existing, token);
             return existing;
         }
 
@@ -1316,6 +1321,7 @@ public partial class GitPackageSwitcher : ToolEditorWindow
         if (Directory.Exists(repository))
         {
             ValidateLocalPackage(packagePath, pkg.packageName);
+            ValidateExistingGitPackage(packagePath, token);
             return packagePath;
         }
 
@@ -1330,6 +1336,9 @@ public partial class GitPackageSwitcher : ToolEditorWindow
                 ExecuteGit(staging, token, 300, "fetch", "--depth", "1", "--", "origin", pkg.branch);
                 ExecuteGit(staging, token, 30, "checkout", "--detach", "FETCH_HEAD");
             }
+            // Initialize at the selected revision, before moving the complete repository.
+            // Relative submodule gitdir/core.worktree paths move with their parent .git.
+            ExecuteGit(staging, token, 300, "submodule", "update", "--init", "--recursive");
             ValidateLocalPackage(Path.Combine(staging, pkg.subPath ?? ""), pkg.packageName);
             token.ThrowIfCancellationRequested();
             Directory.Move(staging, repository);
@@ -1344,6 +1353,17 @@ public partial class GitPackageSwitcher : ToolEditorWindow
                 Directory.Delete(staging, true);
             }
         }
+    }
+
+    private void ValidateExistingGitPackage(string directory, CancellationToken token)
+    {
+        string repository = FindGitWorkingDirectory(directory);
+        if (string.IsNullOrEmpty(repository))
+            throw new IOException("已有本地目录缺少 Git 元数据，不会覆盖或伪装成 Git 工作副本。请先恢复该目录的 .git，或为新克隆选择空目录：" + directory);
+        ExecuteGit(repository, token, 30, "rev-parse", "--verify", "HEAD");
+        string submodules = ExecuteGit(repository, token, 30, "submodule", "status", "--recursive");
+        if (submodules.Split('\n').Any(line => line.StartsWith("-", StringComparison.Ordinal)))
+            throw new IOException("已有工作副本包含未初始化或 Git 元数据缺失的子模块。请先修复子模块；不会覆盖已有文件：" + repository);
     }
 
     private static void ValidateLocalPackage(string directory, string packageName)

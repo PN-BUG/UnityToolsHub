@@ -63,7 +63,8 @@ namespace UnityToolsHub.Setup
                 int valueStart = json.IndexOf('"', json.IndexOf(':', keyIndex) + 1);
                 int valueEnd = valueStart >= 0 ? json.IndexOf('"', valueStart + 1) : -1;
                 if (valueStart < 0 || valueEnd < 0) return false;
-                if (json.Substring(valueStart + 1, valueEnd - valueStart - 1) == value) return true;
+                // Bootstrap only: preserve the project's chosen local, registry or Git source.
+                if (!string.IsNullOrWhiteSpace(json.Substring(valueStart + 1, valueEnd - valueStart - 1))) return true;
                 result = json.Substring(0, valueStart + 1) + value + json.Substring(valueEnd);
                 changed = true;
                 return true;
