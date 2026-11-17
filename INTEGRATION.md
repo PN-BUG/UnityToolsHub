@@ -21,6 +21,10 @@
 
 Hub 不会向第三方仓库写入 `[ToolInfo]`，也不会修改其脚本。
 
+### 推荐包
+
+第三方工具页的“推荐包”列表提供 **Unity MCP (MCP for Unity)**。点击“安装”会通过 UPM 安装 `https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main`，与 Package Manager 的 Git URL 安装方式相同。当前项目已注册该包时显示“已安装”，不会重复安装；安装完成后仍需手动启用需要的工具入口。
+
 ### 已经安装的 Git 包
 
 无需重复安装。Hub 打开时会扫描 `Packages/manifest.json` 中已经解析完成的 Git UPM 包，并自动登记其中的 `EditorWindow`。识别出的入口默认禁用，在第三方工具管理页确认后启用即可。UnityToolsHub 自身会被排除。

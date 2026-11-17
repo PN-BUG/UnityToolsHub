@@ -2531,6 +2531,57 @@ public partial class UnityToolsHub
     #endregion
 
     #region 第三方工具管理面板
+    private const string RecommendedUnityMcpPackageName = "com.coplaydev.unity-mcp";
+    private const string RecommendedUnityMcpGitUrl = "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main";
+    private const string RecommendedUnityMcpRepositoryUrl = "https://github.com/CoplayDev/unity-mcp";
+
+    private static bool IsUnityMcpInstalled()
+    {
+        return UnityEditor.PackageManager.PackageInfo.FindForAssetPath(
+            "Packages/" + RecommendedUnityMcpPackageName + "/package.json") != null;
+    }
+
+    private void InstallRecommendedUnityMcp()
+    {
+        if (_isImporting || EditorApplication.isCompiling || EditorApplication.isUpdating
+            || EditorApplication.isPlayingOrWillChangePlaymode || IsUnityMcpInstalled())
+            return;
+
+        ImportThirdPartyFromGit(RecommendedUnityMcpGitUrl, "MCP for Unity", "Coplay",
+            RecommendedUnityMcpRepositoryUrl);
+    }
+
+    private void DrawRecommendedThirdPartyPackages()
+    {
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        GUILayout.Label("推荐包", Styles.SectionHeader);
+
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label(new GUIContent("Unity MCP (MCP for Unity)", RecommendedUnityMcpGitUrl),
+            EditorStyles.boldLabel, GUILayout.ExpandWidth(true));
+        if (GUILayout.Button("仓库", GUILayout.Width(52), GUILayout.Height(24)))
+            Application.OpenURL(RecommendedUnityMcpRepositoryUrl);
+
+        bool installed = IsUnityMcpInstalled();
+        using (new EditorGUI.DisabledScope(installed || _isImporting || EditorApplication.isCompiling
+            || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode))
+        {
+            if (GUILayout.Button(new GUIContent(installed ? "已安装" : "安装",
+                "通过 Unity Package Manager 安装\n" + RecommendedUnityMcpGitUrl),
+                GUILayout.Width(72), GUILayout.Height(24)))
+                InstallRecommendedUnityMcp();
+        }
+        EditorGUILayout.EndHorizontal();
+
+        GUILayout.Label("让 AI 助手通过 MCP 管理 Unity 场景、资源和脚本。", EditorStyles.miniLabel);
+        EditorGUILayout.EndVertical();
+        GUILayout.Space(RightPadding);
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(4);
+    }
+
     /// <summary>第三方工具管理面板（类似 Unity Package Manager 的左右分栏布局）</summary>
     private void DrawThirdPartyManagerPanel()
     {
@@ -2540,6 +2591,7 @@ public partial class UnityToolsHub
 
         // ── 顶部工具栏：导入按钮 + 导入表单 ──────────────────
         DrawThirdPartyToolbar(accent);
+        DrawRecommendedThirdPartyPackages();
 
         // 导入中状态
         if (_isImporting)
@@ -2601,16 +2653,13 @@ public partial class UnityToolsHub
 
         // ── 左右分栏布局 ──
         float statsBarHeight = 28f;
-        float toolbarHeight = _showImportForm ? 160f : 44f;
-        float contentHeight = (position.height - toolbarHeight - 60) - statsBarHeight;
-        contentHeight = Mathf.Max(contentHeight, 200f);
 
-        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
         GUILayout.Space(RightPadding);
 
         // ── 左侧：工具列表 ──
         float listWidth = Mathf.Clamp(position.width * 0.34f, 250f, 340f);
-        EditorGUILayout.BeginVertical(GUILayout.Width(listWidth), GUILayout.Height(contentHeight));
+        EditorGUILayout.BeginVertical(GUILayout.Width(listWidth), GUILayout.ExpandHeight(true));
 
         var listHeaderRect = GUILayoutUtility.GetRect(listWidth, 24);
         EditorGUI.DrawRect(listHeaderRect, new Color(0.13f, 0.13f, 0.14f, 1f));
@@ -2698,11 +2747,11 @@ public partial class UnityToolsHub
         EditorGUILayout.EndVertical();
 
         // ── 分隔线 ──
-        var splitterRect = GUILayoutUtility.GetRect(1, contentHeight, GUILayout.Width(1));
+        var splitterRect = GUILayoutUtility.GetRect(1, 0, GUILayout.Width(1), GUILayout.ExpandHeight(true));
         EditorGUI.DrawRect(splitterRect, Theme.ClrDivider);
 
         // ── 右侧：详情 ──
-        EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true), GUILayout.Height(contentHeight));
+        EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
 
         _thirdPartyMgrScroll = EditorGUILayout.BeginScrollView(_thirdPartyMgrScroll);
 
