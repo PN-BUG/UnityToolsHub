@@ -217,6 +217,10 @@ public partial class GitPackageSwitcher
     {
         if (timeoutSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(timeoutSeconds));
         token.ThrowIfCancellationRequested();
+        // Enable Git for Windows long paths for clone, checkout, status and pull,
+        // including existing repositories, without changing global Git settings.
+        if (Path.DirectorySeparatorChar == '\\')
+            arguments = new[] { "-c", "core.longpaths=true" }.Concat(arguments).ToArray();
         var start = new ProcessStartInfo("git", string.Join(" ", arguments.Select(QuoteProcessArgument)))
         {
             WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true,

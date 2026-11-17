@@ -120,6 +120,10 @@ namespace UnityPackageCreator.Editor
         private static void CopyPackageDirectory(string source, string destination)
         {
             RejectLink(source);
+            // A copied gitdir file can point outside the new package; filtering it
+            // silently loses repository history. Require moving the complete repo instead.
+            if (Directory.Exists(Path.Combine(source, ".git")) || File.Exists(Path.Combine(source, ".git")))
+                throw new IOException("所选目录包含 Git 工作副本，不能作为普通包复制并丢弃 Git 元数据。请将完整仓库放到项目 LocalPackages 中再选择，或通过 Git 包切换工具克隆：" + source);
             Directory.CreateDirectory(destination);
             foreach (string file in Directory.GetFiles(source))
             {

@@ -4,6 +4,8 @@ All notable changes to this package will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Nodin 自动安装保留 manifest 中已有的本地包、版本和 Git 引用，仅补充缺失或空配置，避免项目重开或程序集重载时把本地工作副本切回 Git。
+- GitPackageSwitcher 在 Windows 执行 Git 时启用长路径支持，新克隆仓库同时保存本地设置，修复深层目录切换到本地包时的 `Filename too long` 检出失败；不修改全局 Git 配置。
 - Unity 2021.3 编译兼容：仅在 Unity 2023.1+ 编译使用 `FindObjectsInactive` 的查找重载，避免 Hub 编译失败并阻断 Nodin 自动配置。
 - `LogManagerPanel` 改为反射连接可选的 `GameLogger`；旧版 UnityFramework 或未安装 GameLogger 时 Hub 仍可编译，面板会显示功能不可用提示。
 
