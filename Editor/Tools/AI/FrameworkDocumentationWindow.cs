@@ -210,7 +210,8 @@ public sealed class FrameworkDocumentationWindow : EditorWindow
         reader.style.paddingLeft = reader.style.paddingRight = 20;
         reader.style.paddingBottom = 24;
         content.Add(reader);
-        editor = new TextField { multiline = true, isDelayed = false, verticalScrollerVisibility = ScrollerVisibility.Auto };
+        editor = new TextField { multiline = true, isDelayed = false };
+        editor.SetVerticalScrollerVisibility(ScrollerVisibility.Auto);
         editor.style.whiteSpace = WhiteSpace.Normal;
         editor.style.flexGrow = 1;
         editor.style.flexShrink = 1;

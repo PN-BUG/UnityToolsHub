@@ -23,7 +23,10 @@ Hub 入口：`Window > Unity Tools Hub > AI工具`。窗口、搜索、标签、
 
 ## 接入约定
 
+
 文档中心右上角“外观”支持跟随 Unity（默认）、日间和夜间，偏好保存在本机 EditorPrefs。窗口公开 `SetThemeMode(ThemeMode)`、`CurrentTheme` 和 `UsesDarkTheme`，只改变窗口外观；样式位于 `FrameworkDocumentationTheme.uss`。
+
+文档编辑框使用 Unity 2022.3 支持的 `SetVerticalScrollerVisibility(ScrollerVisibility.Auto)` 设置滚动条。已核对本机 2022.3 API 文档，并通过 MermaidsFallAVG 的 Unity MCP 脚本编译验证；尚未完成窗口交互验证。
 
 - 文件保存在本目录，可按用途创建子目录；保持编辑器代码和运行时代码隔离。
 - 使用 `[ToolInfo("明确的工具名称", "AI工具", Description = "用途、输入和副作用", Tags = new[] { "AI", "功能关键词" })]`。Hub 自动发现，无需修改分类注册代码。
