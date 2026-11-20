@@ -112,6 +112,7 @@ public abstract class ToolEditorWindow : EditorWindow
     protected virtual string ToolIcon  => "";
     protected virtual bool ShowSearchBar   => false;
     protected virtual bool ShowStatusBar   => false;
+    protected virtual bool ScrollToolContent => true;
     protected virtual float SearchBarHeight  => 28f;
     protected virtual float ToolbarHeight    => 36f;
     protected virtual float StatusBarHeight  => 22f;
@@ -240,11 +241,16 @@ public abstract class ToolEditorWindow : EditorWindow
         EditorGUI.DrawRect(new Rect(0, y, position.width, contentH), ClrBg);
 
         var contentRect = new Rect(ContentPadding, y, position.width - ContentPadding * 2, contentH);
-        GUILayout.BeginArea(contentRect);
-        ContentScroll = EditorGUILayout.BeginScrollView(ContentScroll);
-        DrawToolContent();
-        EditorGUILayout.EndScrollView();
-        GUILayout.EndArea();
+        using (new GUILayout.AreaScope(contentRect))
+        {
+            if (ScrollToolContent)
+            {
+                using var scroll = new EditorGUILayout.ScrollViewScope(ContentScroll);
+                ContentScroll = scroll.scrollPosition;
+                DrawToolContent();
+            }
+            else DrawToolContent();
+        }
 
         // ── 状态栏 ──
         if (ShowStatusBar)
